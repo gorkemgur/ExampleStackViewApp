@@ -8,28 +8,28 @@
 
 /* Begin PBXBuildFile section */
 		EEA17C3328D0C5C000EA4D86 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA17C3228D0C5C000EA4D86 /* AppDelegate.swift */; };
-		EEA17C3528D0C5C000EA4D86 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA17C3428D0C5C000EA4D86 /* SceneDelegate.swift */; };
-		EEA17C3728D0C5C000EA4D86 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA17C3628D0C5C000EA4D86 /* ViewController.swift */; };
 		EEA17C3C28D0C5C200EA4D86 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EEA17C3B28D0C5C200EA4D86 /* Assets.xcassets */; };
 		EEA17C3F28D0C5C200EA4D86 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EEA17C3D28D0C5C200EA4D86 /* LaunchScreen.storyboard */; };
-		EEA17C4828D0C5F600EA4D86 /* ExampleStackViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA17C4628D0C5F600EA4D86 /* ExampleStackViewController.swift */; };
-		EEA17C4928D0C5F600EA4D86 /* ExampleStackViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = EEA17C4728D0C5F600EA4D86 /* ExampleStackViewController.xib */; };
 		EEA17C4B28D0C66000EA4D86 /* MockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA17C4A28D0C66000EA4D86 /* MockView.swift */; };
 		EEA17C4D28D0C66900EA4D86 /* MockView.xib in Resources */ = {isa = PBXBuildFile; fileRef = EEA17C4C28D0C66900EA4D86 /* MockView.xib */; };
+		EEA17C5228D0C8AE00EA4D86 /* ExampleStackViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA17C5028D0C8AE00EA4D86 /* ExampleStackViewController.swift */; };
+		EEA17C5328D0C8AE00EA4D86 /* ExampleStackViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = EEA17C5128D0C8AE00EA4D86 /* ExampleStackViewController.xib */; };
+		EEA17C5528D0C8FB00EA4D86 /* UIViewControllerExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA17C5428D0C8FB00EA4D86 /* UIViewControllerExtension.swift */; };
+		EEA17C5728D0CC0500EA4D86 /* UIStackViewExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA17C5628D0CC0500EA4D86 /* UIStackViewExtension.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		EEA17C2F28D0C5C000EA4D86 /* ExampleStackView.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ExampleStackView.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EEA17C3228D0C5C000EA4D86 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		EEA17C3428D0C5C000EA4D86 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
-		EEA17C3628D0C5C000EA4D86 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		EEA17C3B28D0C5C200EA4D86 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EEA17C3E28D0C5C200EA4D86 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		EEA17C4028D0C5C200EA4D86 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		EEA17C4628D0C5F600EA4D86 /* ExampleStackViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExampleStackViewController.swift; sourceTree = "<group>"; };
-		EEA17C4728D0C5F600EA4D86 /* ExampleStackViewController.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = ExampleStackViewController.xib; sourceTree = "<group>"; };
 		EEA17C4A28D0C66000EA4D86 /* MockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockView.swift; sourceTree = "<group>"; };
 		EEA17C4C28D0C66900EA4D86 /* MockView.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = MockView.xib; sourceTree = "<group>"; };
+		EEA17C5028D0C8AE00EA4D86 /* ExampleStackViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ExampleStackViewController.swift; sourceTree = "<group>"; };
+		EEA17C5128D0C8AE00EA4D86 /* ExampleStackViewController.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = ExampleStackViewController.xib; sourceTree = "<group>"; };
+		EEA17C5428D0C8FB00EA4D86 /* UIViewControllerExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIViewControllerExtension.swift; sourceTree = "<group>"; };
+		EEA17C5628D0CC0500EA4D86 /* UIStackViewExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIStackViewExtension.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,11 +65,11 @@
 				EEA17C4F28D0C69C00EA4D86 /* ExampleStackViewContoller */,
 				EEA17C4E28D0C69300EA4D86 /* MockView */,
 				EEA17C3228D0C5C000EA4D86 /* AppDelegate.swift */,
-				EEA17C3428D0C5C000EA4D86 /* SceneDelegate.swift */,
-				EEA17C3628D0C5C000EA4D86 /* ViewController.swift */,
 				EEA17C3B28D0C5C200EA4D86 /* Assets.xcassets */,
 				EEA17C3D28D0C5C200EA4D86 /* LaunchScreen.storyboard */,
 				EEA17C4028D0C5C200EA4D86 /* Info.plist */,
+				EEA17C5428D0C8FB00EA4D86 /* UIViewControllerExtension.swift */,
+				EEA17C5628D0CC0500EA4D86 /* UIStackViewExtension.swift */,
 			);
 			path = ExampleStackView;
 			sourceTree = "<group>";
@@ -86,8 +86,8 @@
 		EEA17C4F28D0C69C00EA4D86 /* ExampleStackViewContoller */ = {
 			isa = PBXGroup;
 			children = (
-				EEA17C4628D0C5F600EA4D86 /* ExampleStackViewController.swift */,
-				EEA17C4728D0C5F600EA4D86 /* ExampleStackViewController.xib */,
+				EEA17C5028D0C8AE00EA4D86 /* ExampleStackViewController.swift */,
+				EEA17C5128D0C8AE00EA4D86 /* ExampleStackViewController.xib */,
 			);
 			path = ExampleStackViewContoller;
 			sourceTree = "<group>";
@@ -150,7 +150,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EEA17C4928D0C5F600EA4D86 /* ExampleStackViewController.xib in Resources */,
+				EEA17C5328D0C8AE00EA4D86 /* ExampleStackViewController.xib in Resources */,
 				EEA17C3F28D0C5C200EA4D86 /* LaunchScreen.storyboard in Resources */,
 				EEA17C4D28D0C66900EA4D86 /* MockView.xib in Resources */,
 				EEA17C3C28D0C5C200EA4D86 /* Assets.xcassets in Resources */,
@@ -164,11 +164,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EEA17C4828D0C5F600EA4D86 /* ExampleStackViewController.swift in Sources */,
-				EEA17C3728D0C5C000EA4D86 /* ViewController.swift in Sources */,
+				EEA17C5228D0C8AE00EA4D86 /* ExampleStackViewController.swift in Sources */,
+				EEA17C5528D0C8FB00EA4D86 /* UIViewControllerExtension.swift in Sources */,
 				EEA17C3328D0C5C000EA4D86 /* AppDelegate.swift in Sources */,
+				EEA17C5728D0CC0500EA4D86 /* UIStackViewExtension.swift in Sources */,
 				EEA17C4B28D0C66000EA4D86 /* MockView.swift in Sources */,
-				EEA17C3528D0C5C000EA4D86 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -311,7 +311,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ExampleStackView/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -338,7 +337,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ExampleStackView/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (

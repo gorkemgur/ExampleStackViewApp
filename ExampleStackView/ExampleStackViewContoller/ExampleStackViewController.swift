@@ -9,21 +9,43 @@ import UIKit
 
 class ExampleStackViewController: UIViewController {
 
+    @IBOutlet weak var exampleStackView: UIStackView!
+    
+    private var mockData = [MockExampleModel]()
+    private var mockViews = [MockView]()
+
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        mockData = getRandomModel()
+        
+        setupUI()
 
-        // Do any additional setup after loading the view.
     }
-
-
-    /*
-    // MARK: - Navigation
-
-    // In a storyboard-based application, you will often want to do a little preparation before navigation
-    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-        // Get the new view controller using segue.destination.
-        // Pass the selected object to the new view controller.
+    
+    private func setupUI() {
+        for i in 0..<mockData.count {
+            let mockView = MockView()
+            mockView.tag = i
+            let tapGesture = UITapGestureRecognizer(target: self, action: #selector(tappedMockView))
+            mockView.addGestureRecognizer(tapGesture)
+            mockView.setupView(showBottomLine: mockData[i].index != mockData.last?.index, model: mockData[i])
+            mockViews.append(mockView)
+        }
+        print("Geldi")
+        exampleStackView.addArrangedSubviews(mockViews)
     }
-    */
+    
+    @objc func tappedMockView(_ sender: UITapGestureRecognizer) {
+         guard let getTag = sender.view?.tag else { return }
+        exampleStackView.getTappedView(index: getTag)
+    }
+    
 
+}
+
+struct MockExampleModel {
+    var title:String?
+    var description:String?
+    var index: Int?
 }
