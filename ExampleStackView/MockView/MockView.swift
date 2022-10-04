@@ -31,7 +31,7 @@ class MockView: UIView, NibLoadable {
     }
     
     func setupView(showBottomLine: Bool,model: MockExampleModel) {
-        self.backgroundColor = .clear
+        
         self.mockDataModel = model
         bottomLine.isHidden = !showBottomLine
         self.titleLabel.text = model.title
@@ -46,7 +46,7 @@ class MockView: UIView, NibLoadable {
         self.backgroundColor = .red
         self.setNeedsLayout()
         self.layoutIfNeeded()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: {
             self.backgroundColor = .clear
         })
     }

@@ -28,7 +28,6 @@ extension UIStackView {
             if view.tag == index {
                 tappedView = view as? MockView ?? MockView()
                 tappedView.setSelected()
-                print(tappedView.getModel())
             }
         }
         return tappedView

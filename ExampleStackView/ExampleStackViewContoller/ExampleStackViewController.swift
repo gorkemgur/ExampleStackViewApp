@@ -38,7 +38,15 @@ class ExampleStackViewController: UIViewController {
     
     @objc func tappedMockView(_ sender: UITapGestureRecognizer) {
          guard let getTag = sender.view?.tag else { return }
-        exampleStackView.getTappedView(index: getTag)
+        let tappedView = exampleStackView.getTappedView(index: getTag) as? MockView
+        let title = tappedView?.getModel()?.title ?? ""
+        let description = tappedView?.getModel()?.description ?? ""
+        let alert = UIAlertController(title: "Title: \(title)", message: "Description: \(description)\nTapped Index: \(getTag)", preferredStyle: .alert)
+        let alertAction = UIAlertAction(title: "OK", style: .default, handler: { _ in
+            alert.dismiss(animated: true)
+        })
+        alert.addAction(alertAction)
+        self.present(alert, animated: true)
     }
     
 
