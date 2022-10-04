@@ -1,0 +1,6 @@
+
+language: swift
+osx_image: xcode13.4
+xcode_project: ExampleStackView.xcodeproj # path to your xcodeproj folder
+xcode_scheme: ExampleStackView
+xcode_destination: platform=iOS Simulator,OS=13.6,name=iPhone 8
