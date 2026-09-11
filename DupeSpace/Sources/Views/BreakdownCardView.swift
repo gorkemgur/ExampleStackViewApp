@@ -55,7 +55,7 @@ struct BreakdownCardView: View {
                 Text(entry.category.title)
                     .font(.subheadline.weight(.medium))
                     .accessibilityIdentifier("breakdown.row.\(entry.id)")
-                Text("\(entry.itemCount) items")
+                Text(Counting.items(entry.itemCount))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

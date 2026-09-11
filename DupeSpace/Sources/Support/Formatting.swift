@@ -18,6 +18,19 @@ enum ByteFormatting {
     }
 }
 
+/// "1 items" is the kind of detail that makes a screen look unfinished, and this app asks
+/// people to trust it with their photos.
+enum Counting {
+
+    static func items(_ count: Int) -> String {
+        count == 1 ? "1 item" : "\(count) items"
+    }
+
+    static func copies(_ count: Int) -> String {
+        count == 1 ? "1 other copy" : "\(count) other copies"
+    }
+}
+
 extension CategoryBreakdown.Category {
 
     var title: String {

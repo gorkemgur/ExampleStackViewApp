@@ -16,6 +16,14 @@ final class StorageProbeTests: XCTestCase {
         XCTAssertFalse(ByteFormatting.string(-5).isEmpty, "negative input must not crash or blank out")
     }
 
+    func testCountingAgreesWithItsNoun() {
+        XCTAssertEqual(Counting.items(0), "0 items")
+        XCTAssertEqual(Counting.items(1), "1 item")
+        XCTAssertEqual(Counting.items(2), "2 items")
+        XCTAssertEqual(Counting.copies(1), "1 other copy")
+        XCTAssertEqual(Counting.copies(3), "3 other copies")
+    }
+
     func testZeroIsWrittenAsANumber() {
         // ByteCountFormatter says "Zero KB" by default, which reads like a bug in the app.
         XCTAssertFalse(ByteFormatting.string(0).localizedCaseInsensitiveContains("zero"))

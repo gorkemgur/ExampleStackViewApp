@@ -46,7 +46,6 @@ struct GroupRowView: View {
     }
 
     private var detail: String {
-        let copies = group.candidates.count == 1 ? "1 other copy" : "\(group.candidates.count) other copies"
-        return "keeping this one · \(copies)"
+        return "keeping this one · \(Counting.copies(group.candidates.count))"
     }
 }

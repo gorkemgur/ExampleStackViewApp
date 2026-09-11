@@ -108,9 +108,9 @@ struct ReviewView: View {
         let reached = ByteFormatting.string(plan.reclaimedBytes)
         let deepest = plan.deepestTier.map { ScanCopy.title(for: $0).lowercased() } ?? "nothing"
         if plan.meetsTarget {
-            return "\(plan.selected.count) items, \(reached) — reaching as far as \(deepest)."
+            return "\(Counting.items(plan.selected.count)), \(reached) — reaching as far as \(deepest)."
         }
-        return "Only \(reached) is available at this setting (\(plan.selected.count) items). Allow more, or accept less."
+        return "Only \(reached) is available at this setting (\(Counting.items(plan.selected.count))). Allow more, or accept less."
     }
 
     // MARK: - Sections
@@ -134,7 +134,9 @@ struct ReviewView: View {
                 Text(ScanCopy.title(for: section.tier))
                     .accessibilityIdentifier("review.section.\(section.tier.rawValue)")
                 Spacer()
-                Button(model.selection.containsAll(section.candidateIDs) ? "None" : "All") {
+                // "None"/"All" read as labels for the current state rather than as the action
+                // they perform, which is the wrong ambiguity on a screen that deletes things.
+                Button(model.selection.containsAll(section.candidateIDs) ? "Deselect all" : "Select all") {
                     model.setSelected(!model.selection.containsAll(section.candidateIDs), in: section)
                 }
                 .font(.caption.weight(.semibold))
@@ -142,7 +144,7 @@ struct ReviewView: View {
                 .accessibilityIdentifier("review.selectall.\(section.tier.rawValue)")
             }
         } footer: {
-            Text("\(ScanCopy.subtitle(for: section.tier)) · \(ByteFormatting.string(section.bytes)) across \(section.itemCount) items")
+            Text("\(ScanCopy.subtitle(for: section.tier)) · \(ByteFormatting.string(section.bytes)) across \(Counting.items(section.itemCount))")
         }
     }
 
@@ -182,7 +184,7 @@ struct ReviewView: View {
     private func outcomeSection(_ outcome: DeletionOutcome) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
-                Label("\(outcome.deletedCount) items removed", systemImage: "checkmark.circle.fill")
+                Label("\(Counting.items(outcome.deletedCount)) removed", systemImage: "checkmark.circle.fill")
                     .font(.headline)
                     .foregroundStyle(.green)
                     .accessibilityIdentifier("review.result")
@@ -193,7 +195,7 @@ struct ReviewView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if outcome.missingCount > 0 {
-                    Text("\(outcome.missingCount) items were already gone.")
+                    Text("\(Counting.items(outcome.missingCount)) \(outcome.missingCount == 1 ? "was" : "were") already gone.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

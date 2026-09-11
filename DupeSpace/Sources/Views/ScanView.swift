@@ -53,7 +53,7 @@ struct ScanView: View {
     private var introCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Scan \(items.count) items")
+                Text("Scan \(Counting.items(items.count))")
                     .font(.title3.weight(.semibold))
 
                 Text("Metadata is compared first, so only the handful of items that could possibly match ever get read. Nothing is downloaded from iCloud and nothing is deleted without you saying so.")
@@ -131,7 +131,7 @@ struct ScanView: View {
                     Text(ByteFormatting.string(result.reclaimableBytes))
                         .font(.system(size: 38, weight: .semibold, design: .rounded))
                         .accessibilityIdentifier("scan.total")
-                    Text("across \(result.candidates.count) items you could remove")
+                    Text("across \(Counting.items(result.candidates.count)) you could remove")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -153,7 +153,7 @@ struct ScanView: View {
 
             if !result.cloudOnlyIDs.isEmpty {
                 Card("Not checked", symbolName: "icloud", identifier: "scan.cloud") {
-                    Text("\(result.cloudOnlyIDs.count) items have their original in iCloud. They were left alone rather than downloaded over your connection.")
+                    Text("\(Counting.items(result.cloudOnlyIDs.count)) \(result.cloudOnlyIDs.count == 1 ? "has" : "have") the original in iCloud. They were left alone rather than downloaded over your connection.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -187,7 +187,7 @@ struct ScanView: View {
                     Text(ByteFormatting.string(summary.bytes))
                         .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
-                    Text("\(summary.itemCount) items")
+                    Text(Counting.items(summary.itemCount))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -53,7 +53,7 @@ struct ConfirmDeleteSheet: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                     } else {
-                        Text("Delete \(model.selection.count) items")
+                        Text("Delete \(Counting.items(model.selection.count))")
                             .frame(maxWidth: .infinity)
                     }
                 }
