@@ -118,19 +118,34 @@ jobs:
           APP=build/Build/Products/Debug-iphonesimulator/DupeSpace.app
           test -d "$APP"
 
-          idb install --udid "$UDID" "$APP"
-          idb launch --udid "$UDID" com.gorkemgur.dupespace
-
-          # Give SwiftUI a moment to lay the first screen out before snapshotting it.
-          sleep 5
-
           mkdir -p artifacts
-          idb ui describe-all --udid "$UDID" > artifacts/accessibility-tree.json
-          idb screenshot --udid "$UDID" artifacts/launch.png
 
-          # The accessibility tree is the machine-checkable half of "the screen rendered".
-          grep -q "storage" artifacts/accessibility-tree.json \
-            || { echo "root screen did not expose its storage elements"; exit 1; }
+          idb install --udid "$UDID" "$APP"
+          idb launch --udid "$UDID" com.gorkemgur.dupespace || true
+
+          # The accessibility bridge is not ready the instant launch returns, and on a slow
+          # runner "not ready" and "the screen is genuinely empty" look identical. Poll until
+          # the tree both parses and carries the root screen, rather than sampling once and
+          # calling a cold simulator a regression.
+          FOUND=0
+          for attempt in $(seq 1 20); do
+            if idb ui describe-all --udid "$UDID" > artifacts/accessibility-tree.json 2>artifacts/describe-error.txt \
+               && grep -q "storage" artifacts/accessibility-tree.json; then
+              FOUND=1
+              echo "accessibility tree ready after ${attempt} attempt(s)"
+              break
+            fi
+            sleep 5
+          done
+
+          # simctl owns the display, so it can snapshot even when the idb bridge cannot.
+          xcrun simctl io "$UDID" screenshot artifacts/launch.png || true
+
+          if [ "$FOUND" -ne 1 ]; then
+            echo "root screen never exposed its storage elements"
+            tail -20 artifacts/describe-error.txt || true
+            exit 1
+          fi
 
       - name: Upload simulator artifacts
         if: always()
