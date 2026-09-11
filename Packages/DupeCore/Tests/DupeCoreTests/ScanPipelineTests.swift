@@ -141,6 +141,26 @@ final class ScanPipelineTests: XCTestCase {
         XCTAssertFalse(analyzer.hashRequests.contains("cloud"), "a cloud-only item must not be downloaded to fingerprint it")
     }
 
+    func testItemsAlreadyKnownToBeInTheCloudAreNeverTouched() async throws {
+        let items = [
+            Fixtures.item("local", bytes: 100, width: 10, height: 10),
+            Fixtures.item("elsewhere", bytes: 100, width: 10, height: 10, local: false)
+        ]
+        let analyzer = StubAnalyzer(
+            digests: ["local": .digest(digest(4)), "elsewhere": .digest(digest(4))],
+            hashes: ["elsewhere": PerceptualHashes(dHash: 1, pHash: 1)]
+        )
+        let result = try await ScanPipeline(analyzer: analyzer).run(items: items)
+
+        XCTAssertEqual(result.cloudOnlyIDs, ["elsewhere"])
+        XCTAssertFalse(analyzer.digestRequests.contains("elsewhere"), "reading it would mean downloading it")
+        XCTAssertFalse(analyzer.hashRequests.contains("elsewhere"))
+        XCTAssertTrue(
+            result.groups.isEmpty,
+            "a match that only holds if we download the other half is not a match we can act on"
+        )
+    }
+
     func testUnreadableItemsAreSkippedRatherThanGuessedAt() async throws {
         let items = [
             Fixtures.item("a", bytes: 100, width: 10, height: 10),

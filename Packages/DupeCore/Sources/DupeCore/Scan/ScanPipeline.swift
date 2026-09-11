@@ -116,13 +116,19 @@ public struct ScanPipeline: Sendable {
 
         // 1. Metadata buckets. Identical originals always agree on kind, pixels and size.
         progress(ScanProgress(stage: .bucketing, completed: 0, total: items.count))
-        let suspects = Self.metadataSuspects(items)
+
+        // An item the source already knows is not on this device is set aside before any work
+        // is scheduled against it. Reading it would mean a download, and the point of the scan
+        // is to free space, not to spend someone's data plan filling it.
+        var cloudOnly = Set(items.filter { !$0.isLocallyAvailable }.map(\.id))
+        let localItems = items.filter { $0.isLocallyAvailable }
+
+        let suspects = Self.metadataSuspects(localItems)
         try Task.checkCancellation()
         progress(ScanProgress(stage: .bucketing, completed: items.count, total: items.count))
 
         // 2. Read and digest only the suspects.
         var digests: [String: ContentDigest] = [:]
-        var cloudOnly = Set<String>()
 
         let digestResults = try await mapConcurrently(
             suspects,
