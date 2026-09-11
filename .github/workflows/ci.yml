@@ -87,10 +87,14 @@ jobs:
         run: |
           set -euo pipefail
           brew install xcodegen
+          # Homebrew refuses formulae from third-party taps until the tap is trusted.
           brew tap facebook/fb
+          brew trust facebook/fb
           brew install idb-companion
           pipx install fb-idb
-          idb --help > /dev/null
+          # pipx drops shims in ~/.local/bin, which is not on the runner's default PATH.
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/idb" --help > /dev/null
 
       - name: Build for simulator
         run: |
