@@ -96,10 +96,16 @@ public struct ScanPipeline: Sendable {
 
     private let analyzer: any AssetAnalyzing
     private let configuration: ScanConfiguration
+    private let throttle: any ScanThrottling
 
-    public init(analyzer: any AssetAnalyzing, configuration: ScanConfiguration = .default) {
+    public init(
+        analyzer: any AssetAnalyzing,
+        configuration: ScanConfiguration = .default,
+        throttle: any ScanThrottling = SystemThrottle()
+    ) {
         self.analyzer = analyzer
         self.configuration = configuration
+        self.throttle = throttle
     }
 
     public func run(
@@ -113,6 +119,10 @@ public struct ScanPipeline: Sendable {
         // Bound to locals so the concurrent closures below capture plain values.
         let analyzer = self.analyzer
         let configuration = self.configuration
+
+        // Re-read once per stage rather than per item: a device that heats up mid-scan slows
+        // down at the next stage boundary, without paying for a check on every read.
+        let readLimit = throttle.concurrencyLimit(base: configuration.maxConcurrentReads)
 
         // 1. Metadata buckets. Identical originals always agree on kind, pixels and size.
         progress(ScanProgress(stage: .bucketing, completed: 0, total: items.count))
@@ -132,7 +142,7 @@ public struct ScanPipeline: Sendable {
 
         let digestResults = try await mapConcurrently(
             suspects,
-            limit: configuration.maxConcurrentReads,
+            limit: readLimit,
             progress: { done in
                 progress(ScanProgress(stage: .hashing, completed: done, total: suspects.count))
             },
@@ -161,7 +171,7 @@ public struct ScanPipeline: Sendable {
 
         let hashResults = try await mapConcurrently(
             fingerprintTargets,
-            limit: configuration.maxConcurrentReads,
+            limit: throttle.concurrencyLimit(base: configuration.maxConcurrentReads),
             progress: { done in
                 progress(ScanProgress(stage: .fingerprinting, completed: done, total: fingerprintTargets.count))
             },

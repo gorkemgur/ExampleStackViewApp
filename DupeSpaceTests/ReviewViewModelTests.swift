@@ -129,6 +129,20 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertTrue(deleter.received.isEmpty)
     }
 
+    func testDeletedCopiesStopBeingOffered() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        let before = model.sections.reduce(0) { $0 + $1.itemCount }
+        let deleting = model.selection.count
+        XCTAssertGreaterThan(deleting, 0)
+
+        await model.delete()
+
+        let after = model.sections.reduce(0) { $0 + $1.itemCount }
+        XCTAssertEqual(after, before - deleting, "the list must stop offering copies that are gone")
+        XCTAssertTrue(model.liveCandidates.allSatisfy { !model.deletedIDs.contains($0.id) })
+        XCTAssertEqual(model.savings.totalBytes, 0, "nothing is selected right after a deletion")
+    }
+
     func testCancellingAtTheSystemPromptKeepsTheSelection() async {
         let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter(behaviour: .cancel))
         let before = model.selection.selectedIDs

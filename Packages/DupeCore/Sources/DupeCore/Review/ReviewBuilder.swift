@@ -96,3 +96,36 @@ public enum ReviewBuilder {
         }
     }
 }
+
+extension ReviewGroup {
+
+    /// The same group with `ids` taken out. `nil` when there is nothing left to offer, which
+    /// is what happens once every copy in it has actually been deleted.
+    public func removing(_ ids: Set<String>) -> ReviewGroup? {
+        guard !ids.isEmpty else { return self }
+
+        let remaining = candidates.filter { !ids.contains($0.id) }
+        guard !remaining.isEmpty else { return nil }
+
+        let remainingIDs = Set(remaining.map(\.id))
+        return ReviewGroup(
+            id: id,
+            tier: tier,
+            keeper: keeper,
+            candidates: remaining,
+            items: items.filter { remainingIDs.contains($0.id) }
+        )
+    }
+}
+
+extension ReviewSection {
+
+    public func removing(_ ids: Set<String>) -> ReviewSection? {
+        guard !ids.isEmpty else { return self }
+
+        let remaining = groups.compactMap { $0.removing(ids) }
+        guard !remaining.isEmpty else { return nil }
+
+        return ReviewSection(tier: tier, groups: remaining)
+    }
+}

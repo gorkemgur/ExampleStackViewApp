@@ -15,21 +15,35 @@ final class ReviewViewModel: ObservableObject {
     /// How far the slider is allowed to reach. Starts at the tiers that cost the user nothing.
     @Published var budgetDepth: RegretTier = .inferiorCopy
 
-    let result: ScanResult
-    let sections: [ReviewSection]
+    /// Items that have actually been removed. Kept so the list stops offering copies that no
+    /// longer exist the moment a deletion succeeds, rather than leaving the user staring at
+    /// rows that would fail if tapped.
+    @Published private(set) var deletedIDs: Set<String> = []
 
+    let result: ScanResult
+
+    private let allSections: [ReviewSection]
     private let deleter: MediaDeleting
 
     init(result: ScanResult, deleter: MediaDeleting) {
         self.result = result
         self.deleter = deleter
-        self.sections = ReviewBuilder.sections(for: result)
+        self.allSections = ReviewBuilder.sections(for: result)
         self.selection = .preSelected(from: result.candidates)
+    }
+
+    var sections: [ReviewSection] {
+        allSections.compactMap { $0.removing(deletedIDs) }
+    }
+
+    /// Candidates that still exist.
+    var liveCandidates: [DeletionCandidate] {
+        result.candidates.filter { !deletedIDs.contains($0.id) }
     }
 
     // MARK: - Derived
 
-    var maxReclaimableBytes: Int64 { result.reclaimableBytes }
+    var maxReclaimableBytes: Int64 { liveCandidates.reduce(Int64(0)) { $0 + $1.bytes } }
 
     var savings: SavingsBreakdown {
         SavingsCalculator.breakdown(for: selection.selectedIDs, items: result.items)
@@ -46,7 +60,7 @@ final class ReviewViewModel: ObservableObject {
     var canDelete: Bool { !selection.isEmpty && violations.isEmpty && !isDeleting }
 
     var selectedCandidates: [DeletionCandidate] {
-        result.candidates.filter { selection.isSelected($0.id) }
+        liveCandidates.filter { selection.isSelected($0.id) }
     }
 
     /// The worst tier the current selection reaches into. What the confirmation has to lead
@@ -64,7 +78,7 @@ final class ReviewViewModel: ObservableObject {
         let allowed = Set(RegretTier.allCases.filter { $0 <= budgetDepth })
         return BudgetPlanner.plan(
             target: Int64(budgetBytes),
-            candidates: result.candidates,
+            candidates: liveCandidates,
             allowedTiers: allowed
         )
     }
@@ -88,7 +102,7 @@ final class ReviewViewModel: ObservableObject {
     }
 
     func resetToSafeDefaults() {
-        selection = .preSelected(from: result.candidates)
+        selection = .preSelected(from: liveCandidates)
     }
 
     // MARK: - Deletion
@@ -115,7 +129,9 @@ final class ReviewViewModel: ObservableObject {
         failure = nil
 
         do {
-            outcome = try await deleter.delete(ids: ids)
+            let completed = try await deleter.delete(ids: ids)
+            outcome = completed
+            deletedIDs.formUnion(completed.deletedIDs)
             selection.clear()
         } catch {
             failure = error.localizedDescription

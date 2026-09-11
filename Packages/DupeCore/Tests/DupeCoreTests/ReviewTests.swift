@@ -152,3 +152,71 @@ final class ReviewBuilderTests: XCTestCase {
         XCTAssertEqual(Set(sections[0].candidateIDs).count, 6)
     }
 }
+
+final class ReviewPruningTests: XCTestCase {
+
+    private func group(_ ids: [String], tier: RegretTier = .identical) -> ReviewGroup {
+        ReviewGroup(
+            id: "g",
+            tier: tier,
+            keeper: Fixtures.item("keeper"),
+            candidates: ids.map {
+                DeletionCandidate(id: $0, groupID: "g", keeperID: "keeper", tier: tier, bytes: 10, isPreSelected: true)
+            },
+            items: ids.map { Fixtures.item($0) }
+        )
+    }
+
+    func testRemovingNothingLeavesTheGroupAlone() {
+        let original = group(["a", "b"])
+        XCTAssertEqual(original.removing([]), original)
+    }
+
+    func testRemovingSomeCopiesKeepsTheRest() {
+        let pruned = group(["a", "b", "c"]).removing(["b"])
+        XCTAssertEqual(pruned?.candidateIDs, ["a", "c"])
+        XCTAssertEqual(pruned?.items.map(\.id), ["a", "c"], "the item list must track the candidate list")
+    }
+
+    func testAGroupWithNothingLeftToOfferDisappears() {
+        XCTAssertNil(group(["a", "b"]).removing(["a", "b"]))
+    }
+
+    func testSectionDropsEmptiedGroupsAndThenItself() {
+        let section = ReviewSection(tier: .identical, groups: [group(["a"]), group(["b"])])
+        XCTAssertEqual(section.removing(["a"])?.groups.count, 1)
+        XCTAssertNil(section.removing(["a", "b"]))
+    }
+
+    func testKeeperIsNeverPrunedAway() {
+        let pruned = group(["a"]).removing(["keeper"])
+        XCTAssertEqual(pruned?.keeper.id, "keeper")
+        XCTAssertEqual(pruned?.candidateIDs, ["a"])
+    }
+}
+
+final class ScanThrottleTests: XCTestCase {
+
+    func testNominalRunsAtFullSpeed() {
+        XCTAssertEqual(SystemThrottle.limit(base: 4, thermalState: .nominal, isLowPowerMode: false), 4)
+    }
+
+    func testWarmDeviceHalvesTheLoad() {
+        XCTAssertEqual(SystemThrottle.limit(base: 4, thermalState: .fair, isLowPowerMode: false), 2)
+    }
+
+    func testHotDeviceDropsToOneReadAtATime() {
+        XCTAssertEqual(SystemThrottle.limit(base: 8, thermalState: .serious, isLowPowerMode: false), 1)
+        XCTAssertEqual(SystemThrottle.limit(base: 8, thermalState: .critical, isLowPowerMode: false), 1)
+    }
+
+    func testLowPowerModeOverridesEvenACoolDevice() {
+        XCTAssertEqual(SystemThrottle.limit(base: 8, thermalState: .nominal, isLowPowerMode: true), 1)
+    }
+
+    func testLimitIsNeverZero() {
+        XCTAssertEqual(SystemThrottle.limit(base: 1, thermalState: .fair, isLowPowerMode: false), 1)
+        XCTAssertEqual(SystemThrottle.limit(base: 0, thermalState: .nominal, isLowPowerMode: false), 1)
+        XCTAssertEqual(UnthrottledScan().concurrencyLimit(base: 0), 1)
+    }
+}
