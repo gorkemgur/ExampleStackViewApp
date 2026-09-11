@@ -27,6 +27,10 @@ struct RootView: View {
                         failureCard(message)
                     }
 
+                    if !model.items.isEmpty {
+                        scanEntryCard
+                    }
+
                     if !model.breakdown.isEmpty {
                         BreakdownCardView(breakdown: model.breakdown, totalBytes: model.libraryBytes)
                     }
@@ -48,6 +52,29 @@ struct RootView: View {
         }
         .task {
             await model.refresh()
+        }
+    }
+
+    private var scanEntryCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Find what you can lose least")
+                    .font(.title3.weight(.semibold))
+                Text("Ranked by what deleting actually costs you — identical copies first, your judgement calls last.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            NavigationLink {
+                ScanView(items: model.items)
+            } label: {
+                Text("Scan for duplicates")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityIdentifier("root.scan")
         }
     }
 

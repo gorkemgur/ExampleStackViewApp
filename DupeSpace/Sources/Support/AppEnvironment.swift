@@ -1,4 +1,5 @@
 import Foundation
+import DupeCore
 
 /// Picks the real services or the deterministic fixtures.
 enum AppEnvironment {
@@ -13,5 +14,9 @@ enum AppEnvironment {
 
     static func makeLibrary() -> MediaLibrary {
         isUITesting ? StubMediaLibrary.uiTestFixture() : PhotoKitMediaLibrary()
+    }
+
+    static func makeAnalyzer() -> any AssetAnalyzing {
+        isUITesting ? StubAssetAnalyzer.uiTestFixture() : PhotoKitAssetAnalyzer()
     }
 }

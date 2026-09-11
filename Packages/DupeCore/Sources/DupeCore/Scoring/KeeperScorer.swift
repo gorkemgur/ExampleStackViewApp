@@ -105,3 +105,35 @@ public enum KeeperScorer {
         }
     }
 }
+
+extension KeeperScorer {
+
+    /// A library-wide ranking, used to pick which item a similar-group forms around.
+    ///
+    /// `scores(for:)` is relative to one group, which is the right answer once a group exists
+    /// but useless while deciding what the groups should be. This ordering is absolute and
+    /// deterministic: protection dominates everything, then quality signals, then raw size.
+    public static func globalRank(for item: MediaItem) -> Double {
+        var rank = 0.0
+        if item.isProtected { rank += 1_000_000 }
+        if item.isEdited { rank += 300_000 }
+        if item.isLivePhoto { rank += 150_000 }
+        if item.isUserLibraryOriginal { rank += 80_000 }
+        if item.hasLocationMetadata { rank += 40_000 }
+        if item.isScreenshot { rank -= 100_000 }
+        if !item.isLocallyAvailable { rank -= 25_000 }
+
+        // Tie-breakers, scaled so they can never overturn a categorical signal above.
+        rank += Double(item.pixelCount) / 1_000
+        rank += Double(item.totalByteSize) / 1_000_000
+        return rank
+    }
+
+    public static func globalRanks(for items: [MediaItem]) -> [String: Double] {
+        var ranks: [String: Double] = [:]
+        for item in items {
+            ranks[item.id] = globalRank(for: item)
+        }
+        return ranks
+    }
+}
