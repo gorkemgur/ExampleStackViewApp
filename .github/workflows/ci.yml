@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: DupeCore unit tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          swift --version
+
+      - name: Run tests
+        run: swift test --package-path Packages/DupeCore
+
+  app:
+    name: iOS build and simulator tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick a simulator
+        id: simulator
+        run: echo "udid=$(python3 Scripts/pick-simulator.py)" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: TestResults.xcresult
+          retention-days: 7
+
+  idb:
+    name: Simulator automation (idb)
+    runs-on: macos-15
+    needs: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+
+      - name: Install XcodeGen and idb
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          brew tap facebook/fb
+          brew install idb-companion
+          pipx install fb-idb
+          idb --help > /dev/null
+
+      - name: Build for simulator
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          xcodebuild build \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Boot simulator, install and inspect
+        run: |
+          set -euo pipefail
+          UDID=$(python3 Scripts/pick-simulator.py)
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
+          APP=build/Build/Products/Debug-iphonesimulator/DupeSpace.app
+          test -d "$APP"
+
+          idb install --udid "$UDID" "$APP"
+          idb launch --udid "$UDID" com.gorkemgur.dupespace
+
+          # Give SwiftUI a moment to lay the first screen out before snapshotting it.
+          sleep 5
+
+          mkdir -p artifacts
+          idb ui describe-all --udid "$UDID" > artifacts/accessibility-tree.json
+          idb screenshot --udid "$UDID" artifacts/launch.png
+
+          # The accessibility tree is the machine-checkable half of "the screen rendered".
+          grep -q "storage" artifacts/accessibility-tree.json \
+            || { echo "root screen did not expose its storage elements"; exit 1; }
+
+      - name: Upload simulator artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idb-artifacts
+          path: artifacts
+          retention-days: 7
