@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Walk the app on a booted simulator and photograph every screen.
+
+Screenshots are the one thing a test suite cannot give you: XCUITest proves the
+elements are there, but only a picture shows whether the result is worth looking at.
+Every step is tolerant — a screen that cannot be reached is reported and skipped, so
+a partial walk still yields the screens it did reach.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+UDID = sys.argv[1]
+OUT_DIR = sys.argv[2]
+
+
+def run(args, timeout=120):
+    return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+
+
+def describe():
+    """The accessibility tree, once idb is willing to produce one."""
+    for _ in range(20):
+        result = run(["idb", "ui", "describe-all", "--udid", UDID])
+        if result.returncode == 0 and result.stdout.strip():
+            try:
+                return json.loads(result.stdout)
+            except json.JSONDecodeError:
+                pass
+        time.sleep(3)
+    return []
+
+
+def find(tree, identifier):
+    for element in tree:
+        if element.get("AXUniqueId") == identifier:
+            return element
+    for element in tree:
+        if element.get("AXLabel") == identifier:
+            return element
+    return None
+
+
+def center(element):
+    frame = element.get("frame") or {}
+    return (
+        int(frame.get("x", 0) + frame.get("width", 0) / 2),
+        int(frame.get("y", 0) + frame.get("height", 0) / 2),
+    )
+
+
+def tap(element, settle=2.0):
+    x, y = center(element)
+    run(["idb", "ui", "tap", "--udid", UDID, str(x), str(y)])
+    time.sleep(settle)
+
+
+def swipe_up():
+    run(["idb", "ui", "swipe", "--udid", UDID, "200", "620", "200", "280"])
+    time.sleep(1.0)
+
+
+def shot(name):
+    path = os.path.join(OUT_DIR, name)
+    run(["xcrun", "simctl", "io", UDID, "screenshot", path])
+    ok = os.path.exists(path) and os.path.getsize(path) > 0
+    print(f"{'captured' if ok else 'MISSED  '} {name}")
+    return ok
+
+
+def wait_for(identifier, timeout=150):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        element = find(describe(), identifier)
+        if element is not None:
+            return element
+        time.sleep(3)
+    print(f"never appeared: {identifier}")
+    return None
+
+
+def scroll_to(identifier, attempts=8):
+    """Find an element, scrolling down until it comes into view."""
+    for _ in range(attempts):
+        element = find(describe(), identifier)
+        if element is not None:
+            return element
+        swipe_up()
+    print(f"not reachable by scrolling: {identifier}")
+    return None
+
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    captured = 0
+
+    if wait_for("storage.headline") is None:
+        print("the app never reached its root screen")
+        return 1
+    captured += shot("01-overview.png")
+
+    entry = scroll_to("root.scan")
+    if entry is None:
+        return 0 if captured else 1
+    tap(entry)
+
+    start = wait_for("scan.start", timeout=60)
+    if start is None:
+        return 0
+    captured += shot("02-scan.png")
+    tap(start)
+
+    if wait_for("scan.total", timeout=180) is not None:
+        captured += shot("03-results.png")
+
+    review = scroll_to("scan.review")
+    if review is not None:
+        tap(review)
+        if wait_for("review.total", timeout=90) is not None:
+            captured += shot("04-review.png")
+
+            delete = find(describe(), "review.delete")
+            if delete is not None:
+                tap(delete, settle=3.0)
+                if wait_for("confirm.total", timeout=60) is not None:
+                    captured += shot("05-confirm.png")
+
+    print(f"captured {captured} screens")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

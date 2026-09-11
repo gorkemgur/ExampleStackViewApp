@@ -74,6 +74,8 @@ jobs:
     name: Simulator automation (idb)
     runs-on: macos-15
     needs: app
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -146,6 +148,39 @@ jobs:
             tail -20 artifacts/describe-error.txt || true
             exit 1
           fi
+
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Walk the app and photograph every screen
+        run: python3 Scripts/capture-screens.py "$UDID" artifacts/screens
+
+      - name: Commit the screenshots
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          shots=(artifacts/screens/*.png)
+          if [ ${#shots[@]} -eq 0 ]; then
+            echo "no screenshots to commit"
+            exit 0
+          fi
+
+          mkdir -p docs/screenshots
+          cp "${shots[@]}" docs/screenshots/
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if git diff --cached --quiet; then
+            echo "screenshots unchanged"
+            exit 0
+          fi
+
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          git commit -m "Update simulator screenshots [skip ci]"
+          # Rebase rather than force: this branch is also being pushed to by hand.
+          git pull --rebase origin "$BRANCH"
+          git push origin "HEAD:$BRANCH"
 
       - name: Upload simulator artifacts
         if: always()
