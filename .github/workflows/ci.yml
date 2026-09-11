@@ -123,7 +123,9 @@ jobs:
           mkdir -p artifacts
 
           idb install --udid "$UDID" "$APP"
-          idb launch --udid "$UDID" com.gorkemgur.dupespace || true
+          # simctl, not idb: it reliably forwards launch arguments, and the fixture
+          # flag is what puts a library in front of the app on a fresh simulator.
+          xcrun simctl launch "$UDID" com.gorkemgur.dupespace -ui-testing || true
 
           # The accessibility bridge is not ready the instant launch returns, and on a slow
           # runner "not ready" and "the screen is genuinely empty" look identical. Poll until

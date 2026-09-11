@@ -14,6 +14,7 @@ import time
 
 UDID = sys.argv[1]
 OUT_DIR = sys.argv[2]
+BUNDLE_ID = "com.gorkemgur.dupespace"
 
 
 def run(args, timeout=120):
@@ -92,9 +93,25 @@ def scroll_to(identifier, attempts=8):
     return None
 
 
+def relaunch_with_fixtures():
+    """Restart the app against the deterministic fixtures.
+
+    Without the flag the app runs for real: no photo permission on a fresh simulator,
+    so every screen past the permission wall is unreachable and the walk photographs
+    an empty library instead of the product.
+    """
+    run(["xcrun", "simctl", "terminate", UDID, BUNDLE_ID])
+    time.sleep(1)
+    result = run(["xcrun", "simctl", "launch", UDID, BUNDLE_ID, "-ui-testing"])
+    print("relaunch:", result.stdout.strip() or result.stderr.strip())
+    time.sleep(4)
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     captured = 0
+
+    relaunch_with_fixtures()
 
     if wait_for("storage.headline") is None:
         print("the app never reached its root screen")

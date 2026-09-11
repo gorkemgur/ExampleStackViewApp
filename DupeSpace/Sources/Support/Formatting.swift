@@ -7,6 +7,9 @@ enum ByteFormatting {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         formatter.allowedUnits = [.useGB, .useMB, .useKB]
+        // Without this the formatter writes "Zero KB", which reads as a formatting bug
+        // rather than as a measurement.
+        formatter.allowsNonnumericFormatting = false
         return formatter
     }()
 
