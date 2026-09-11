@@ -1,0 +1,204 @@
+import SwiftUI
+import DupeCore
+
+struct ReviewView: View {
+
+    @StateObject private var model: ReviewViewModel
+    @State private var showingConfirm = false
+
+    private let loader: any ThumbnailLoading
+
+    init(result: ScanResult) {
+        _model = StateObject(
+            wrappedValue: ReviewViewModel(result: result, deleter: AppEnvironment.makeDeleter())
+        )
+        loader = AppEnvironment.makeThumbnailLoader()
+    }
+
+    var body: some View {
+        List {
+            if let outcome = model.outcome {
+                outcomeSection(outcome)
+            }
+
+            if let failure = model.failure, model.outcome == nil {
+                Section {
+                    Text(failure)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("review.failure")
+                }
+            }
+
+            budgetSection
+
+            ForEach(model.sections) { section in
+                sectionView(section)
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Review")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            deleteBar
+        }
+        .sheet(isPresented: $showingConfirm) {
+            ConfirmDeleteSheet(model: model)
+        }
+    }
+
+    // MARK: - Budget
+
+    private var budgetSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("I need")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(ByteFormatting.string(Int64(model.budgetBytes)))
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                        .accessibilityIdentifier("budget.target")
+                    Text("back")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Slider(
+                    value: $model.budgetBytes,
+                    in: 0...Double(max(model.maxReclaimableBytes, 1))
+                )
+                .accessibilityIdentifier("budget.slider")
+
+                Picker("How far to go", selection: $model.budgetDepth) {
+                    Text("No loss").tag(RegretTier.inferiorCopy)
+                    Text("+ bursts").tag(RegretTier.burstLeftover)
+                    Text("+ similar").tag(RegretTier.similar)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("budget.depth")
+
+                Text(planSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("budget.summary")
+
+                Button("Select this plan") {
+                    model.applyBudgetPlan()
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.budgetPlan.selected.isEmpty)
+                .accessibilityIdentifier("budget.apply")
+            }
+            .padding(.vertical, 6)
+        } header: {
+            Text("Space budget")
+        } footer: {
+            Text("Starts with the copies that cost you nothing and only reaches further if you let it.")
+        }
+    }
+
+    private var planSummary: String {
+        let plan = model.budgetPlan
+        guard !plan.selected.isEmpty else {
+            return "Drag to set a target. Nothing is selected by a plan of zero."
+        }
+        let reached = ByteFormatting.string(plan.reclaimedBytes)
+        let deepest = plan.deepestTier.map { ScanCopy.title(for: $0).lowercased() } ?? "nothing"
+        if plan.meetsTarget {
+            return "\(plan.selected.count) items, \(reached) — reaching as far as \(deepest)."
+        }
+        return "Only \(reached) is available at this setting (\(plan.selected.count) items). Allow more, or accept less."
+    }
+
+    // MARK: - Sections
+
+    @ViewBuilder
+    private func sectionView(_ section: ReviewSection) -> some View {
+        Section {
+            ForEach(section.groups) { group in
+                NavigationLink {
+                    GroupDetailView(group: group, model: model, loader: loader)
+                } label: {
+                    GroupRowView(
+                        group: group,
+                        selectedCount: group.candidateIDs.filter { model.selection.isSelected($0) }.count,
+                        loader: loader
+                    )
+                }
+            }
+        } header: {
+            HStack {
+                Text(ScanCopy.title(for: section.tier))
+                    .accessibilityIdentifier("review.section.\(section.tier.rawValue)")
+                Spacer()
+                Button(model.selection.containsAll(section.candidateIDs) ? "None" : "All") {
+                    model.setSelected(!model.selection.containsAll(section.candidateIDs), in: section)
+                }
+                .font(.caption.weight(.semibold))
+                .textCase(nil)
+                .accessibilityIdentifier("review.selectall.\(section.tier.rawValue)")
+            }
+        } footer: {
+            Text("\(ScanCopy.subtitle(for: section.tier)) · \(ByteFormatting.string(section.bytes)) across \(section.itemCount) items")
+        }
+    }
+
+    // MARK: - Bottom bar
+
+    private var deleteBar: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ByteFormatting.string(model.savings.onDeviceBytes))
+                    .font(.headline)
+                    .monospacedDigit()
+                    .accessibilityIdentifier("review.total")
+                Text("\(model.selection.count) selected")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("review.count")
+            }
+
+            Spacer(minLength: 0)
+
+            Button("Delete…") {
+                showingConfirm = true
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .disabled(!model.canDelete)
+            .accessibilityIdentifier("review.delete")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial)
+    }
+
+    // MARK: - Outcome
+
+    @ViewBuilder
+    private func outcomeSection(_ outcome: DeletionOutcome) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("\(outcome.deletedCount) items removed", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.green)
+                    .accessibilityIdentifier("review.result")
+
+                Text("They are in Recently Deleted for 30 days. Empty that album in Photos to get the space back now.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if outcome.missingCount > 0 {
+                    Text("\(outcome.missingCount) items were already gone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+}

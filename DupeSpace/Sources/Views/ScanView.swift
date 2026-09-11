@@ -135,6 +135,16 @@ struct ScanView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+
+                NavigationLink {
+                    ReviewView(result: result)
+                } label: {
+                    Text("Review and choose")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityIdentifier("scan.review")
             }
 
             ForEach(summaries) { summary in

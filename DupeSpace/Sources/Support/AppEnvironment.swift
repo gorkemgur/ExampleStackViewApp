@@ -19,4 +19,12 @@ enum AppEnvironment {
     static func makeAnalyzer() -> any AssetAnalyzing {
         isUITesting ? StubAssetAnalyzer.uiTestFixture() : PhotoKitAssetAnalyzer()
     }
+
+    static func makeDeleter() -> MediaDeleting {
+        isUITesting ? StubDeleter() : PhotoKitDeleter()
+    }
+
+    static func makeThumbnailLoader() -> ThumbnailLoading {
+        isUITesting ? StubThumbnailLoader() : PhotoKitThumbnailLoader()
+    }
 }
