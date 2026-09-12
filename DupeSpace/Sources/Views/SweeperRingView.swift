@@ -25,6 +25,12 @@ struct SweeperRingView: View {
     /// the next is due: always moving, and never ahead of what has happened. It used to be a
     /// fixed 0.15s, which on a cadence any slower than that advanced the ring and then left it
     /// sitting still — the step-by-step catching you can see when the demo is slowed down.
+    ///
+    /// And the curve is `.linear`, which is not a detail. An ease-out here starts each segment
+    /// fast and brings it to a stop before the next report arrives, so a twelve-file deletion
+    /// pulses twelve times instead of travelling. Constant velocity is what makes the joins
+    /// between reports invisible; measured in the browser preview, the drawn arc advances at
+    /// one speed through the whole phase to within floating point.
     var stepInterval: TimeInterval = 0.15
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
