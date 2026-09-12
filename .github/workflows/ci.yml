@@ -17,6 +17,57 @@ env:
   HOMEBREW_NO_INSTALL_CLEANUP: 1
 
 jobs:
+
+  # Exists for one reason: a verdict in about a minute.
+  #
+  # Everything else in this file takes between seven and twelve, and for the last several
+  # rounds the thing that actually held us up was waiting on all of it to find out about a
+  # one-line type error. This job compiles and stops. Red here means do not bother reading
+  # the rest.
+  compile:
+    name: Does it compile
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .derived-compile
+          key: compile-${{ runner.os }}-${{ hashFiles('DupeSpace/Sources/**/*.swift', 'Shared/**/*.swift', 'DupeSpaceWidgets/**/*.swift', 'Packages/DupeCore/Sources/**/*.swift', 'project.yml') }}
+          restore-keys: |
+            compile-${{ runner.os }}-
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath .derived-compile \
+            -enableCodeCoverage NO \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee compile.log
+
+      - name: What did not compile
+        if: failure()
+        run: grep -nE "error:" compile.log | sort -u | head -40 || echo "none"
+
   core:
     name: DupeCore unit tests
     runs-on: macos-15
@@ -95,25 +146,61 @@ jobs:
           restore-keys: |
             derived-${{ runner.os }}-
 
-      - name: Test
+      # Built once, then run twice. `build-for-testing` is most of the cost of this job, and
+      # running it separately means the unit verdict and the UI verdict do not queue behind
+      # each other's compile.
+      - name: Build for testing
         run: |
           set -o pipefail
           # -enableCodeCoverage NO: instrumenting every file costs about a minute and nothing
           # in this pipeline reads the coverage. -derivedDataPath: so the cache above has
           # something to hold on to.
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -project DupeSpace.xcodeproj \
             -scheme DupeSpace \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath .derived \
-            -resultBundlePath TestResults.xcresult \
             -enableCodeCoverage NO \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
             2>&1 | tee xcodebuild.log
+
+      # The fast half, and the one that catches most of what goes wrong: no app launches, no
+      # scans, no waiting on an accessibility tree.
+      - name: Unit tests
+        id: unit
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath .derived \
+            -only-testing:DupeSpaceTests \
+            -enableCodeCoverage NO \
+            2>&1 | tee -a xcodebuild.log
+
+      # The slow half. Every one of these launches the app and scans the fixture from scratch,
+      # which is twenty seconds apiece — so they run two simulators at once. `if: always()`
+      # because a unit failure must not hide a UI failure: finding out about them one round
+      # trip at a time is the thing that has actually been costing us.
+      - name: UI tests
+        if: always() && steps.unit.conclusion != 'skipped'
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath .derived \
+            -resultBundlePath TestResults.xcresult \
+            -only-testing:DupeSpaceUITests \
+            -parallel-testing-enabled YES \
+            -maximum-parallel-testing-workers 2 \
+            -enableCodeCoverage NO \
+            2>&1 | tee -a xcodebuild.log
 
       - name: Upload test results
         if: always()
