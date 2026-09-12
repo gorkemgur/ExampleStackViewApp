@@ -180,25 +180,50 @@ final class FileScanningTests: XCTestCase {
 
     // MARK: - Deletion
 
+    /// Every deletion in this suite goes through the stamped call, because that is the only
+    /// call the app makes and now the only one the deleter honours.
+    private func stamps(for items: [MediaItem]) -> [String: FileStamp] {
+        items.reduce(into: [:]) { $0[$1.id] = FileStamp($1) }
+    }
+
     func testDeletingRemovesTheFileFromDisk() async throws {
         let url = try write("gone.txt", "bytes")
         let target = try XCTUnwrap(items().first)
 
-        let outcome = try await FileDeleter(registry: registry).delete(ids: [target.id])
+        let outcome = try await FileDeleter(registry: registry)
+            .delete(ids: [target.id], expecting: stamps(for: [target]))
 
         XCTAssertEqual(outcome.deletedIDs, [target.id])
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
-    func testDeletingSomethingAlreadyGoneReportsItMissingRatherThanFailing() async throws {
-        try write("vanishing.txt", "bytes")
+    /// The fail-closed rule, stated as a test so it cannot quietly go back.
+    ///
+    /// `MediaDeleting` offers `delete(ids:)` with no stamps at all, and the deleter used to
+    /// read that as "nothing to check against, go ahead" — on the half of this app that cannot
+    /// be undone. An unstamped file is one the caller cannot vouch for, and the answer is no.
+    func testAFileWithNoStampIsRefusedRatherThanDeleted() async throws {
+        let url = try write("unvouched.txt", "bytes")
         let target = try XCTUnwrap(items().first)
-        try FileManager.default.removeItem(at: root.appendingPathComponent("vanishing.txt"))
 
         let outcome = try await FileDeleter(registry: registry).delete(ids: [target.id])
 
         XCTAssertTrue(outcome.deletedIDs.isEmpty)
-        XCTAssertEqual(outcome.missingCount, 1)
+        XCTAssertEqual(outcome.skippedIDs, [target.id], "a refusal, not a failure")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testDeletingSomethingAlreadyGoneReportsItMissingRatherThanFailing() async throws {
+        try write("vanishing.txt", "bytes")
+        let target = try XCTUnwrap(items().first)
+        let stamp = stamps(for: [target])
+        try FileManager.default.removeItem(at: root.appendingPathComponent("vanishing.txt"))
+
+        let outcome = try await FileDeleter(registry: registry)
+            .delete(ids: [target.id], expecting: stamp)
+
+        XCTAssertTrue(outcome.deletedIDs.isEmpty)
+        XCTAssertEqual(outcome.deletedIDs.count + outcome.missingCount + outcome.skippedCount, 1)
     }
 
     func testDeletingLeavesEverythingElseAlone() async throws {
@@ -207,7 +232,8 @@ final class FileScanningTests: XCTestCase {
 
         let all = items()
         let doomed = try XCTUnwrap(all.first { $0.displayName == "doomed.txt" })
-        _ = try await FileDeleter(registry: registry).delete(ids: [doomed.id])
+        _ = try await FileDeleter(registry: registry)
+            .delete(ids: [doomed.id], expecting: stamps(for: [doomed]))
 
         XCTAssertEqual(items().map(\.displayName), ["safe.txt"])
     }
