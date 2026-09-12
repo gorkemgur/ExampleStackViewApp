@@ -26,6 +26,19 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # The rule the whole layering rests on, enforced by the build rather than by
+      # discipline. DupeCore holds the reasoning that decides what gets deleted, and it is
+      # testable on a Linux box precisely because none of it can reach a platform framework.
+      # Nothing checked that until it was a grep.
+      - name: DupeCore must stay platform-free
+        run: |
+          set -euo pipefail
+          if grep -rnE '^import (SwiftUI|UIKit|Photos|PhotosUI|Vision|AVFoundation|ActivityKit|WidgetKit|CoreGraphics|ImageIO)$'               Packages/DupeCore/Sources; then
+            echo "::error::DupeCore imported a platform framework. The engine has to stay testable without a simulator."
+            exit 1
+          fi
+          echo "clean"
+
       - name: Run tests
         run: swift test --package-path Packages/DupeCore
 

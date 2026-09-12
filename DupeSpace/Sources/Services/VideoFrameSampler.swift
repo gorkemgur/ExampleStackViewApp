@@ -41,18 +41,35 @@ enum VideoFrameSampler {
         generator.requestedTimeToleranceBefore = tolerance
         generator.requestedTimeToleranceAfter = tolerance
 
-        var frames: [UInt64] = []
-        frames.reserveCapacity(VideoSignature.samplePositions.count)
+        // One pass for all ten timestamps rather than ten separate seeks.
+        //
+        // `image(at:)` opens a decode session, seeks, decodes and tears down, so the loop that
+        // was here paid that ten times per video — five thousand seeks across five hundred
+        // clips where five hundred passes would do. `images(for:)` hands AVFoundation the whole
+        // list and lets it walk the file once.
+        let times = VideoSignature.samplePositions.map {
+            CMTime(seconds: seconds * $0, preferredTimescale: 600)
+        }
 
-        for position in VideoSignature.samplePositions {
-            let time = CMTime(seconds: seconds * position, preferredTimescale: 600)
+        var framesByTime: [Double: UInt64] = [:]
+        for await result in generator.images(for: times) {
             guard
-                let result = try? await generator.image(at: time),
-                let gray = GrayImageRenderer.render(result.image)
+                case let .success(requestedTime: requested, image: image, actualTime: _) = result,
+                let gray = GrayImageRenderer.render(image)
             else {
+                // A signature with a gap in it would be compared against another video's frames
+                // one position out, which is a worse answer than no answer.
                 return nil
             }
-            frames.append(PerceptualHasher.pHash(gray))
+            framesByTime[CMTimeGetSeconds(requested)] = PerceptualHasher.pHash(gray)
+        }
+
+        // Back into sample order: the stream does not promise one.
+        var frames: [UInt64] = []
+        frames.reserveCapacity(times.count)
+        for time in times {
+            guard let hash = framesByTime[CMTimeGetSeconds(time)] else { return nil }
+            frames.append(hash)
         }
 
         let signature = VideoSignature(frameHashes: frames)

@@ -42,22 +42,4 @@ public struct StreamingDigest {
     }
 }
 
-/// Cheap pre-filter digest: the head and tail of a file plus its exact length.
-///
-/// Two files with different quick digests cannot be identical, so the expensive full pass
-/// only ever runs on items that already agree on size *and* on both edge windows.
-public enum QuickDigest {
-
-    /// Bytes read from each end of the file.
-    public static let windowSize = 64 * 1024
-
-    public static func compose(head: Data, tail: Data, totalBytes: Int64) -> ContentDigest {
-        var hasher = SHA256()
-        hasher.update(data: head)
-        hasher.update(data: tail)
-        withUnsafeBytes(of: totalBytes.littleEndian) { hasher.update(bufferPointer: $0) }
-        return ContentDigest(bytes: Array(hasher.finalize()))
-    }
-}
-
 #endif

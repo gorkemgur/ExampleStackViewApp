@@ -451,6 +451,27 @@ final class VideoScanTests: XCTestCase {
         XCTAssertTrue(ScanPipeline.videoCandidatePairs(items, tolerance: 0.5).isEmpty)
     }
 
+    /// Duration alone is a weak filter: a camera roll of fifteen-second exports is one giant
+    /// run, and every pair in it used to be opened and sampled.
+    func testVideosOfDifferentShapesAreNotPaired() {
+        let items = [
+            video("wide", seconds: 10.0, width: 1920, height: 1080),
+            video("tall", seconds: 10.1, width: 1080, height: 1920)
+        ]
+        XCTAssertTrue(ScanPipeline.videoCandidatePairs(items, tolerance: 0.5).isEmpty)
+    }
+
+    /// Unknown proportions are not evidence of difference. A video in a granted folder carries
+    /// none until something opens it, and excluding those unexamined would switch video
+    /// matching off for the whole Files source.
+    func testAVideoWithNoKnownShapeIsStillPaired() {
+        let items = [
+            video("known", seconds: 10.0, width: 1920, height: 1080),
+            video("unknown", seconds: 10.1, width: 0, height: 0)
+        ]
+        XCTAssertEqual(ScanPipeline.videoCandidatePairs(items, tolerance: 0.5).count, 1)
+    }
+
     func testEveryVideoInACloseRunIsPairedWithEveryOther() {
         let items = [
             video("a", seconds: 10.0),

@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UniformTypeIdentifiers
 import DupeCore
 
@@ -30,7 +31,7 @@ final class FileMediaLibrary: MediaLibrary {
     // MARK: - Enumeration
 
     static func items(in folder: GrantedFolder) -> [MediaItem] {
-        FolderAccess.withFolder(folder) { root -> [MediaItem] in
+        FolderAccess.withFolder(folder, renewingWith: registry) { root -> [MediaItem] in
             let keys: [URLResourceKey] = [
                 .isRegularFileKey,
                 .fileSizeKey,
@@ -94,17 +95,46 @@ final class FileMediaLibrary: MediaLibrary {
             kind = .document
         }
 
+        // Dimensions, without decoding the image.
+        //
+        // These were never filled in for files, and the consequences reached further than a
+        // blank field. `sameFraming` compares aspect ratios, so with both sides at zero it
+        // returned false for every file pair — which meant a file image could never be labelled
+        // `.nearExact` no matter how identical, `CleanupPlanner`'s "the keeper has more pixels"
+        // rule could never be true for one, and every duplicate in a granted folder landed in
+        // `.similar` and was never pre-selected. The near-duplicate tier was switched off for
+        // half the app's sources, quietly, by an unset field.
+        let pixels = kind == .image ? Self.pixelSize(of: url) : (width: 0, height: 0)
+
         return MediaItem(
             id: FileItemID.make(folderID: folder.id, relativePath: relativePath),
             source: .fileFolder,
             kind: kind,
             displayName: url.lastPathComponent,
             byteSize: bytes,
+            pixelWidth: pixels.width,
+            pixelHeight: pixels.height,
             creationDate: values.creationDate,
             modificationDate: values.contentModificationDate,
             isLocallyAvailable: !isPlaceholder,
             isUserLibraryOriginal: false
         )
+    }
+
+    /// The image's dimensions, read from its header.
+    ///
+    /// `CGImageSourceCopyPropertiesAtIndex` reads the metadata block and stops; it does not
+    /// decode pixels, so this costs about what the `stat` beside it costs.
+    static func pixelSize(of url: URL) -> (width: Int, height: Int) {
+        guard
+            let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            let width = properties[kCGImagePropertyPixelWidth] as? Int,
+            let height = properties[kCGImagePropertyPixelHeight] as? Int
+        else {
+            return (0, 0)
+        }
+        return (width, height)
     }
 
     /// Path of `url` relative to `root`, with no leading slash.
@@ -132,7 +162,7 @@ final class FileMediaLibrary: MediaLibrary {
 
         // The nested optional is flattened: "the grant would not resolve" and "the path was
         // not inside it" are the same answer to the caller — there is no file here for you.
-        let resolved: T?? = try FolderAccess.withFolder(folder) { root -> T? in
+        let resolved: T?? = try FolderAccess.withFolder(folder, renewingWith: registry) { root -> T? in
             let target = root.appendingPathComponent(parsed.relativePath).standardizedFileURL
 
             // The relative path comes from this app's own enumeration, but it is also written
@@ -165,7 +195,7 @@ final class FileMediaLibrary: MediaLibrary {
             return nil
         }
 
-        let resolved: T?? = await FolderAccess.withFolderAsync(folder) { root -> T? in
+        let resolved: T?? = await FolderAccess.withFolderAsync(folder, renewingWith: registry) { root -> T? in
             let target = root.appendingPathComponent(parsed.relativePath).standardizedFileURL
             guard target.path.hasPrefix(root.standardizedFileURL.path + "/") else { return nil }
             return await body(target)

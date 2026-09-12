@@ -38,7 +38,7 @@ PhotoKit, Vision or SwiftUI types, so all of it runs under unit test:
 | Area | What lives there |
 |---|---|
 | `Hashing` | streaming SHA-256, dHash, DCT-based pHash over a plain grayscale buffer |
-| `Matching` | BK-tree, pigeonhole-banded index, union-find, the clusterer |
+| `Matching` | the pair sweep, the video signature matcher, the star clusterer |
 | `Scoring` | which copy survives, what may be pre-ticked, and the validator |
 | `Budget` | regret tiers and the "I need N bytes" planner |
 | `Scan` | the pipeline, its analyzer protocol, the fingerprint cache, the thermal policy and the pause gate |
@@ -102,7 +102,8 @@ no live scan, and exactly the same scan.
 ## The four rules it will not break
 
 1. **Nothing is deleted on transitive evidence.** Byte-identical copies are grouped
-   with union-find, which is correct because digest equality is transitive. A
+   by bucketing on the digest itself, which is correct because digest equality is
+   transitive — every member of such a bucket equals every other by construction. A
    distance threshold is *not* transitive — A~B and B~C says nothing about A~C — so
    similar photos are clustered as stars around the copy that survives, and every
    member was measured against that copy directly.

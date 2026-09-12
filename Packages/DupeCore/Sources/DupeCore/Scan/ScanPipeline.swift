@@ -215,7 +215,8 @@ public struct ScanPipeline: Sendable {
         // with a plausible partner are ever opened and sampled.
         let videoPairs = Self.videoCandidatePairs(
             items.filter { !consumed.contains($0.id) && !cloudOnly.contains($0.id) },
-            tolerance: configuration.videoDurationTolerance
+            tolerance: configuration.videoDurationTolerance,
+            aspectRatioTolerance: configuration.aspectRatioTolerance
         )
         let videoPairIDs = Set(videoPairs.flatMap { [$0.a, $0.b] })
         let videoTargets = items.filter { videoPairIDs.contains($0.id) }
@@ -240,7 +241,14 @@ public struct ScanPipeline: Sendable {
 
         // 5. Candidate lookup through a metric tree, then a second opinion from the other hash.
         progress(ScanProgress(stage: .matching, completed: 0, total: hashes.count))
-        var edges = Self.edges(hashes: hashes, items: index, configuration: configuration)
+        var edges = try Self.edges(
+            hashes: hashes,
+            items: index,
+            configuration: configuration,
+            progress: { done, total in
+                progress(ScanProgress(stage: .matching, completed: done, total: total))
+            }
+        )
         let videoEdges = Self.videoEdges(
             pairs: videoPairs,
             signatures: signatures,
@@ -311,36 +319,88 @@ public struct ScanPipeline: Sendable {
         var similar: [SimilarityEdge] = []
     }
 
+    /// The most neighbours any one item may contribute.
+    ///
+    /// Both edge sets used to grow without a ceiling. A camera roll with five thousand
+    /// screenshots of the same app screen — common, and precisely the case this app is for —
+    /// produces about twelve and a half million edges, each holding two `String` ids: several
+    /// gigabytes, and a scan killed by the system somewhere in the middle. The clusterer only
+    /// ever reads a seed's neighbours and only the closest of them matter, so keeping the
+    /// closest few hundred per item costs nothing anyone can observe and bounds this at
+    /// n x 256 instead of n squared.
+    static let maximumNeighboursPerItem = 256
+
     static func edges(
         hashes: [String: PerceptualHashes],
         items: [String: MediaItem],
-        configuration: ScanConfiguration
-    ) -> EdgeSets {
+        configuration: ScanConfiguration,
+        progress: (Int, Int) -> Void = { _, _ in }
+    ) throws -> EdgeSets {
 
-        var tree = BKTree()
-        for (id, hash) in hashes.sorted(by: { $0.key < $1.key }) {
-            tree.insert(value: hash.dHash, id: id)
+        // A flat sweep rather than a BK-tree.
+        //
+        // The tree was doing no work. Its pruning window is [d-r, d+r], which at the similar
+        // threshold of 12 is 25 wide, and 64-bit Hamming distances between unrelated hashes
+        // concentrate around 32 give or take four — so the window swallows the whole
+        // distribution and the query visits 78-85% of the nodes. It was a linear scan wearing
+        // a tree's costs: a dictionary lookup and a node allocation per visit, and every pair
+        // discovered twice, once from each end.
+        //
+        // This is the same comparison over three parallel arrays, each pair looked at once,
+        // with the cheap dHash test first so the second hash is only computed for hashes that
+        // already passed. Same results, none of the overhead.
+        let ordered = hashes.keys.sorted()
+        let count = ordered.count
+        var dHashes = [UInt64](repeating: 0, count: count)
+        var pHashes = [UInt64](repeating: 0, count: count)
+        for (index, id) in ordered.enumerated() {
+            let hash = hashes[id]!
+            dHashes[index] = hash.dHash
+            pHashes[index] = hash.pHash
         }
 
         var nearExact = Set<SimilarityEdge>()
         var similar = Set<SimilarityEdge>()
 
-        for (id, hash) in hashes.sorted(by: { $0.key < $1.key }) {
-            for hit in tree.query(value: hash.dHash, maxDistance: configuration.similarDistance) {
-                guard hit.id != id else { continue }
-                guard let otherHash = hashes[hit.id] else { continue }
+        for outer in 0..<count {
+            // The longest stretch of the scan, and until now the one stretch with no
+            // cancellation check and no progress in it: the bar sat at "matching 0 of n" for
+            // the whole of it and the stop button did nothing. `run` claims every stage is
+            // cancellable; this is where that became true.
+            if outer % 128 == 0 {
+                try Task.checkCancellation()
+                progress(outer, count)
+            }
+
+            var neighbours: [(index: Int, distance: Int)] = []
+
+            for inner in (outer + 1)..<count {
+                let dDistance = hammingDistance(dHashes[outer], dHashes[inner])
+                guard dDistance <= configuration.similarDistance else { continue }
 
                 // The second fingerprint is an independent opinion: dHash tracks local
                 // gradients, pHash tracks low-frequency structure. Requiring both to agree is
                 // what keeps unrelated photos out of a deletion list.
-                let pDistance = hammingDistance(hash.pHash, otherHash.pHash)
+                let pDistance = hammingDistance(pHashes[outer], pHashes[inner])
                 guard pDistance <= configuration.similarDistance else { continue }
 
-                let distance = max(hit.distance, pDistance)
-                let edge = SimilarityEdge(a: id, b: hit.id, distance: distance)
+                neighbours.append((inner, max(dDistance, pDistance)))
+            }
 
-                if distance <= configuration.nearExactDistance,
-                   sameFraming(items[id], items[hit.id], tolerance: configuration.aspectRatioTolerance) {
+            if neighbours.count > Self.maximumNeighboursPerItem {
+                neighbours.sort {
+                    $0.distance == $1.distance ? $0.index < $1.index : $0.distance < $1.distance
+                }
+                neighbours.removeLast(neighbours.count - Self.maximumNeighboursPerItem)
+            }
+
+            let id = ordered[outer]
+            for neighbour in neighbours {
+                let otherID = ordered[neighbour.index]
+                let edge = SimilarityEdge(a: id, b: otherID, distance: neighbour.distance)
+
+                if neighbour.distance <= configuration.nearExactDistance,
+                   sameFraming(items[id], items[otherID], tolerance: configuration.aspectRatioTolerance) {
                     nearExact.insert(edge)
                 } else {
                     similar.insert(edge)
@@ -354,12 +414,23 @@ public struct ScanPipeline: Sendable {
         )
     }
 
-    /// Pairs of videos close enough in length to be worth opening.
+    /// Pairs of videos close enough in length *and* shape to be worth opening.
     ///
     /// Sorted once and swept, so this costs a sort rather than a comparison of every video
     /// against every other one. Duration is metadata the library already has; sampling frames
     /// is not, and this is what keeps the expensive half off most of the library.
-    static func videoCandidatePairs(_ items: [MediaItem], tolerance: Double) -> [SimilarityEdge] {
+    ///
+    /// The shape half was missing, and it is the half that matters at scale: a camera roll of
+    /// three thousand fifteen-second clips — app exports, screen recordings, anything with a
+    /// fixed length — all fall inside the duration window of each other, so the sweep produced
+    /// four and a half million pairs and four and a half million frame comparisons. Two videos
+    /// of different proportions are not the same recording, and the library knows their
+    /// proportions without opening anything.
+    static func videoCandidatePairs(
+        _ items: [MediaItem],
+        tolerance: Double,
+        aspectRatioTolerance: Double = ScanConfiguration.default.aspectRatioTolerance
+    ) -> [SimilarityEdge] {
         let videos = items
             .filter { $0.kind == .video && $0.duration > 0 }
             .sorted { $0.duration == $1.duration ? $0.id < $1.id : $0.duration < $1.duration }
@@ -369,8 +440,13 @@ public struct ScanPipeline: Sendable {
             var inner = outer + 1
             while inner < videos.count,
                   videos[inner].duration - videos[outer].duration <= tolerance {
+                defer { inner += 1 }
+                guard couldShareFraming(
+                    videos[outer],
+                    videos[inner],
+                    tolerance: aspectRatioTolerance
+                ) else { continue }
                 pairs.append(SimilarityEdge(a: videos[outer].id, b: videos[inner].id, distance: 0))
-                inner += 1
             }
         }
         return pairs
@@ -422,6 +498,20 @@ public struct ScanPipeline: Sendable {
 
     static func sameFraming(_ lhs: MediaItem?, _ rhs: MediaItem?, tolerance: Double) -> Bool {
         guard let lhs, let rhs, lhs.aspectRatio > 0, rhs.aspectRatio > 0 else { return false }
+        return abs(lhs.aspectRatio - rhs.aspectRatio) / max(lhs.aspectRatio, rhs.aspectRatio) <= tolerance
+    }
+
+    /// `sameFraming`, but unknown proportions do not count as different.
+    ///
+    /// The two are used for opposite purposes and need opposite defaults. Deciding whether a
+    /// pair is near-exact, not knowing is a reason to say no — that is `sameFraming`, and it
+    /// stays strict. Deciding whether a pair is worth *opening*, not knowing is not evidence of
+    /// anything, and answering no would throw the pair away unexamined. A folder video carries
+    /// no dimensions until something reads it, so the strict version here would have excluded
+    /// every file-to-file video pair in the app.
+    static func couldShareFraming(_ lhs: MediaItem?, _ rhs: MediaItem?, tolerance: Double) -> Bool {
+        guard let lhs, let rhs else { return false }
+        guard lhs.aspectRatio > 0, rhs.aspectRatio > 0 else { return true }
         return abs(lhs.aspectRatio - rhs.aspectRatio) / max(lhs.aspectRatio, rhs.aspectRatio) <= tolerance
     }
 

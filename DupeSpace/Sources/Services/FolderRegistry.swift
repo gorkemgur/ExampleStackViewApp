@@ -22,6 +22,14 @@ protocol FolderRegistering: Sendable {
     func folders() -> [GrantedFolder]
     func add(_ folder: GrantedFolder)
     func remove(id: UUID)
+    /// Replaces the stored bookmark for a grant, keeping its id and name.
+    ///
+    /// A bookmark goes stale when the folder moves, when the volume changes, or after a
+    /// restore. It keeps resolving for a while and then stops, and when it stops the grant
+    /// fails silently: the folder yields no items, contributes nothing to the inventory, and
+    /// says nothing about it. `URL(resolvingBookmarkData:)` reports staleness and the fix is to
+    /// write a fresh bookmark back while the security scope is still held.
+    func refreshBookmark(id: UUID, to bookmark: Data)
 }
 
 /// Identifies a file by the grant it came from plus its path inside that grant.
@@ -84,6 +92,14 @@ final class UserDefaultsFolderRegistry: FolderRegistering, @unchecked Sendable {
         writeLocked(current)
     }
 
+    func refreshBookmark(id: UUID, to bookmark: Data) {
+        lock.lock(); defer { lock.unlock() }
+        var current = decodeLocked()
+        guard let index = current.firstIndex(where: { $0.id == id }) else { return }
+        current[index].bookmark = bookmark
+        writeLocked(current)
+    }
+
     private func decodeLocked() -> [GrantedFolder] {
         guard let data = defaults.data(forKey: Self.key) else { return [] }
         return (try? JSONDecoder().decode([GrantedFolder].self, from: data)) ?? []
@@ -119,6 +135,12 @@ final class InMemoryFolderRegistry: FolderRegistering, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         storage.removeAll { $0.id == id }
     }
+
+    func refreshBookmark(id: UUID, to bookmark: Data) {
+        lock.lock(); defer { lock.unlock() }
+        guard let index = storage.firstIndex(where: { $0.id == id }) else { return }
+        storage[index].bookmark = bookmark
+    }
 }
 
 /// Resolves a grant back into a usable URL and holds the security scope while you work.
@@ -127,7 +149,11 @@ enum FolderAccess {
     /// Runs `body` with the folder's URL. Returns `nil` when the grant can no longer be
     /// resolved — a folder the user moved or deleted is simply gone, not an error worth
     /// interrupting them over.
-    static func withFolder<T>(_ folder: GrantedFolder, _ body: (URL) throws -> T) rethrows -> T? {
+    static func withFolder<T>(
+        _ folder: GrantedFolder,
+        renewingWith registry: (any FolderRegistering)? = nil,
+        _ body: (URL) throws -> T
+    ) rethrows -> T? {
         var isStale = false
         guard
             let url = try? URL(
@@ -142,13 +168,37 @@ enum FolderAccess {
 
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        renew(folder, at: url, isStale: isStale, registry: registry)
 
         return try body(url)
     }
 
+    /// Writes a fresh bookmark back when the old one is on its way out.
+    ///
+    /// `isStale` used to be declared, passed by reference and then never read — in both
+    /// resolvers. A stale bookmark still resolves, right up until the day it does not, and on
+    /// that day the grant disappears without a word: the folder enumerates empty, its files
+    /// leave the inventory, and the overlap check that stops the same file being indexed twice
+    /// stops seeing it. The renewal has to happen inside the security scope, which is why it
+    /// lives here rather than at the call site.
+    private static func renew(
+        _ folder: GrantedFolder,
+        at url: URL,
+        isStale: Bool,
+        registry: (any FolderRegistering)?
+    ) {
+        guard isStale, let registry, let fresh = try? url.bookmarkData() else { return }
+        registry.refreshBookmark(id: folder.id, to: fresh)
+    }
+
     /// The same, for work that has to await inside the grant. The security scope has to stay
     /// held for the whole read, and AVFoundation does not read synchronously.
-    static func withFolderAsync<T>(_ folder: GrantedFolder, _ body: (URL) async -> T) async -> T? {
+    static func withFolderAsync<T>(
+        _ folder: GrantedFolder,
+        renewingWith registry: (any FolderRegistering)? = nil,
+        _ body: (URL) async -> T
+    ) async -> T? {
         var isStale = false
         guard
             let url = try? URL(
@@ -163,6 +213,8 @@ enum FolderAccess {
 
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        renew(folder, at: url, isStale: isStale, registry: registry)
 
         return await body(url)
     }

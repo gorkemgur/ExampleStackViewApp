@@ -1,5 +1,26 @@
 # DupeSpace — Duplicate Finder & Storage Analyzer (iOS)
 
+> **Bu doküman planın kendisi, kodun aynası değil.** Aşağıdaki üç madde
+> planlandı ama kodda yok, ve bir mimari incelemesi bunları "README'nin
+> çalışmayan bir mekanizmayı çalışıyormuş gibi anlatması" olarak işaretledi:
+>
+> - **Vision `VNGenerateImageFeaturePrintRequest` doğrulaması (§2.2-C).** Depoda
+>   hiç Vision kodu yok. `nearExact` / `similar` ayrımı yalnızca Hamming
+>   mesafesine dayanıyor.
+> - **Multi-index / pigeonhole bantlı indeks ve BK-tree (§2.2-B).** BK-tree
+>   yazıldı ve ölçüldü: eşik 12'de budama penceresi 25 bit genişliğinde, 64-bit
+>   mesafeler 32±4'te toplandığı için ağaç düğümlerin %80'inden fazlasını
+>   geziyordu — sözlük maliyetiyle birlikte doğrusal taramadan yavaş. Yerini
+>   düz bir çift taraması aldı; her iki tip de silindi.
+> - **Kademe 1 hızlı özet (§2.1, §2.4).** `QuickDigest` hiç çağrılmadı ve
+>   silindi; eleme metadata kovaları ile tam akış özeti arasında iki kademeli.
+>
+> Ayrıca §2.2-D'deki "bileşen içi ortalama mesafe eşiği aşarsa grup ikiye
+> bölünür" adımı uygulanmadı: yıldız kümeleme onun yerine geçti ve daha güvenli
+> bir cevap veriyor (her üye tohuma doğrudan ölçüldü). §2.2-B "dHash ≤ 10
+> **veya** pHash ≤ 10" diyor; kod **ve** istiyor — README kodu doğru anlatan
+> belge.
+
 Kişisel kullanım için, tek cihazda çalışan, tamamen on-device bir uygulama.
 Fotoğraf/video/belge kopyalarını bulur, ne nerede yer kaplıyor gösterir,
 seçili kopyaları silerek ne kadar kazanç sağlanacağını hesaplar.
