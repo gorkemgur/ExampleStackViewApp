@@ -38,7 +38,22 @@ enum DS {
     /// and they force `colorScheme` to dark for the system controls they hold — which would
     /// resolve an adaptive colour to its dark half anyway. Used for the three blocks that are
     /// the product: the invitation to scan, what the scan found, and the space budget.
-    static let slab = Color(dsRGB: 0x101B27)
+    static let slab = Color(dsRGB: 0x18293C)
+
+    /// The slab as it is actually painted: lit from the top, not flat.
+    ///
+    /// `#101B27` on a `#EFF3F8` page is nearly a black rectangle, and a large flat block that
+    /// dark reads as a hole cut in the screen rather than as a panel resting on it. Two things
+    /// fix that without giving up the dark instrument: the base is lifted to a deep slate-blue
+    /// that still lets the brand gradient sit at full saturation on it, and the fill carries a
+    /// slight vertical lift so the top edge catches light the way a real panel would.
+    static var slabFill: LinearGradient {
+        LinearGradient(
+            colors: [Color(dsRGB: 0x1E3145), Color(dsRGB: 0x13202F)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
     /// Body copy on `slab`.
     static let onSlab = Color(dsRGB: 0xE7F0F8)
 
@@ -287,11 +302,20 @@ extension View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous).fill(DS.slab)
+                RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous).fill(DS.slabFill)
             )
             .overlay(
+                // A brighter edge at the top than at the bottom, which is what makes a panel
+                // look like it is sitting on the page rather than punched through it.
                 RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.16), Color.white.opacity(0.05)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
             )
             .environment(\.colorScheme, .dark)
     }
