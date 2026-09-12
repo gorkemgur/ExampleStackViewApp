@@ -19,7 +19,9 @@ struct GroupDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            // Lazy: a burst can leave sixty copies in one group, and every row here carries a
+            // thumbnail that requests itself on appear.
+            LazyVStack(spacing: 16) {
                 keeperPanel
 
                 ForEach(group.items) { item in

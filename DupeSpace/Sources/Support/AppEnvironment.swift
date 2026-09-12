@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import DupeCore
 
 /// Picks the real services or the deterministic fixtures.
@@ -63,8 +64,9 @@ enum AppEnvironment {
         )
     }
 
+    @MainActor
     static func makeThumbnailLoader() -> ThumbnailLoading {
-        isUITesting ? StubThumbnailLoader() : PhotoKitThumbnailLoader()
+        isUITesting ? StubThumbnailLoader() : PhotoKitThumbnailLoader(scale: UIScreen.main.scale)
     }
 
     /// UI tests start from a clean slate so an assertion about "one deletion in the history"

@@ -16,6 +16,10 @@ struct ReviewView: View {
 
     private let loader: any ThumbnailLoading
 
+    // Main-actor because the thumbnail loader now takes the display scale, and `UIScreen.main`
+    // is main-actor isolated. A SwiftUI view's `init` is not implicitly isolated — only `body`
+    // is — so it has to be said.
+    @MainActor
     init(result: ScanResult, history: HistoryViewModel) {
         _model = StateObject(
             wrappedValue: ReviewViewModel(
@@ -221,9 +225,18 @@ struct ReviewView: View {
 
     // MARK: - The ladder
 
+    /// Lazy, and it has to be said out loud because the outer `LazyVStack` was doing nothing
+    /// for it.
+    ///
+    /// A lazy stack only defers the children it owns directly. `ladder` is a single child of
+    /// the one at the top of this file, so the moment it came into view every section and
+    /// every group inside it was built at once — and each group row holds a `ThumbnailView`
+    /// whose `.task` fires on appear. A hundred and seventy items form about eighty-five
+    /// groups: eighty-five rows and eighty-five PhotoKit requests, all on the first frame, for
+    /// a screen showing six of them.
     private var ladder: some View {
         let sections = model.visibleSections
-        return VStack(alignment: .leading, spacing: 0) {
+        return LazyVStack(alignment: .leading, spacing: 0) {
             if model.availableKinds.count > 1 {
                 kindFilter
                     .padding(.bottom, DS.Space.l)
@@ -307,7 +320,7 @@ struct ReviewView: View {
             VStack(alignment: .leading, spacing: 12) {
                 rungHeader(section, tint: tint)
 
-                VStack(spacing: 8) {
+                LazyVStack(spacing: 8) {
                     ForEach(section.groups) { group in
                         groupRow(group, tint: tint)
                     }
