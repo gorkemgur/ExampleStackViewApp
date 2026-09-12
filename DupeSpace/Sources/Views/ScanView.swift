@@ -505,7 +505,7 @@ struct ScanView: View {
                         .lineLimit(2)
                         .accessibilityIdentifier("scan.tier.\(summary.tier.rawValue)")
 
-                    Eyebrow(DS.cost(summary.tier), tint: DS.costTint(summary.tier))
+                    Badge(DS.cost(summary.tier), tint: DS.costTint(summary.tier))
 
                     Text(ScanCopy.subtitle(for: summary.tier))
                         .font(.footnote)

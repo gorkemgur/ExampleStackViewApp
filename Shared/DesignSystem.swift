@@ -33,29 +33,45 @@ enum DS {
     /// A filled neutral, for the part of a measurement this app cannot act on.
     static let neutral = adaptive(light: 0xA5B4C4, dark: 0x46566A)
 
-    /// The instrument panel. One value, not an adaptive pair: these blocks are drawn dark in
-    /// both appearances so the figure on them can carry the brand gradient at full saturation,
-    /// and they force `colorScheme` to dark for the system controls they hold — which would
-    /// resolve an adaptive colour to its dark half anyway. Used for the three blocks that are
-    /// the product: the invitation to scan, what the scan found, and the space budget.
-    static let slab = Color(dsRGB: 0x18293C)
+    /// The three blocks that are the product: the invitation to scan, what the scan found, and
+    /// the space budget.
+    ///
+    /// These were one dark value in both appearances — an instrument panel, deliberately not a
+    /// card. It made the app heavy, and the argument for it never survived contact: the panel
+    /// forced `colorScheme` to dark for everything inside it, which meant the ladder had to be
+    /// painted twice (`tier` for paper, `tierVivid` for navy) and half the palette existed in
+    /// two versions of itself. Every one of the light-mode values had been drawn for text on
+    /// white and then never used on white.
+    ///
+    /// They are elevated cards now, and the depth comes from the three things that make one:
+    /// a background step off the page, a hairline, and a shadow. The token keeps its name,
+    /// because the *role* did not change — it is still the block that carries the product —
+    /// and a rename would have touched eighty call sites to say the same thing.
+    static let slab = adaptive(light: 0xFFFFFF, dark: 0x171E27)
 
     /// The slab as it is actually painted: lit from the top, not flat.
-    ///
-    /// `#101B27` on a `#EFF3F8` page is nearly a black rectangle, and a large flat block that
-    /// dark reads as a hole cut in the screen rather than as a panel resting on it. Two things
-    /// fix that without giving up the dark instrument: the base is lifted to a deep slate-blue
-    /// that still lets the brand gradient sit at full saturation on it, and the fill carries a
-    /// slight vertical lift so the top edge catches light the way a real panel would.
     static var slabFill: LinearGradient {
         LinearGradient(
-            colors: [Color(dsRGB: 0x1E3145), Color(dsRGB: 0x13202F)],
+            colors: [adaptive(light: 0xFFFFFF, dark: 0x1B2430), adaptive(light: 0xF8FAFD, dark: 0x141B25)],
             startPoint: .top,
             endPoint: .bottom
         )
     }
+
+    /// The slab's own edge. A hairline on paper, a lift in the dark.
+    static let slabEdge = adaptive(light: 0xDCE4EE, dark: 0x2A3542)
+
+    /// A recess *on* the slab: the fader's groove, an unreached step, the part of a track that
+    /// is not on offer. It has to read as cut into the card rather than as a colour laid on it.
+    static let groove = adaptive(light: 0xD7DEE8, dark: 0x2B3644)
+
+    /// Ink, for the one thing on this screen that is white in both appearances: the fader cap.
+    /// Its stroke and its ridges cannot come from an adaptive pair, because the thing they are
+    /// drawn on does not adapt.
+    static let onWhite = Color(dsRGB: 0x101720)
+
     /// Body copy on `slab`.
-    static let onSlab = Color(dsRGB: 0xE7F0F8)
+    static let onSlab = adaptive(light: 0x101720, dark: 0xE7F0F8)
 
     // MARK: - Brand
 
@@ -70,9 +86,10 @@ enum DS {
     /// things. One hue, one meaning: the accent is this, the ladder is the ladder.
     static let deep = adaptive(light: 0x0A6FE0, dark: 0x3DA1FF)
 
-    /// The accent, on `slab`. The light-mode `deep` is too dark for a navy ground and the
-    /// dark-mode one is not quite bright enough.
-    static let onSlabAccent = Color(dsRGB: 0x7FC4FF)
+    /// The accent, on `slab`. It was its own value because the slab was navy in both
+    /// appearances and neither half of `deep` suited it. The slab is a card now and follows
+    /// the appearance, so the accent that belongs on a card is the accent.
+    static let onSlabAccent = deep
 
     /// The icon's own two stops. Fills only — never text on a light ground.
     static let brandTop = Color(dsRGB: 0x0A84FF)
@@ -106,17 +123,15 @@ enum DS {
         }
     }
 
-    /// The same ladder at full saturation, for use on `slab`, which is dark in both
-    /// appearances — the light-mode tier colours are darkened for text on white and would
-    /// disappear there.
-    static func tierVivid(_ tier: RegretTier) -> Color {
-        switch tier {
-        case .identical: return Color(dsRGB: 0x32D7EB)
-        case .inferiorCopy: return Color(dsRGB: 0x3DDC97)
-        case .burstLeftover: return Color(dsRGB: 0xF5B944)
-        case .similar: return Color(dsRGB: 0xF2684E)
-        }
-    }
+    /// The ladder on `slab`.
+    ///
+    /// This used to be a second set of values at full saturation, because the slab was navy in
+    /// both appearances and the light-mode tier colours — drawn for text on white — vanished
+    /// on it. The slab is a card now, so there is one ladder: teal, green, amber, red, each
+    /// resolving against the appearance the card is in. The name stays so the call sites keep
+    /// saying which ground they are on, and the day the two diverge again there is somewhere
+    /// for it to happen.
+    static func tierVivid(_ rung: RegretTier) -> Color { tier(rung) }
 
     /// What that tier costs, in two words, for the rung's eyebrow.
     static func cost(_ tier: RegretTier) -> String {
@@ -140,17 +155,13 @@ enum DS {
         return isOnSlab ? tierVivid(.burstLeftover) : tier(.burstLeftover)
     }
 
-    /// The muting neutral, at a value that reads on the slab.
-    ///
-    /// `MeterTrack` mutes with `DS.neutral.opacity(0.35)`, which on navy is very nearly
-    /// nothing. Same meaning, slab-correct value — the pattern `tierVivid` and `onSlabAccent`
-    /// already set. It is the most load-bearing colour in the deletion instrument, because it
-    /// is what says "in Recently Deleted: gone from the library, not yours again yet".
-    static let neutralOnSlab = Color(dsRGB: 0x5D7288)
+    /// The muting neutral, at a value that reads on the slab. It is the most load-bearing
+    /// colour in the deletion instrument, because it is what says "in Recently Deleted: gone
+    /// from the library, not yours again yet".
+    static let neutralOnSlab = adaptive(light: 0x9FAFC1, dark: 0x5D7288)
 
-    /// Secondary copy on the slab. `Color.secondary` resolves against the page, not against a
-    /// navy block that ignores the appearance.
-    static let onSlabMuted = Color(dsRGB: 0x8FA3B8)
+    /// Secondary copy on the slab.
+    static let onSlabMuted = adaptive(light: 0x64768A, dark: 0x8FA3B8)
 
     // MARK: - Metrics
 
@@ -238,6 +249,36 @@ enum Readout {
 /// The small wide-tracked label that sits over a figure. The counterweight to the hero number:
 /// the whole point of the pairing is that one is loud and the other is quiet, and a caption set
 /// in the same grey subheadline as the body copy is neither.
+/// A tinted pill: a state, said in one or two words, in the colour of the thing it is about.
+///
+/// The regret ladder's cost was an eyebrow — small, uppercase, letter-spaced — stacked under
+/// the rung's title. An eyebrow is a label *for* what follows it; "costs nothing" is not a
+/// label for a list of files, it is a fact about them, and a fact reads faster as a badge than
+/// as a caption. The tint is the rung's own colour, so the ladder is legible at a glance down
+/// the screen without reading a word of it.
+struct Badge: View {
+
+    private let text: String
+    private let tint: Color
+
+    init(_ text: String, tint: Color) {
+        self.text = text
+        self.tint = tint
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.heavy))
+            .textCase(.uppercase)
+            .kerning(0.5)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Capsule(style: .continuous).fill(tint.opacity(0.14)))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 struct Eyebrow: View {
 
     private let text: String
@@ -299,8 +340,15 @@ extension View {
         )
     }
 
-    /// The instrument panel: a dark slab with a lit edge, holding a reading and the control
-    /// that moves it.
+    /// The block that carries the product: a reading and the control that moves it, on a card
+    /// lifted off the page.
+    ///
+    /// It was a dark instrument panel. Three of them, on three adjacent screens, on a pale
+    /// page — and the weight was not doing the work the argument for it claimed. What it did
+    /// do was force `colorScheme` to dark for everything inside, which meant the regret ladder
+    /// had to exist twice over: `tier` drawn for text on white and never used on white, and
+    /// `tierVivid` for navy. Retiring the panel collapsed that, and the depth it was providing
+    /// is now what actually provides depth on a card: a background step, a hairline, a shadow.
     ///
     /// This was three byte-identical copies of the same eight lines, in the three files that
     /// draw the product's three main blocks. The material that says "this is the instrument,
@@ -317,19 +365,14 @@ extension View {
                 RoundedRectangle(cornerRadius: radius, style: .continuous).fill(DS.slabFill)
             )
             .overlay(
-                // A brighter edge at the top than at the bottom, which is what makes a panel
-                // look like it is sitting on the page rather than punched through it.
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.16), Color.white.opacity(0.05)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
+                    .strokeBorder(DS.slabEdge, lineWidth: 1)
             )
-            .environment(\.colorScheme, .dark)
+            // A card needs all three to have a boundary: the step off the page above, this
+            // hairline, and a shadow. Kept under twelve per cent — heavier than that and a
+            // card stops resting on the page and starts hovering over it.
+            .shadow(color: .black.opacity(0.07), radius: 18, y: 6)
+            .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
     }
 }
 
@@ -423,12 +466,11 @@ extension ButtonStyle where Self == KeyButtonStyle {
 
     /// The quiet key on the instrument panel.
     ///
-    /// `keyQuiet` is a pale well carrying `DS.deep`, which is the right pair on the page and
-    /// close to invisible on the slab — a near-white block with a mid-blue label sitting on
-    /// dark navy. This is the same idea in the slab's own terms: the panel's own accent on a
-    /// lift of the panel itself.
+    /// `keyQuiet` is a pale well carrying `DS.deep`. On the card that is now the right pair,
+    /// but the well has to be a tint of the accent rather than of the page, or it disappears
+    /// into a white slab.
     static var keyOnSlab: KeyButtonStyle {
-        KeyButtonStyle(fill: AnyShapeStyle(Color.white.opacity(0.10)), foreground: DS.onSlabAccent)
+        KeyButtonStyle(fill: AnyShapeStyle(DS.deep.opacity(0.10)), foreground: DS.onSlabAccent)
     }
 }
 
@@ -594,7 +636,7 @@ struct ReachPicker<Value: Hashable>: View {
 
     /// The outline of a step this setting has not reached.
     private var unreached: Color {
-        onSlab ? Color.white.opacity(0.10) : DS.well
+        onSlab ? DS.groove : DS.well
     }
 
     private func labelColor(at index: Int, option: Option) -> Color {
@@ -751,7 +793,7 @@ struct TargetSlider: View {
                 // to be marking anything.
                 if limitFraction > 0.02, limitFraction < 0.98 {
                     Rectangle()
-                        .fill(Color.white.opacity(0.45))
+                        .fill(DS.onSlab.opacity(0.45))
                         .frame(width: 2, height: trackHeight)
                         .offset(x: width * limitFraction - 1)
                 }
@@ -767,11 +809,11 @@ struct TargetSlider: View {
                             Capsule().frame(width: 1.5)
                         }
                         .frame(height: gripHeight * 0.36)
-                        .foregroundStyle(DS.slab.opacity(isLive ? 0.28 : 0.45))
+                        .foregroundStyle(DS.onWhite.opacity(isLive ? 0.28 : 0.45))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(DS.slab.opacity(0.28), lineWidth: 1)
+                            .strokeBorder(DS.onWhite.opacity(0.28), lineWidth: 1)
                     )
                     .shadow(color: .black.opacity(isLive ? 0.28 : 0), radius: 4, y: 1)
                     .frame(width: gripWidth, height: gripHeight)
@@ -834,10 +876,10 @@ struct TargetSlider: View {
         HStack(spacing: 0) {
             ForEach(laidOutRungs, id: \.rung.id) { entry in
                 Rectangle()
-                    .fill(entry.isBeyondLimit ? DS.neutralOnSlab.opacity(0.45) : entry.rung.color)
+                    .fill(entry.isBeyondLimit ? DS.groove : entry.rung.color)
                     .frame(width: max(width * entry.share, 2))
             }
-            Rectangle().fill(Color.white.opacity(0.10))
+            Rectangle().fill(DS.groove)
         }
     }
 

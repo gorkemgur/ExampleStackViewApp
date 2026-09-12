@@ -158,23 +158,35 @@ struct ReviewView: View {
             }
 
             // A fader with the ladder drawn into its track, so the question "how far down does
-            // this target make me go" is answered before the drag rather than after it.
-            TargetSlider(
-                value: $model.budgetBytes,
-                range: 0...Double(max(model.plannableBytes, 1)),
-                rungs: RegretTier.allCases.compactMap { tier in
-                    let bytes = rungBytes(tier)
-                    guard bytes > 0 else { return nil }
-                    return TargetSlider.Rung(
-                        id: "rung.\(tier.rawValue)",
-                        bytes: bytes,
-                        color: DS.tierVivid(tier)
-                    )
-                },
-                reachLimit: reachableBytes,
-                label: "Space to free",
-                identifier: "budget.slider"
-            )
+            // this target make me go" is answered before the drag rather than after it — but
+            // only while there is a target to set.
+            //
+            // When the depth setting reaches nothing, a fader is a control with no job. Drawn
+            // greyed it is still drawn, and it was pointed at as a stray mark three separate
+            // times before I accepted that the answer was not a better disabled state. The
+            // three chips below still work, and they are what changes this.
+            if reachableBytes > 0 {
+                TargetSlider(
+                    value: $model.budgetBytes,
+                    range: 0...Double(max(model.plannableBytes, 1)),
+                    rungs: RegretTier.allCases.compactMap { tier in
+                        let bytes = rungBytes(tier)
+                        guard bytes > 0 else { return nil }
+                        return TargetSlider.Rung(
+                            id: "rung.\(tier.rawValue)",
+                            bytes: bytes,
+                            color: DS.tierVivid(tier)
+                        )
+                    },
+                    reachLimit: reachableBytes,
+                    label: "Space to free",
+                    identifier: "budget.slider"
+                )
+                .transition(.opacity)
+            } else {
+                depthExhausted
+                    .transition(.opacity)
+            }
 
             // One bar on this slab, and it is the fader. The depth is three chips.
             depthPicker
@@ -193,7 +205,39 @@ struct ReviewView: View {
             .accessibilityIdentifier("budget.apply")
 
         }
+        .animation(Motion.content, value: reachableBytes > 0)
         .dsSlab()
+    }
+
+    /// What stands where the fader was, once the depth setting can reach nothing.
+    ///
+    /// Not a disabled control. The thing that has run out is the *depth*, the thing that fixes
+    /// it is the row of chips directly below, and a line that says so is worth more than a
+    /// greyed-out track somebody has to work out the meaning of.
+    private var depthExhausted: some View {
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: "arrow.down.to.line")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(DS.tier(.burstLeftover))
+
+            Text(model.plannableBytes > 0
+                 ? "Nothing left at this depth — the rest is yours to judge."
+                 : "Nothing left to offer.")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(DS.onSlab)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: DS.controlCorner, style: .continuous)
+                .fill(DS.tier(.burstLeftover).opacity(0.10))
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("budget.exhausted")
     }
 
     /// How far down the ladder the plan may reach.
@@ -526,7 +570,7 @@ struct ReviewView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("review.section.\(KindCopy.slug(for: kind)).\(section.tier.rawValue)")
 
-                    Eyebrow(DS.cost(section.tier), tint: DS.costTint(section.tier))
+                    Badge(DS.cost(section.tier), tint: DS.costTint(section.tier))
                 }
 
                 Spacer(minLength: 8)

@@ -226,9 +226,9 @@ struct RootView: View {
 
     // MARK: - The invitation
 
-    /// The one block on this screen that is not a card: a dark instrument panel carrying the
-    /// ladder the whole product is built on, so the offer on the button is legible before it is
-    /// tapped rather than after.
+    /// The block carrying the ladder the whole product is built on, so the offer on the button
+    /// is legible before it is tapped rather than after. It was a dark instrument panel; it is
+    /// an elevated card now, and the ladder's own colours carry the weight the darkness used to.
     private var scanEntryPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 7) {
@@ -236,7 +236,7 @@ struct RootView: View {
 
                 Text("Find what you can lose least")
                     .font(.system(.title2, design: .rounded).weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DS.onSlab)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("Ranked by what deleting actually costs you — identical copies first, your judgement calls last.")
@@ -278,7 +278,7 @@ struct RootView: View {
 
                     Spacer(minLength: 8)
 
-                    Eyebrow(DS.cost(tier), tint: DS.costTint(tier, isOnSlab: true))
+                    Badge(DS.cost(tier), tint: DS.costTint(tier, isOnSlab: true))
                 }
             }
         }

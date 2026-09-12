@@ -85,7 +85,7 @@ struct SweeperRingView: View {
 
     private var track: some View {
         Circle()
-            .strokeBorder(Color.white.opacity(0.10), lineWidth: lineWidth)
+            .strokeBorder(DS.groove, lineWidth: lineWidth)
     }
 
     /// Filled when there is something to fill it with; a travelling arc when there is not.
@@ -253,7 +253,9 @@ struct SweeperRingView: View {
             width: width,
             height: scale.height * 0.022
         )
-        context.fill(Path(ellipseIn: rect), with: .color(DS.ink.opacity(0.55)))
+        // The shadow the figure casts on the floor. It was `DS.ink` — the *page* colour, which
+        // was dark on the navy panel and is a white smear on a white card.
+        context.fill(Path(ellipseIn: rect), with: .color(DS.onSlab.opacity(0.22)))
     }
 
     /// What is left to do, at its own size rather than fourteen identical dots.
