@@ -168,6 +168,10 @@ final class ScanViewModel: ObservableObject {
     private static let strictnessKey = "scan.strictness"
 
     private static func remembered() -> ScanStrictness {
+        // Never under test. The unit bundle is hosted by the app, so a unit test that touches
+        // `strictness` writes the same defaults every later UI test launches with — and a UI
+        // test that scans at a strictness it did not choose is a test of something else.
+        guard !AppEnvironment.isUITesting else { return .balanced }
         guard
             let raw = UserDefaults.standard.object(forKey: strictnessKey) as? Int,
             let stored = ScanStrictness(rawValue: raw)

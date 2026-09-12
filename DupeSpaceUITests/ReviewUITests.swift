@@ -39,15 +39,23 @@ final class ReviewUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["review.count"].exists)
         XCTAssertTrue(app.buttons["review.delete"].isEnabled, "the safe default selection must be actionable")
-        // Kind first, then tier — so the identifier has to name both. The fixture's identical
-        // copies are photos; a bare `review.section.0` now matches one rung per kind, and the
-        // query returns whichever the accessibility tree hands over first.
-        XCTAssertTrue(app.staticTexts["review.section.image.0"].exists, "identical photo copies section missing")
+        // Kind first, then tier — so the identifier has to name both, and a bare
+        // `review.section.0` would match one rung per kind. Asserted by shape rather than by
+        // `image`: the fixture's byte-identical pair is the two videos, and which kind happens
+        // to hold the cheapest rung is a property of the fixture, not of the screen.
+        let identical = app
+            .staticTexts
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'review.section.' AND identifier ENDSWITH '.0'"))
+            .firstMatch
+        XCTAssertTrue(identical.waitForExistence(timeout: 10), "no identical-copies rung anywhere")
 
         let count = app.staticTexts["review.count"]
         let before = count.label
 
-        let toggle = app.buttons["review.selectall.image.0"]
+        let toggle = app
+            .buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'review.selectall.' AND identifier ENDSWITH '.0'"))
+            .firstMatch
         XCTAssertTrue(toggle.exists, "each section needs a whole-section control")
         toggle.tap()
 

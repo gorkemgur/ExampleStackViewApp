@@ -90,20 +90,54 @@ final class SweepSceneTests: XCTestCase {
         XCTAssertEqual(half, (start + end) / 2, accuracy: 0.0001)
     }
 
-    /// A body drawn hard against the inside of a ring reads as a mistake, so the walk stays
-    /// inside its own bounds at every phase.
-    func testTheFigureStaysInsideTheRing() {
+    /// Every part of the figure stays inside the unit box at every phase of every step.
+    ///
+    /// The bound used to be an invented 0.97 and it failed at 0.99 — which was the test doing
+    /// its job. The broom really does reach 0.99 on the last stroke, and the view was drawing
+    /// the unit box edge to edge, so the brush ended up outside the ring itself. The box is
+    /// inset now; this asserts the figure fits the box, and `testTheInsetCoversTheBroomsReach`
+    /// asserts the box fits the ring.
+    func testTheFigureStaysInsideItsBox() {
         for settled in 0...12 {
             let scene = SweepScene.from(progress(.files, settled: settled, total: 12, determinate: true))
             for phase in stride(from: 0.0, to: 1.0, by: 0.05) {
                 let x = SweeperFigure.standingX(for: scene, workingPhase: phase)
                 let pose = SweeperFigure.pose(x: x, phase: phase, sweeping: true)
-                XCTAssertGreaterThan(pose.backFoot.x, 0.08)
-                XCTAssertLessThan(pose.broomRight.x, 0.97)
+                XCTAssertGreaterThan(pose.backFoot.x, 0.05)
+                XCTAssertLessThanOrEqual(pose.broomRight.x, 1)
                 XCTAssertGreaterThan(pose.head.y, 0.05)
                 XCTAssertLessThan(pose.frontFoot.y, 0.95)
             }
         }
+    }
+
+    /// And the box fits inside the ring, at the height where the figure actually stands.
+    ///
+    /// A circle is narrowest where the floor is — 0.78 of the way down — so the check has to be
+    /// taken there rather than at the widest point. This is the assertion that would have
+    /// stopped a brush being drawn outside the circle.
+    func testTheInsetCoversTheBroomsReach() {
+        let inset = 44.0 / 300.0
+        let box = 1 - inset * 2
+
+        // The furthest anything is ever drawn, over every phase of the last step.
+        let reach = stride(from: 0.0, to: 1.0, by: 0.01)
+            .map { SweeperFigure.pose(x: SweeperFigure.travel.upperBound, phase: $0, sweeping: true).broomRight.x }
+            .max() ?? 1
+
+        let drawnX = inset + Double(reach) * box
+        let drawnY = inset + SweeperFigure.floorY * box
+
+        // The ring, as the view draws it: a 7pt stroke inside a 132pt circle.
+        let radius = (1 - 7.0 / 132.0) / 2
+        let dy = drawnY - 0.5
+        let halfWidth = (radius * radius - dy * dy).squareRoot()
+
+        XCTAssertLessThan(
+            drawnX,
+            0.5 + halfWidth,
+            "the broom is drawn outside the ring at full sweep"
+        )
     }
 
     /// The broom has to be the thing that moves. If its travel is not clearly the widest of

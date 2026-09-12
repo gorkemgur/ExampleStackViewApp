@@ -112,6 +112,19 @@ final class ScanViewModelTests: XCTestCase {
     /// And the strictness the user picks for the second run is the one it uses, rather than
     /// whatever the first run was configured with.
     func testTheSecondScanUsesTheStrictnessSetForIt() async {
+        // Restored afterwards. `strictness` persists to UserDefaults, and the unit bundle is
+        // hosted by the app — so a test that leaves it set changes what every UI test in the
+        // same run scans with. That is exactly what happened: this test left it on `loose` and
+        // `ScanUITests` then failed to find the burst tier.
+        let remembered = UserDefaults.standard.object(forKey: "scan.strictness")
+        defer {
+            if let remembered {
+                UserDefaults.standard.set(remembered, forKey: "scan.strictness")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "scan.strictness")
+            }
+        }
+
         let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture())
         model.strictness = .strict
         model.start(items: StubMediaLibrary.sampleItems())

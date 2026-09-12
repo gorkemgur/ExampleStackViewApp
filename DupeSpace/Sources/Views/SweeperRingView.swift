@@ -157,31 +157,47 @@ struct SweeperRingView: View {
 
     /// Unit space to canvas space, in one place.
     private struct Scale {
+
+        /// How far in from the view's edge the unit box sits.
+        ///
+        /// Not decoration. The broom reaches 0.99 in unit space at the end of a full sweep —
+        /// `travel.upperBound` plus the broom's own offset and swing — and the ring, at floor
+        /// height, only spans 0.118 to 0.882 of the view. Drawing the unit box edge to edge put
+        /// the brush *outside the circle* on the last stroke. The browser preview never showed
+        /// it because the preview had this inset and the app did not; `testTheFigureStaysInsideTheRing`
+        /// is what caught it.
+        static let inset: CGFloat = 44.0 / 300.0
+
+        let origin: CGFloat
         let width: CGFloat
         let height: CGFloat
 
         init(size: CGSize) {
-            width = size.width
-            height = size.height
+            let side = min(size.width, size.height)
+            origin = side * Self.inset
+            width = size.width - origin * 2
+            height = size.height - origin * 2
         }
 
         func point(_ unit: CGPoint) -> CGPoint {
-            CGPoint(x: unit.x * width, y: unit.y * height)
+            CGPoint(x: origin + unit.x * width, y: origin + unit.y * height)
         }
 
-        func x(_ unit: CGFloat) -> CGFloat { unit * width }
-        func y(_ unit: CGFloat) -> CGFloat { unit * height }
+        func x(_ unit: CGFloat) -> CGFloat { origin + unit * width }
+        func y(_ unit: CGFloat) -> CGFloat { origin + unit * height }
 
         var floorY: CGFloat { y(CGFloat(SweeperFigure.floorY)) }
-        var inset: CGFloat { width * 0.2 }
+        /// Where the drawn floor starts and stops, inside the unit box.
+        var floorStart: CGFloat { x(0.2) }
+        var floorEnd: CGFloat { x(0.8) }
     }
 
     /// The ground plane. It fades out at both ends rather than stopping dead, and the part
     /// already swept carries a trail that is brightest right behind the broom.
     private func drawFloor(_ context: inout GraphicsContext, scale: Scale, pose: SweeperFigure.Pose) {
         let floorY = scale.floorY
-        let inset = scale.inset
-        let far = scale.width - inset
+        let inset = scale.floorStart
+        let far = scale.floorEnd
 
         var floor = Path()
         floor.move(to: CGPoint(x: inset, y: floorY))

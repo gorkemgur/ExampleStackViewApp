@@ -55,10 +55,17 @@ final class GroupUITests: XCTestCase {
         XCTAssertTrue(deleteAll.waitForExistence(timeout: 10))
         deleteAll.tap()
 
-        let arm = app.buttons["Select them all"]
+        // By label. A `confirmationDialog`'s buttons carry no identifiers, and the subscript
+        // form searches identifiers first — which is why this could not find "Cancel" even
+        // though it was plainly on screen.
+        let byLabel = { (text: String) in
+            app.buttons.matching(NSPredicate(format: "label == %@", text)).firstMatch
+        }
+
+        let arm = byLabel("Select them all")
         XCTAssertTrue(arm.waitForExistence(timeout: 10), "clearing a group must ask first")
 
-        app.buttons["Cancel"].tap()
+        byLabel("Cancel").tap()
         XCTAssertFalse(app.buttons["group.keepone"].exists, "cancelling must not arm anything")
     }
 }
