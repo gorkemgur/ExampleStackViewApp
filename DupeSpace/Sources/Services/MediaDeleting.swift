@@ -222,20 +222,47 @@ final class StubDeleter: MediaDeleting, @unchecked Sendable {
 
         switch behaviour {
         case .succeed:
-            onProgress(.starting(total: ids.count, isDeterminate: ids.count > 1, stage: .files))
-            for (index, _) in ids.enumerated() {
-                if stepDelay > .zero { try? await Task.sleep(for: stepDelay) }
+            // Reports the same shape the real composite does, because a stub that reports a
+            // different shape is a stub that lets a screen be built against a flow that does
+            // not exist. Photo ids settle as one atomic batch; file ids walk.
+            let fileIDs = ids.filter { FileItemID.isFile($0) }
+            let photoIDs = ids.filter { !FileItemID.isFile($0) }
+            let isDeterminate = (photoIDs.isEmpty ? 0 : 1) + fileIDs.count > 1
+            var settled = 0
+
+            onProgress(
+                .starting(
+                    total: ids.count,
+                    isDeterminate: isDeterminate,
+                    stage: photoIDs.isEmpty ? .files : .photoLibrary
+                )
+            )
+
+            if !photoIDs.isEmpty {
+                // The wait for the system's own confirmation, which is the whole of what the
+                // held gate is drawing.
+                if stepDelay > .zero { try? await Task.sleep(for: stepDelay * 2) }
+                settled = photoIDs.count
                 onProgress(
                     DeletionProgress(
-                        stage: .files,
-                        settled: index + 1,
+                        stage: fileIDs.isEmpty ? .done : .files,
+                        settled: settled,
                         total: ids.count,
-                        isDeterminate: ids.count > 1
+                        isDeterminate: isDeterminate
                     )
                 )
             }
+
+            for _ in fileIDs {
+                if stepDelay > .zero { try? await Task.sleep(for: stepDelay) }
+                settled += 1
+                onProgress(
+                    DeletionProgress(stage: .files, settled: settled, total: ids.count, isDeterminate: isDeterminate)
+                )
+            }
+
             onProgress(
-                DeletionProgress(stage: .done, settled: ids.count, total: ids.count, isDeterminate: ids.count > 1)
+                DeletionProgress(stage: .done, settled: ids.count, total: ids.count, isDeterminate: isDeterminate)
             )
             return DeletionOutcome(requestedIDs: ids, deletedIDs: ids)
         case .cancel:

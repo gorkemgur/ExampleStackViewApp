@@ -267,6 +267,12 @@ jobs:
       - name: Measure layout and animation
         run: python3 Scripts/audit-ui.py "$UDID" artifacts/audit
 
+      # The handover instrument is not a state, so a still cannot show it. Never fails the
+      # run: a recording that did not come off is a missing preview, not a broken app.
+      - name: Record the deletion
+        continue-on-error: true
+        run: python3 Scripts/record-deletion.py "$UDID" artifacts/motion/deletion.mov
+
       - name: Commit the screenshots
         if: github.event_name == 'push'
         run: |
@@ -291,9 +297,17 @@ jobs:
             cp artifacts/audit/ui-audit.md docs/ui-audit.md
           fi
 
+          # Same argument as the screenshots, for the one screen that has to be watched rather
+          # than looked at.
+          if [ -f artifacts/motion/deletion.mov ]; then
+            mkdir -p docs/motion
+            cp artifacts/motion/deletion.mov docs/motion/deletion.mov
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/screenshots
+          if [ -d docs/motion ]; then git add docs/motion; fi
           if [ -f docs/ui-audit.md ]; then git add docs/ui-audit.md; fi
           if git diff --cached --quiet; then
             echo "screenshots unchanged"

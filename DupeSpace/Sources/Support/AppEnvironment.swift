@@ -60,7 +60,7 @@ enum AppEnvironment {
         // A step delay under test, and only there: the walk has to photograph the deletion
         // while it is running, and a stub that finishes in one frame leaves nothing to
         // photograph. Unit tests construct their own stub and get no delay at all.
-        guard !isUITesting else { return StubDeleter(stepDelay: .milliseconds(220)) }
+        guard !isUITesting else { return StubDeleter(stepDelay: .milliseconds(420)) }
         return CompositeDeleter(
             photos: PhotoKitDeleter(),
             files: FileDeleter(registry: folderRegistry)
