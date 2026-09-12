@@ -98,8 +98,16 @@ struct RootView: View {
                 // them. Nothing here is reachable in a shipping build.
                 if AppEnvironment.isUITesting {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Live surfaces") { showingLiveSurfaces = true }
-                            .accessibilityIdentifier("root.livesurfaces")
+                        // A glyph rather than the words: the bar also carries the title and the
+                        // History reading, and "Live surfaces" spelled out crowds both off a
+                        // phone. The label is unchanged, so the walk still finds it by name.
+                        Button {
+                            showingLiveSurfaces = true
+                        } label: {
+                            Image(systemName: "iphone.gen3")
+                        }
+                        .accessibilityLabel("Live surfaces")
+                        .accessibilityIdentifier("root.livesurfaces")
                     }
                 }
 
@@ -174,7 +182,7 @@ struct RootView: View {
     private var scanEntryPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 7) {
-                Eyebrow("Ranked by regret", tint: DS.brandBottom)
+                Eyebrow("The regret ladder", tint: DS.brandBottom)
 
                 Text("Find what you can lose least")
                     .font(.system(.title2, design: .rounded).weight(.bold))
@@ -206,6 +214,7 @@ struct RootView: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
+        .environment(\.colorScheme, .dark)
     }
 
     /// Four rungs, cheapest at the bottom of the cost scale and dearest at the top. The colours

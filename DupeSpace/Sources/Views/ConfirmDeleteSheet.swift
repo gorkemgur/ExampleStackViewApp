@@ -75,8 +75,10 @@ struct ConfirmDeleteSheet: View {
             }
         } label: {
             if model.isDeleting {
+                // Not tinted white: while the deletion runs the key is disabled, so it is a
+                // grey well, and a white spinner on it is an invisible spinner.
                 ProgressView()
-                    .tint(.white)
+                    .tint(DS.deep)
             } else {
                 Text("Delete \(Counting.items(model.selection.count))")
             }
@@ -111,7 +113,7 @@ struct ConfirmDeleteSheet: View {
     }
 
     private var deepestCostLine: String {
-        guard let tier = model.deepestSelectedTier else { return "from nothing — nothing is selected" }
+        guard let tier = model.deepestSelectedTier else { return "nothing is selected" }
         return tier.isLossless
             ? "from \(Counting.items(model.selection.count)) that cost you nothing"
             : "from \(Counting.items(model.selection.count)), the dearest a judgement call"

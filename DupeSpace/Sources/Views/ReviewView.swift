@@ -397,7 +397,7 @@ struct ReviewView: View {
 
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Eyebrow("Comes back to this device", tint: model.canDelete ? actionTint : Color.secondary)
+                    Eyebrow("You get back", tint: model.canDelete ? actionTint : Color.secondary)
 
                     Readout.bytes(
                         model.savings.onDeviceBytes,

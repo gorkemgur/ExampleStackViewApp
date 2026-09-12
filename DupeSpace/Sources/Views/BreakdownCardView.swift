@@ -6,12 +6,14 @@ struct BreakdownCardView: View {
     let breakdown: [CategoryBreakdown]
     let totalBytes: Int64
 
+    /// Five hues walked round from the brand's blue rather than five system colours: this is
+    /// a categorical scale, so what matters is that no two neighbours collide at a glance.
     private static let categoryColors: [CategoryBreakdown.Category: Color] = [
-        .photos: .blue,
-        .videos: .purple,
-        .screenshots: .orange,
-        .livePhotos: .teal,
-        .documents: .brown
+        .photos: DS.deep,
+        .videos: Color(dsRGB: 0x7A5CF0),
+        .screenshots: Color(dsRGB: 0xC77B12),
+        .livePhotos: DS.aqua,
+        .documents: Color(dsRGB: 0x8A7A6B)
     ]
 
     var body: some View {
@@ -21,7 +23,7 @@ struct BreakdownCardView: View {
             VStack(spacing: 0) {
                 ForEach(Array(breakdown.enumerated()), id: \.element.id) { index, entry in
                     if index > 0 {
-                        Divider()
+                        Divider().overlay(DS.hairline)
                     }
                     row(entry)
                 }
@@ -63,7 +65,7 @@ struct BreakdownCardView: View {
             Spacer(minLength: 8)
 
             Text(ByteFormatting.string(entry.bytes))
-                .font(.subheadline.weight(.semibold))
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
                 .monospacedDigit()
         }
         .padding(.vertical, 9)

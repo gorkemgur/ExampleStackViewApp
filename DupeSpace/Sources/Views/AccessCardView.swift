@@ -16,10 +16,11 @@ struct AccessCardView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: symbolName)
                     .font(.title)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(DS.deep)
 
                 Text(headline)
-                    .font(.title3.weight(.semibold))
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("access.headline")
 
                 Text(explanation)
@@ -30,10 +31,8 @@ struct AccessCardView: View {
 
             Button(action: action) {
                 Text(buttonTitle)
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.key)
             .accessibilityIdentifier("access.button")
         }
     }

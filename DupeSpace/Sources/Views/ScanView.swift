@@ -241,7 +241,7 @@ struct ScanView: View {
     private func resultsHeadline(_ result: ScanResult) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Eyebrow("Found, ranked by what it costs you", tint: DS.brandBottom)
+                Eyebrow("What the scan found", tint: DS.brandBottom)
 
                 Readout.bytes(result.reclaimableBytes, tint: DS.brandBottom)
                     .lineLimit(1)

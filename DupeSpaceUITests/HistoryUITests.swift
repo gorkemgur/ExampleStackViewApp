@@ -15,10 +15,26 @@ final class HistoryUITests: XCTestCase {
         app.launch()
     }
 
+    /// History is a destination off the overview rather than a tab, so getting to it means
+    /// getting back to the overview first. Popping by the navigation bar's leading button is
+    /// what a person does, and it works from however deep the test happens to be.
     private func openHistory() {
-        let tab = app.tabBars.buttons["History"]
-        XCTAssertTrue(tab.waitForExistence(timeout: 30), "the History tab is missing")
-        tab.tap()
+        let entry = app.buttons["history.open"]
+
+        if !entry.waitForExistence(timeout: 10) {
+            // Named rather than taken by position: the overview's own bar has trailing items at
+            // index 0, and tapping one of those instead of a back button opens a sheet.
+            for _ in 0..<3 where !entry.exists {
+                let back = ["Find duplicates", "Review", "DupeSpace", "Back"]
+                    .map { app.navigationBars.buttons[$0] }
+                    .first { $0.exists }
+                guard let back else { break }
+                back.tap()
+            }
+        }
+
+        XCTAssertTrue(entry.waitForExistence(timeout: 30), "there is no way in to History")
+        entry.tap()
     }
 
     private func runScan() {

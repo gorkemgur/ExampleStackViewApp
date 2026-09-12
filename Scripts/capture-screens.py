@@ -250,24 +250,45 @@ def capture_live_surfaces():
     return captured
 
 
+def pop_to_overview(limit=4):
+    """Walk back up the navigation stack until the overview's History control is in reach.
+
+    History used to be a tab, reachable from anywhere; it is now a destination off the
+    overview, so the walk has to come back for it the way a person would.
+    """
+    for _ in range(limit):
+        tree = describe()
+        if find(tree, "history.open", types={"Button"}) is not None:
+            return True
+        # Exact labels only. `find` falls back to a prefix match, and "Review" would happily
+        # match the "Review and choose" button on the results screen — walking deeper into the
+        # stack rather than back out of it.
+        back = next(
+            (
+                element
+                for element in tree
+                if element.get("type") == "Button"
+                and element.get("AXLabel") in ("Find duplicates", "Review", "DupeSpace", "Back")
+            ),
+            None,
+        )
+        if back is None:
+            return False
+        tap(back, settle=1.5)
+    return find(describe(), "history.open", types={"Button"}) is not None
+
+
 def capture_history():
     """The receipt, which only exists once something has actually been deleted."""
-    tree = describe()
-    tab = find(tree, "History", types={"Button"})
+    if not pop_to_overview():
+        print("could not get back to the overview to open History")
+        return 0
 
-    if tab is not None:
-        tap(tab, settle=2.5)
-    else:
-        # The floating tab bar is not part of the app's accessibility tree that idb walks,
-        # even though it is plainly on screen. Aim at it instead: second of two tabs, sitting
-        # just above the bottom edge.
-        size = screen_size(tree)
-        if size is None:
-            print("could not work out the screen size")
-            return 0
-        width, height = size
-        print(f"tapping the History tab by position within {int(width)}x{int(height)} points")
-        tap_point(width * 0.62, height * 0.92, settle=2.5)
+    entry = find(describe(), "history.open", types={"Button"})
+    if entry is None:
+        print("no History control on the overview")
+        return 0
+    tap(entry, settle=2.5)
 
     if wait_for("history.total", timeout=40) is None:
         return 0

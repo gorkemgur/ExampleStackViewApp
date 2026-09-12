@@ -15,20 +15,22 @@ enum DS {
     // MARK: - Ground
 
     /// The page behind everything.
-    static let ink = dynamic(light: 0xEFF3F8, dark: 0x080C11)
+    static let ink = adaptive(light: 0xEFF3F8, dark: 0x080C11)
     /// A panel lifted off the page.
-    static let inkRaised = dynamic(light: 0xFFFFFF, dark: 0x131A22)
+    static let inkRaised = adaptive(light: 0xFFFFFF, dark: 0x131A22)
     /// A recess: meter tracks, thumbnail wells, anything pressed into the panel.
-    static let well = dynamic(light: 0xE2E9F1, dark: 0x0D1319)
+    static let well = adaptive(light: 0xE2E9F1, dark: 0x0D1319)
     /// The one rule weight in the app.
-    static let hairline = dynamic(light: 0xD6E0EA, dark: 0x232D38)
+    static let hairline = adaptive(light: 0xD6E0EA, dark: 0x232D38)
     /// A filled neutral, for the part of a measurement this app cannot act on.
-    static let neutral = dynamic(light: 0xA5B4C4, dark: 0x46566A)
+    static let neutral = adaptive(light: 0xA5B4C4, dark: 0x46566A)
 
-    /// The instrument panel: always dark, in either appearance, so the figure on it can carry
-    /// the brand gradient at full saturation. Used for the two blocks that are the product —
-    /// the invitation to scan, and the space budget.
-    static let slab = dynamic(light: 0x0C1B2B, dark: 0x10171F)
+    /// The instrument panel. One value, not an adaptive pair: these blocks are drawn dark in
+    /// both appearances so the figure on them can carry the brand gradient at full saturation,
+    /// and they force `colorScheme` to dark for the system controls they hold — which would
+    /// resolve an adaptive colour to its dark half anyway. Used for the three blocks that are
+    /// the product: the invitation to scan, what the scan found, and the space budget.
+    static let slab = Color(dsRGB: 0x101B27)
     /// Body copy on `slab`.
     static let onSlab = Color(dsRGB: 0xE7F0F8)
 
@@ -36,9 +38,9 @@ enum DS {
 
     /// Text-safe blue. Darker than `#0A84FF` in light mode, where the icon's blue on white is
     /// only just readable at caption sizes.
-    static let deep = dynamic(light: 0x0A6FE0, dark: 0x3DA1FF)
+    static let deep = adaptive(light: 0x0A6FE0, dark: 0x3DA1FF)
     /// Text-safe teal, same reasoning.
-    static let aqua = dynamic(light: 0x0C8FA3, dark: 0x32D7EB)
+    static let aqua = adaptive(light: 0x0C8FA3, dark: 0x32D7EB)
 
     /// The icon's own two stops. Fills only — never text on a light ground.
     static let brandTop = Color(dsRGB: 0x0A84FF)
@@ -59,10 +61,10 @@ enum DS {
     /// do. Deliberately not the accent: this is a semantic scale, not branding.
     static func tier(_ tier: RegretTier) -> Color {
         switch tier {
-        case .identical: return dynamic(light: 0x0C8FA3, dark: 0x32D7EB)
-        case .inferiorCopy: return dynamic(light: 0x10805F, dark: 0x3DDC97)
-        case .burstLeftover: return dynamic(light: 0x996100, dark: 0xF5B944)
-        case .similar: return dynamic(light: 0xBC4127, dark: 0xF2684E)
+        case .identical: return adaptive(light: 0x0C8FA3, dark: 0x32D7EB)
+        case .inferiorCopy: return adaptive(light: 0x10805F, dark: 0x3DDC97)
+        case .burstLeftover: return adaptive(light: 0x996100, dark: 0xF5B944)
+        case .similar: return adaptive(light: 0xBC4127, dark: 0xF2684E)
         }
     }
 
@@ -90,7 +92,7 @@ enum DS {
 
     // MARK: - Plumbing
 
-    private static func dynamic(light: UInt32, dark: UInt32) -> Color {
+    private static func adaptive(light: UInt32, dark: UInt32) -> Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark ? UIColor(dsRGB: dark) : UIColor(dsRGB: light)
         })
@@ -164,8 +166,8 @@ struct Eyebrow: View {
             .textCase(.uppercase)
             .kerning(0.9)
             .foregroundStyle(tint)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -214,7 +216,7 @@ struct KeyButtonStyle: ButtonStyle {
     private struct Face: View {
 
         let style: KeyButtonStyle
-        let configuration: Configuration
+        let configuration: ButtonStyleConfiguration
 
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

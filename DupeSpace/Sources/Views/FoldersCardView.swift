@@ -25,7 +25,7 @@ struct FoldersCardView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(folders.enumerated()), id: \.element.id) { index, folder in
                         if index > 0 {
-                            Divider()
+                            Divider().overlay(DS.hairline)
                         }
                         row(folder)
                     }
@@ -35,7 +35,7 @@ struct FoldersCardView: View {
             if let message {
                 Text(message)
                     .font(.footnote)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.tier(.burstLeftover))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("folders.message")
             }
@@ -44,10 +44,8 @@ struct FoldersCardView: View {
                 onAdd()
             } label: {
                 Label("Add a folder", systemImage: "folder.badge.plus")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.keyQuiet)
             .accessibilityIdentifier("folders.add")
         }
     }
@@ -57,7 +55,7 @@ struct FoldersCardView: View {
         HStack(spacing: 12) {
             Image(systemName: "folder.fill")
                 .font(.footnote)
-                .foregroundStyle(.tint)
+                .foregroundStyle(DS.deep)
                 .frame(width: 22)
 
             Text(folder.displayName)

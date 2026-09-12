@@ -98,3 +98,7 @@ DupeSpace/Info.plist
 DupeSpaceWidgets/Info.plist
 DupeSpace/DupeSpace.entitlements
 DupeSpaceWidgets/DupeSpaceWidgets.entitlements
+
+# Python leaves these behind when a script is imported rather than run
+__pycache__/
+*.pyc

@@ -13,8 +13,8 @@ struct ThumbnailView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color(uiColor: .tertiarySystemFill))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(DS.well)
 
             if let image {
                 Image(uiImage: image)
@@ -27,7 +27,7 @@ struct ThumbnailView: View {
             }
         }
         .frame(width: side, height: side)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .task(id: item.id) {
             guard image == nil else { return }
             image = await loader.thumbnail(for: item.id, size: CGSize(width: side, height: side))

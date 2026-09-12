@@ -10,7 +10,7 @@ struct LargestItemsCardView: View {
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
-                        Divider()
+                        Divider().overlay(DS.hairline)
                     }
                     row(item)
                 }
@@ -39,7 +39,7 @@ struct LargestItemsCardView: View {
             Spacer(minLength: 8)
 
             Text(ByteFormatting.string(item.totalByteSize))
-                .font(.subheadline.weight(.semibold))
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
                 .monospacedDigit()
         }
         .padding(.vertical, 9)
