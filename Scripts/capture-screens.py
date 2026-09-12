@@ -73,14 +73,45 @@ def tap(element, settle=2.0):
     time.sleep(settle)
 
 
-def screen_bounds(tree):
-    """Widest and tallest extent any element reaches, in points."""
-    width = height = 0
+def png_size(path):
+    """Pixel dimensions straight out of a PNG header."""
+    with open(path, "rb") as handle:
+        header = handle.read(24)
+    if len(header) < 24 or header[12:16] != b"IHDR":
+        return None
+    return (
+        int.from_bytes(header[16:20], "big"),
+        int.from_bytes(header[20:24], "big"),
+    )
+
+
+def screen_size(tree):
+    """The visible screen in points.
+
+    Width comes from the accessibility tree, which reports it honestly. Height does not: the
+    tallest element extends past the bottom of the screen when a list is scrollable, so it is
+    derived from a screenshot's pixel height and the scale the width implies.
+    """
+    width = 0
     for element in tree:
         frame = element.get("frame") or {}
         width = max(width, frame.get("x", 0) + frame.get("width", 0))
-        height = max(height, frame.get("y", 0) + frame.get("height", 0))
-    return width, height
+    if width <= 0:
+        return None
+
+    probe = os.path.join(OUT_DIR, "_probe.png")
+    run(["xcrun", "simctl", "io", UDID, "screenshot", probe])
+    size = png_size(probe) if os.path.exists(probe) else None
+    if os.path.exists(probe):
+        os.remove(probe)
+    if size is None:
+        return None
+
+    pixel_width, pixel_height = size
+    scale = pixel_width / width
+    if scale <= 0:
+        return None
+    return width, pixel_height / scale
 
 
 def tap_point(x, y, settle=2.0):
@@ -206,12 +237,13 @@ def capture_history():
         # The floating tab bar is not part of the app's accessibility tree that idb walks,
         # even though it is plainly on screen. Aim at it instead: second of two tabs, sitting
         # just above the bottom edge.
-        width, height = screen_bounds(tree)
-        if width == 0 or height == 0:
-            print("could not work out the screen bounds")
+        size = screen_size(tree)
+        if size is None:
+            print("could not work out the screen size")
             return 0
-        print(f"tapping the History tab by position within {int(width)}x{int(height)}")
-        tap_point(width * 0.62, height * 0.925, settle=2.5)
+        width, height = size
+        print(f"tapping the History tab by position within {int(width)}x{int(height)} points")
+        tap_point(width * 0.62, height * 0.92, settle=2.5)
 
     if wait_for("history.total", timeout=40) is None:
         return 0
