@@ -371,3 +371,210 @@ private final class ProgressRecorder: @unchecked Sendable {
         return storage
     }
 }
+
+/// Analyzer that can answer for video as well as stills.
+final class StubVideoAnalyzer: AssetAnalyzing, @unchecked Sendable {
+
+    private let signatures: [String: VideoSignature]
+    private let lock = NSLock()
+    private var _sampled: [String] = []
+
+    init(signatures: [String: VideoSignature]) {
+        self.signatures = signatures
+    }
+
+    var sampled: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return _sampled
+    }
+
+    func contentDigest(for item: MediaItem) async -> ContentDigestResult { .unavailable }
+
+    func perceptualHashes(for item: MediaItem) async -> PerceptualHashes? { nil }
+
+    func videoSignature(for item: MediaItem) async -> VideoSignature? {
+        lock.lock()
+        _sampled.append(item.id)
+        lock.unlock()
+        return signatures[item.id]
+    }
+}
+
+final class VideoScanTests: XCTestCase {
+
+    private let base: [UInt64] = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA]
+
+    private func video(_ id: String, seconds: Double, width: Int = 1920, height: Int = 1080, bytes: Int64 = 500_000) -> MediaItem {
+        MediaItem(
+            id: id,
+            source: .photoLibrary,
+            kind: .video,
+            displayName: "\(id).MOV",
+            byteSize: bytes,
+            pixelWidth: width,
+            pixelHeight: height,
+            duration: seconds
+        )
+    }
+
+    private func nudged(_ frames: [UInt64], bits: Int) -> [UInt64] {
+        frames.map { frame in
+            var value = frame
+            for bit in 0..<bits { value ^= (UInt64(1) << UInt64(bit)) }
+            return value
+        }
+    }
+
+    // MARK: - Prefilter
+
+    func testOnlyVideosOfSimilarLengthArePaired() {
+        let items = [
+            video("a", seconds: 30.0),
+            video("b", seconds: 30.3),
+            video("c", seconds: 95.0)
+        ]
+        let pairs = ScanPipeline.videoCandidatePairs(items, tolerance: 0.5)
+        XCTAssertEqual(pairs.count, 1)
+        XCTAssertEqual([pairs[0].a, pairs[0].b].sorted(), ["a", "b"])
+    }
+
+    func testStillsAreNeverPairedAsVideo() {
+        let items = [
+            MediaItem(id: "photo1", source: .photoLibrary, kind: .image, duration: 0),
+            MediaItem(id: "photo2", source: .photoLibrary, kind: .image, duration: 0)
+        ]
+        XCTAssertTrue(ScanPipeline.videoCandidatePairs(items, tolerance: 0.5).isEmpty)
+    }
+
+    func testVideosWithNoDurationAreSkipped() {
+        let items = [video("a", seconds: 0), video("b", seconds: 0)]
+        XCTAssertTrue(ScanPipeline.videoCandidatePairs(items, tolerance: 0.5).isEmpty)
+    }
+
+    func testEveryVideoInACloseRunIsPairedWithEveryOther() {
+        let items = [
+            video("a", seconds: 10.0),
+            video("b", seconds: 10.2),
+            video("c", seconds: 10.4)
+        ]
+        let pairs = ScanPipeline.videoCandidatePairs(items, tolerance: 0.5)
+        XCTAssertEqual(pairs.count, 3)
+    }
+
+    // MARK: - Whole scan
+
+    func testARecodedVideoIsFoundAndTheBetterOneKept() async throws {
+        let items = [
+            video("original", seconds: 95.0, width: 1920, height: 1080, bytes: 620_000_000),
+            video("sent", seconds: 95.2, width: 1280, height: 720, bytes: 180_000_000)
+        ]
+        let analyzer = StubVideoAnalyzer(signatures: [
+            "original": VideoSignature(frameHashes: base),
+            "sent": VideoSignature(frameHashes: nudged(base, bits: 2))
+        ])
+
+        let result = try await ScanPipeline(analyzer: analyzer, throttle: UnthrottledScan())
+            .run(items: items)
+
+        XCTAssertEqual(result.groups.count, 1)
+        XCTAssertEqual(result.groups[0].relation, .nearExact)
+        XCTAssertEqual(result.candidates.map(\.id), ["sent"])
+        XCTAssertEqual(result.candidates[0].tier, .inferiorCopy, "fewer pixels, same footage")
+        XCTAssertTrue(result.candidates[0].isPreSelected)
+    }
+
+    func testDifferentFootageOfTheSameLengthIsNotAMatch() async throws {
+        let items = [video("a", seconds: 30), video("b", seconds: 30.1, bytes: 400_000)]
+        let analyzer = StubVideoAnalyzer(signatures: [
+            "a": VideoSignature(frameHashes: base),
+            "b": VideoSignature(frameHashes: base.map { _ in UInt64.max })
+        ])
+
+        let result = try await ScanPipeline(analyzer: analyzer, throttle: UnthrottledScan())
+            .run(items: items)
+        XCTAssertTrue(result.groups.isEmpty)
+    }
+
+    /// The veto that matters: footage that averages close but contains one completely
+    /// different scene is a different video, and averaging would hide that.
+    func testOneWildlyDifferentSceneVetoesTheMatch() async throws {
+        let items = [video("a", seconds: 30), video("b", seconds: 30.1, bytes: 400_000)]
+        var broken = base
+        broken[4] = ~base[4]
+
+        let analyzer = StubVideoAnalyzer(signatures: [
+            "a": VideoSignature(frameHashes: base),
+            "b": VideoSignature(frameHashes: broken)
+        ])
+
+        let result = try await ScanPipeline(analyzer: analyzer, throttle: UnthrottledScan())
+            .run(items: items)
+        XCTAssertTrue(result.groups.isEmpty)
+    }
+
+    func testVideosFarApartInLengthAreNeverEvenOpened() async throws {
+        let items = [video("a", seconds: 30), video("b", seconds: 240, bytes: 400_000)]
+        let analyzer = StubVideoAnalyzer(signatures: [
+            "a": VideoSignature(frameHashes: base),
+            "b": VideoSignature(frameHashes: base)
+        ])
+
+        _ = try await ScanPipeline(analyzer: analyzer, throttle: UnthrottledScan()).run(items: items)
+        XCTAssertTrue(analyzer.sampled.isEmpty, "duration alone ruled them out, so nothing was sampled")
+    }
+
+    func testAVideoWithoutASignatureIsSimplyNotMatched() async throws {
+        let items = [video("a", seconds: 30), video("b", seconds: 30.1, bytes: 400_000)]
+        let analyzer = StubVideoAnalyzer(signatures: ["a": VideoSignature(frameHashes: base)])
+
+        let result = try await ScanPipeline(analyzer: analyzer, throttle: UnthrottledScan())
+            .run(items: items)
+        XCTAssertTrue(result.groups.isEmpty)
+    }
+
+    func testADifferentAspectRatioIsDemotedRatherThanCalledTheSameShot() async throws {
+        let items = [
+            video("wide", seconds: 30, width: 1920, height: 1080),
+            video("square", seconds: 30.1, width: 1080, height: 1080, bytes: 400_000)
+        ]
+        let analyzer = StubVideoAnalyzer(signatures: [
+            "wide": VideoSignature(frameHashes: base),
+            "square": VideoSignature(frameHashes: nudged(base, bits: 2))
+        ])
+
+        let result = try await ScanPipeline(analyzer: analyzer, throttle: UnthrottledScan())
+            .run(items: items)
+
+        XCTAssertEqual(result.groups.first?.relation, .similar)
+        XCTAssertTrue(result.candidates.allSatisfy { !$0.isPreSelected })
+    }
+
+    func testVideoResultsStillPassTheCleanupValidator() async throws {
+        var items: [MediaItem] = []
+        var signatures: [String: VideoSignature] = [:]
+        for index in 0..<8 {
+            let id = "v\(index)"
+            items.append(video(id, seconds: 40 + Double(index) * 0.2, bytes: Int64(900_000 - index)))
+            signatures[id] = VideoSignature(frameHashes: nudged(base, bits: index))
+        }
+
+        let result = try await ScanPipeline(
+            analyzer: StubVideoAnalyzer(signatures: signatures),
+            throttle: UnthrottledScan()
+        ).run(items: items)
+
+        let violations = CleanupValidator.validate(
+            selection: Set(result.candidates.filter(\.isPreSelected).map(\.id)),
+            decisions: result.decisions,
+            knownItemIDs: Set(result.items.keys)
+        )
+        XCTAssertEqual(violations, [])
+
+        var seen = Set<String>()
+        for group in result.groups {
+            for id in group.itemIDs {
+                XCTAssertTrue(seen.insert(id).inserted, "\(id) was grouped twice")
+            }
+        }
+    }
+}

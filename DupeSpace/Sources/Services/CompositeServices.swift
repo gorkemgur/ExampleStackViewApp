@@ -49,6 +49,10 @@ final class CompositeAssetAnalyzer: AssetAnalyzing {
         await analyzer(for: item).perceptualHashes(for: item)
     }
 
+    func videoSignature(for item: MediaItem) async -> VideoSignature? {
+        await analyzer(for: item).videoSignature(for: item)
+    }
+
     private func analyzer(for item: MediaItem) -> any AssetAnalyzing {
         item.source == .fileFolder ? files : photos
     }

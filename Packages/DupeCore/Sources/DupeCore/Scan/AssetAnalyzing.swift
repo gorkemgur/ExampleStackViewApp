@@ -34,4 +34,15 @@ public protocol AssetAnalyzing: Sendable {
     /// Renders a small grayscale thumbnail and fingerprints it. `nil` when the item cannot be
     /// rendered locally.
     func perceptualHashes(for item: MediaItem) async -> PerceptualHashes?
+
+    /// Fingerprints of frames sampled across a video. `nil` when the video cannot be read
+    /// locally, or when any sample failed — a signature with a gap in it would line up
+    /// against another video's frames wrongly, which is worse than having none.
+    func videoSignature(for item: MediaItem) async -> VideoSignature?
+}
+
+public extension AssetAnalyzing {
+
+    /// Sources that hold no video, and callers that only care about stills, get this for free.
+    func videoSignature(for item: MediaItem) async -> VideoSignature? { nil }
 }

@@ -80,6 +80,36 @@ final class StubMediaLibrary: MediaLibrary {
 
         items.append(
             MediaItem(
+                id: "video-trip",
+                source: .photoLibrary,
+                kind: .video,
+                displayName: "IMG_3877.MOV",
+                byteSize: 620_000_000,
+                pixelWidth: 1920,
+                pixelHeight: 1080,
+                duration: 95,
+                creationDate: now - 48 * day,
+                hasLocationMetadata: true
+            )
+        )
+
+        items.append(
+            MediaItem(
+                id: "video-trip-sent",
+                source: .photoLibrary,
+                kind: .video,
+                displayName: "VID-20240501-WA0003.mp4",
+                byteSize: 180_000_000,
+                pixelWidth: 1280,
+                pixelHeight: 720,
+                duration: 95.2,
+                creationDate: now - 47 * day,
+                isUserLibraryOriginal: false
+            )
+        )
+
+        items.append(
+            MediaItem(
                 id: "photo-cliff",
                 source: .photoLibrary,
                 kind: .image,

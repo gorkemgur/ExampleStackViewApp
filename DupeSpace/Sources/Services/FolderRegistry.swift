@@ -146,6 +146,27 @@ enum FolderAccess {
         return try body(url)
     }
 
+    /// The same, for work that has to await inside the grant. The security scope has to stay
+    /// held for the whole read, and AVFoundation does not read synchronously.
+    static func withFolderAsync<T>(_ folder: GrantedFolder, _ body: (URL) async -> T) async -> T? {
+        var isStale = false
+        guard
+            let url = try? URL(
+                resolvingBookmarkData: folder.bookmark,
+                options: [],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+        else {
+            return nil
+        }
+
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        return await body(url)
+    }
+
     static func makeGrant(for url: URL) -> GrantedFolder? {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }

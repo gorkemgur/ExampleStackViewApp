@@ -11,17 +11,30 @@ public struct ScanConfiguration: Sendable, Hashable {
     public var similarDistance: Int
     /// Re-encodes keep their framing, so a different aspect ratio means a different crop.
     public var aspectRatioTolerance: Double
+    /// Seconds two videos may differ by and still be worth comparing frame by frame.
+    /// Transcoding shifts a duration slightly; it does not change it.
+    public var videoDurationTolerance: Double
+    /// Mean frame distance below which two videos are the same footage.
+    public var videoAverageDistance: Double
+    /// A single frame this far apart vetoes the match, however good the average looked.
+    public var videoWorstFrameDistance: Int
 
     public init(
         maxConcurrentReads: Int = 4,
         nearExactDistance: Int = 6,
         similarDistance: Int = 12,
-        aspectRatioTolerance: Double = 0.01
+        aspectRatioTolerance: Double = 0.01,
+        videoDurationTolerance: Double = 0.5,
+        videoAverageDistance: Double = 8,
+        videoWorstFrameDistance: Int = 16
     ) {
         self.maxConcurrentReads = max(1, maxConcurrentReads)
         self.nearExactDistance = nearExactDistance
         self.similarDistance = max(similarDistance, nearExactDistance)
         self.aspectRatioTolerance = aspectRatioTolerance
+        self.videoDurationTolerance = videoDurationTolerance
+        self.videoAverageDistance = videoAverageDistance
+        self.videoWorstFrameDistance = videoWorstFrameDistance
     }
 
     public static let `default` = ScanConfiguration()
@@ -33,6 +46,7 @@ public struct ScanProgress: Sendable, Hashable {
         case bucketing
         case hashing
         case fingerprinting
+        case sampling
         case matching
         case planning
     }
@@ -187,9 +201,44 @@ public struct ScanPipeline: Sendable {
         }
         try Task.checkCancellation()
 
-        // 4. Candidate lookup through a metric tree, then a second opinion from the other hash.
+        // 4. Videos that byte equality did not settle. Duration comes for free and a
+        // transcode barely moves it, so pairs are proposed on that alone and only the videos
+        // with a plausible partner are ever opened and sampled.
+        let videoPairs = Self.videoCandidatePairs(
+            items.filter { !consumed.contains($0.id) && !cloudOnly.contains($0.id) },
+            tolerance: configuration.videoDurationTolerance
+        )
+        let videoTargets = items.filter { Set(videoPairs.flatMap { [$0.a, $0.b] }).contains($0.id) }
+
+        let signatureResults = try await mapConcurrently(
+            videoTargets,
+            limit: throttle.concurrencyLimit(base: configuration.maxConcurrentReads),
+            progress: { done in
+                progress(ScanProgress(stage: .sampling, completed: done, total: videoTargets.count))
+            },
+            transform: { item in
+                let signature = await analyzer.videoSignature(for: item)
+                return (item.id, signature)
+            }
+        )
+
+        var signatures: [String: VideoSignature] = [:]
+        for (id, value) in signatureResults {
+            if let value { signatures[id] = value }
+        }
+        try Task.checkCancellation()
+
+        // 5. Candidate lookup through a metric tree, then a second opinion from the other hash.
         progress(ScanProgress(stage: .matching, completed: 0, total: hashes.count))
-        let edges = Self.edges(hashes: hashes, items: index, configuration: configuration)
+        var edges = Self.edges(hashes: hashes, items: index, configuration: configuration)
+        let videoEdges = Self.videoEdges(
+            pairs: videoPairs,
+            signatures: signatures,
+            items: index,
+            configuration: configuration
+        )
+        edges.nearExact += videoEdges.nearExact
+        edges.similar += videoEdges.similar
         try Task.checkCancellation()
 
         let ranks = KeeperScorer.globalRanks(for: items)
@@ -215,7 +264,7 @@ public struct ScanPipeline: Sendable {
         progress(ScanProgress(stage: .matching, completed: hashes.count, total: hashes.count))
         try Task.checkCancellation()
 
-        // 5. Decide what survives, and what that would be worth.
+        // 6. Decide what survives, and what that would be worth.
         progress(ScanProgress(stage: .planning, completed: 0, total: 1))
         let groups = exactGroups + nearExactGroups + similarGroups
         let decisions = CleanupPlanner.decide(groups: groups, items: index)
@@ -286,6 +335,72 @@ public struct ScanPipeline: Sendable {
                 } else {
                     similar.insert(edge)
                 }
+            }
+        }
+
+        return EdgeSets(
+            nearExact: nearExact.sorted { $0.a == $1.a ? $0.b < $1.b : $0.a < $1.a },
+            similar: similar.sorted { $0.a == $1.a ? $0.b < $1.b : $0.a < $1.a }
+        )
+    }
+
+    /// Pairs of videos close enough in length to be worth opening.
+    ///
+    /// Sorted once and swept, so this costs a sort rather than a comparison of every video
+    /// against every other one. Duration is metadata the library already has; sampling frames
+    /// is not, and this is what keeps the expensive half off most of the library.
+    static func videoCandidatePairs(_ items: [MediaItem], tolerance: Double) -> [SimilarityEdge] {
+        let videos = items
+            .filter { $0.kind == .video && $0.duration > 0 }
+            .sorted { $0.duration == $1.duration ? $0.id < $1.id : $0.duration < $1.duration }
+
+        var pairs: [SimilarityEdge] = []
+        for outer in videos.indices {
+            var inner = outer + 1
+            while inner < videos.count,
+                  videos[inner].duration - videos[outer].duration <= tolerance {
+                pairs.append(SimilarityEdge(a: videos[outer].id, b: videos[inner].id, distance: 0))
+                inner += 1
+            }
+        }
+        return pairs
+    }
+
+    static func videoEdges(
+        pairs: [SimilarityEdge],
+        signatures: [String: VideoSignature],
+        items: [String: MediaItem],
+        configuration: ScanConfiguration
+    ) -> EdgeSets {
+
+        var nearExact: [SimilarityEdge] = []
+        var similar: [SimilarityEdge] = []
+
+        for pair in pairs {
+            guard
+                let left = signatures[pair.a],
+                let right = signatures[pair.b],
+                let comparison = VideoMatcher.compare(left, right)
+            else {
+                continue
+            }
+
+            guard VideoMatcher.isDuplicate(
+                comparison,
+                maximumAverage: configuration.videoAverageDistance,
+                maximumWorstFrame: configuration.videoWorstFrameDistance
+            ) else {
+                continue
+            }
+
+            let distance = Int(comparison.averageDistance.rounded())
+            let edge = SimilarityEdge(a: pair.a, b: pair.b, distance: distance)
+
+            if distance <= configuration.nearExactDistance,
+               sameFraming(items[pair.a], items[pair.b], tolerance: configuration.aspectRatioTolerance) {
+                nearExact.append(edge)
+            } else {
+                similar.append(edge)
             }
         }
 

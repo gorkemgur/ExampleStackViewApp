@@ -12,6 +12,7 @@ enum ScanCopy {
         case .bucketing: return "Sorting by what we already know"
         case .hashing: return "Reading originals"
         case .fingerprinting: return "Fingerprinting photos"
+        case .sampling: return "Sampling video frames"
         case .matching: return "Matching"
         case .planning: return "Working out what to keep"
         }

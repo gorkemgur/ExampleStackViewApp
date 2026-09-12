@@ -38,6 +38,31 @@ final class ScanViewModelTests: XCTestCase {
         XCTAssertTrue(result.candidates.contains { $0.id == "photo-cliff-resend" })
     }
 
+    func testAReEncodedVideoIsCaughtByItsFramesAlone() async {
+        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture())
+        model.start(items: StubMediaLibrary.sampleItems())
+        await waitUntilFinished(model)
+
+        guard let result = model.result else { return XCTFail("scan produced no result") }
+
+        // Nothing in the metadata connects these two: different sizes, different resolutions,
+        // different file names. Only the sampled frames do.
+        let candidate = result.candidates.first { $0.id == "video-trip-sent" }
+        XCTAssertNotNil(candidate, "the re-encoded video was not matched")
+        XCTAssertEqual(candidate?.tier, .inferiorCopy)
+        XCTAssertEqual(candidate?.keeperID, "video-trip", "the full-size copy is the one that stays")
+        XCTAssertTrue(candidate?.isPreSelected ?? false)
+    }
+
+    func testTheFullSizeVideoIsNeverTheOneOffered() async {
+        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture())
+        model.start(items: StubMediaLibrary.sampleItems())
+        await waitUntilFinished(model)
+
+        guard let result = model.result else { return XCTFail("scan produced no result") }
+        XCTAssertFalse(result.candidates.contains { $0.id == "video-trip" })
+    }
+
     func testBurstFramesAreFoundButNeverPreSelected() async {
         let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture())
         model.start(items: StubMediaLibrary.sampleItems())

@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -36,6 +37,22 @@ final class FileAssetAnalyzer: AssetAnalyzing {
                 Self.hashes(of: url)
             } ?? nil
         }.value
+    }
+
+    func videoSignature(for item: MediaItem) async -> VideoSignature? {
+        guard item.kind == .video, item.isLocallyAvailable else { return nil }
+        guard
+            let parsed = FileItemID.parse(item.id),
+            let folder = registry.folders().first(where: { $0.id == parsed.folderID })
+        else {
+            return nil
+        }
+
+        return await FolderAccess.withFolderAsync(folder) { root in
+            await VideoFrameSampler.signature(
+                for: AVURLAsset(url: root.appendingPathComponent(parsed.relativePath))
+            )
+        } ?? nil
     }
 
     // MARK: - Work

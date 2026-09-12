@@ -11,15 +11,18 @@ final class StubAssetAnalyzer: AssetAnalyzing {
 
     private let digests: [String: ContentDigestResult]
     private let hashes: [String: PerceptualHashes]
+    private let signatures: [String: VideoSignature]
     private let stepDelay: Duration
 
     init(
         digests: [String: ContentDigestResult],
         hashes: [String: PerceptualHashes],
+        signatures: [String: VideoSignature] = [:],
         stepDelay: Duration = .zero
     ) {
         self.digests = digests
         self.hashes = hashes
+        self.signatures = signatures
         self.stepDelay = stepDelay
     }
 
@@ -31,6 +34,11 @@ final class StubAssetAnalyzer: AssetAnalyzing {
     func perceptualHashes(for item: MediaItem) async -> PerceptualHashes? {
         if stepDelay > .zero { try? await Task.sleep(for: stepDelay) }
         return hashes[item.id]
+    }
+
+    func videoSignature(for item: MediaItem) async -> VideoSignature? {
+        if stepDelay > .zero { try? await Task.sleep(for: stepDelay) }
+        return signatures[item.id]
     }
 
     // MARK: - Fixture
@@ -70,12 +78,21 @@ final class StubAssetAnalyzer: AssetAnalyzing {
             )
         }
 
+        // The same trip, once at full size and once as it came back from a chat. Nothing in
+        // the metadata says they are the same; only the frames do.
+        let tripFrames: [UInt64] = [0x2F, 0x51, 0x8C, 0xB3, 0x17, 0x6A, 0xD4, 0x39, 0xE2, 0x7B]
+        let signatures: [String: VideoSignature] = [
+            "video-trip": VideoSignature(frameHashes: tripFrames),
+            "video-trip-sent": VideoSignature(frameHashes: tripFrames.map { $0 ^ 0b11 })
+        ]
+
         return StubAssetAnalyzer(
             digests: [
                 "video-holiday": .digest(sharedVideoDigest),
                 "video-holiday-copy": .digest(sharedVideoDigest)
             ],
-            hashes: hashes
+            hashes: hashes,
+            signatures: signatures
         )
     }
 

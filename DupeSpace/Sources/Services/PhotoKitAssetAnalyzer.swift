@@ -1,3 +1,4 @@
+import AVFoundation
 import CryptoKit
 import Foundation
 import Photos
@@ -91,6 +92,27 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
             dHash: PerceptualHasher.dHash(gray),
             pHash: PerceptualHasher.pHash(gray)
         )
+    }
+
+    func videoSignature(for item: MediaItem) async -> VideoSignature? {
+        guard item.kind == .video, item.isLocallyAvailable else { return nil }
+        guard let asset = Self.asset(for: item.id) else { return nil }
+
+        let options = PHVideoRequestOptions()
+        options.isNetworkAccessAllowed = false
+        options.deliveryMode = .fastFormat
+        options.version = .current
+
+        let video: AVAsset? = await withCheckedContinuation { continuation in
+            let resumeGuard = ResumeGuard()
+            PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { video, _, _ in
+                guard resumeGuard.claim() else { return }
+                continuation.resume(returning: video)
+            }
+        }
+
+        guard let video else { return nil }
+        return await VideoFrameSampler.signature(for: video)
     }
 
     // MARK: - Helpers
