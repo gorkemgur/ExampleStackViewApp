@@ -50,6 +50,34 @@ final class LaunchUITests: XCTestCase {
         XCTAssertFalse(app.buttons["access.button"].exists)
     }
 
+    /// The live surfaces render nowhere a simulator can reach, so the app draws them on a
+    /// screen of its own under test. This proves that screen renders every phase — the walk
+    /// that photographs it cannot tell a laid-out view from a blank one.
+    func testEveryLiveScanPhaseRenders() {
+        let entry = app.buttons["root.livesurfaces"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 30), "no way in to the live surfaces")
+        entry.tap()
+
+        XCTAssertTrue(
+            app.buttons["livepreview.close"].waitForExistence(timeout: 10),
+            "the live surfaces screen never appeared"
+        )
+
+        for headline in ["Scanning", "Paused", "Found space", "All clean", "Stopped"] {
+            XCTAssertTrue(
+                app.staticTexts[headline].exists,
+                "the \(headline) state is not rendered"
+            )
+        }
+
+        // The one thing that must never appear on a surface read without the app in front of
+        // you: a claim that something was removed.
+        XCTAssertTrue(app.staticTexts["Nothing was deleted"].exists)
+
+        app.buttons["livepreview.close"].tap()
+        XCTAssertTrue(app.navigationBars["DupeSpace"].waitForExistence(timeout: 10))
+    }
+
     /// One scroll to the bottom, checking everything that lives below the fold on the way.
     func testEverythingBelowTheFoldIsReachable() {
         XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))

@@ -178,6 +178,7 @@ def main():
         print("the app never reached its root screen")
         return 1
     captured += shot("01-overview.png")
+    captured += capture_live_surfaces()
 
     entry = scroll_to("root.scan")
     if entry is None:
@@ -224,6 +225,29 @@ def main():
 
     print(f"captured {captured} screens")
     return 0
+
+
+def capture_live_surfaces():
+    """The Lock Screen and Dynamic Island presentations.
+
+    No simulator will show a Live Activity, so the app renders the same views on a screen of
+    its own under `-ui-testing`. This is the only picture anyone gets of them.
+    """
+    entry = find(describe(), "Live surfaces", types={"Button"})
+    if entry is None:
+        print("no live-surfaces entry on the overview")
+        return 0
+
+    tap(entry, settle=2.0)
+    if wait_for("livepreview.close", timeout=30) is None:
+        return 0
+
+    captured = shot("01b-live-surfaces.png")
+
+    close = find(describe(), "livepreview.close", types={"Button"})
+    if close is not None:
+        tap(close, settle=1.5)
+    return captured
 
 
 def capture_history():

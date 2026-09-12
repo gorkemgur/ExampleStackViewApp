@@ -69,6 +69,25 @@ can be held rather than cancelled, and slows itself down on a hot phone or in Lo
 Every scan and every deletion leaves a record: what went, what was kept in its place, what it
 was worth, and how many days remain to undo it from Recently Deleted.
 
+## Outside the app
+
+A widget carries the same numbers to the Home and Lock Screens — free space, what the last scan
+found, how much has been reclaimed in total — in five families, down to the inline one. It reads
+a snapshot the app leaves in a shared container rather than computing anything: a widget gets a
+few tens of milliseconds and no photo library access at all. The write is a file, and atomic, so
+a widget reloading mid-write reads the previous snapshot instead of half of the next one.
+
+A running scan appears as a Live Activity on the Lock Screen and in the Dynamic Island, because
+a scan of a full library is minutes and nobody stares at a progress bar for minutes. Every
+surface renders one state, so a scan cannot be 40% done in one place and 60% in another, and
+nothing is claimed found until the scan has actually decided — a number read off a Lock Screen
+with the app nowhere in sight is the worst possible place for an estimate. Updates are rationed
+against ActivityKit's budget, except the ones a person would notice: a change of stage, a hold,
+and the end.
+
+Both are best-effort. No App Group, an iPad, or Live Activities switched off means no widget and
+no live scan, and exactly the same scan.
+
 ## The four rules it will not break
 
 1. **Nothing is deleted on transitive evidence.** Byte-identical copies are grouped

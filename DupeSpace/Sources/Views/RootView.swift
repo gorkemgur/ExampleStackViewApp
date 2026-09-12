@@ -11,6 +11,7 @@ struct RootView: View {
         changeObserver: AppEnvironment.makeChangeObserver()
     )
     @State private var pickingFolder = false
+    @State private var showingLiveSurfaces = false
 
     var body: some View {
         NavigationStack {
@@ -76,6 +77,20 @@ struct RootView: View {
             .refreshable {
                 await model.refresh()
             }
+            .toolbar {
+                // The Lock Screen and the Dynamic Island cannot be walked to on a simulator, so
+                // under test the app renders those same views itself and the walk photographs
+                // them. Nothing here is reachable in a shipping build.
+                if AppEnvironment.isUITesting {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Live surfaces") { showingLiveSurfaces = true }
+                            .accessibilityIdentifier("root.livesurfaces")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingLiveSurfaces) {
+            LiveSurfacePreviewView { showingLiveSurfaces = false }
         }
         .task {
             await model.refresh()
