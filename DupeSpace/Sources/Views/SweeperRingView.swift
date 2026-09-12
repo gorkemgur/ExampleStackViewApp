@@ -27,6 +27,11 @@ struct SweeperRingView: View {
     @State private var tickTrim: CGFloat = 0
     /// The single ring pulse that goes with it.
     @State private var pulse: CGFloat = 0
+    /// The figure walking off, and the heap it collected going with it.
+    ///
+    /// Arrival is three beats rather than one: a tick that draws while someone is still
+    /// standing under it reads as two things happening at once instead of one thing finishing.
+    @State private var exit: CGFloat = 0
 
     private let lineWidth: CGFloat = 7
 
@@ -43,7 +48,7 @@ struct SweeperRingView: View {
             .animation(reduceMotion ? nil : Motion.content, value: scene.isFinished)
             .onAppear { if scene.isFinished { arrive() } }
             .onChange(of: scene.isFinished) { _, finished in
-                if finished { arrive() } else { tickTrim = 0; pulse = 0 }
+                if finished { arrive() } else { tickTrim = 0; pulse = 0; exit = 0 }
             }
 
             if let caption {
@@ -101,7 +106,7 @@ struct SweeperRingView: View {
             // the swept floor still says exactly how far the work has got.
             figure(phase: 0.25)
         } else {
-            TimelineView(.animation(minimumInterval: 1.0 / 40.0, paused: scene.isFinished)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 40.0, paused: scene.isFinished && exit >= 1)) { timeline in
                 figure(phase: phase(timeline.date, period: 0.9))
             }
         }
@@ -119,37 +124,135 @@ struct SweeperRingView: View {
             let floorY = SweeperFigure.floorY * canvas.height
             let inset = canvas.width * 0.2
 
-            // The floor. Swept to the left of the broom, still dirty to the right — which is
-            // the progress reading, drawn as the thing the figure is actually doing.
+            // THE FLOOR
+            //
+            // It was a hairline with dots on it, which reads as a diagram rather than as a
+            // place. The rule fades out at both ends instead of stopping dead, the figure
+            // casts a shadow so it stands on something, and the swept part carries a trail
+            // that is brightest right behind the broom.
             var floor = Path()
             floor.move(to: CGPoint(x: inset, y: floorY))
             floor.addLine(to: CGPoint(x: canvas.width - inset, y: floorY))
-            context.stroke(floor, with: .color(DS.onSlabMuted.opacity(0.25)), lineWidth: 1)
-
-            var swept = Path()
-            swept.move(to: CGPoint(x: inset, y: floorY))
-            swept.addLine(
-                to: CGPoint(
-                    x: scene.isFinished
-                        ? canvas.width - inset
-                        : min(pose.broomLeft.x * canvas.width, canvas.width - inset),
-                    y: floorY
-                )
+            context.stroke(
+                floor,
+                with: .linearGradient(
+                    Gradient(stops: [
+                        .init(color: DS.onSlabMuted.opacity(0), location: 0),
+                        .init(color: DS.onSlabMuted.opacity(0.3), location: 0.18),
+                        .init(color: DS.onSlabMuted.opacity(0.3), location: 0.82),
+                        .init(color: DS.onSlabMuted.opacity(0), location: 1)
+                    ]),
+                    startPoint: CGPoint(x: inset, y: floorY),
+                    endPoint: CGPoint(x: canvas.width - inset, y: floorY)
+                ),
+                lineWidth: 1
             )
-            context.stroke(swept, with: .color(DS.onSlabAccent.opacity(0.7)), lineWidth: 2)
 
-            // What is left to do. Nothing, once the work is finished: the figure travels to
-            // `travel.upperBound`, which is short of the far edge, so two specks used to sit
-            // there uncollected under a tick claiming the job was done.
-            for speck in SweepFloor.specks() where !scene.isFinished && !SweepFloor.isSwept(speck, by: x) {
-                let dot = point(speck)
+            let sweptTo = scene.isFinished
+                ? canvas.width - inset
+                : min(pose.broomLeft.x * canvas.width, canvas.width - inset)
+
+            if sweptTo > inset {
+                var swept = Path()
+                swept.move(to: CGPoint(x: inset, y: floorY))
+                swept.addLine(to: CGPoint(x: sweptTo, y: floorY))
+                context.opacity = scene.isFinished ? 1 - exit : 1
+                context.stroke(
+                    swept,
+                    with: .linearGradient(
+                        Gradient(colors: [DS.onSlabAccent.opacity(0), DS.onSlabAccent.opacity(0.85)]),
+                        startPoint: CGPoint(x: inset, y: floorY),
+                        endPoint: CGPoint(x: sweptTo, y: floorY)
+                    ),
+                    style: StrokeStyle(lineWidth: 2.4, lineCap: .round)
+                )
+                context.opacity = 1
+            }
+
+            if !scene.isFinished {
+                // The shadow. It narrows as the body leans into a stroke, which is the cheapest
+                // way to make a walk read as weight rather than as a sprite sliding along.
+                let squash = 1 - abs(sin(phase * 2 * .pi)) * 0.18
+                let shadowWidth = canvas.width * 0.115 * squash
                 context.fill(
-                    Path(ellipseIn: CGRect(x: dot.x - 1.6, y: dot.y - 1.6, width: 3.2, height: 3.2)),
+                    Path(
+                        ellipseIn: CGRect(
+                            x: x * canvas.width - shadowWidth / 2,
+                            y: floorY - 1,
+                            width: shadowWidth,
+                            height: canvas.height * 0.022
+                        )
+                    ),
+                    with: .color(DS.ink.opacity(0.55))
+                )
+            }
+
+            // What is left to do, at its own size rather than fourteen identical dots. Nothing
+            // once the work is finished: the figure travels to `travel.upperBound`, which is
+            // short of the far edge, so two specks used to sit there uncollected under a tick
+            // claiming the job was done.
+            let grain = SweepFloor.grain()
+            for (index, speck) in SweepFloor.specks().enumerated()
+            where !scene.isFinished && !SweepFloor.isSwept(speck, by: x) {
+                let dot = point(speck)
+                let r = grain[index]
+                context.fill(
+                    Path(ellipseIn: CGRect(x: dot.x - r, y: dot.y - r, width: r * 2, height: r * 2)),
                     with: .color(DS.onSlabMuted.opacity(0.55))
                 )
             }
 
-            guard !scene.isFinished else { return }
+            // THE HEAP
+            //
+            // What the broom has actually collected, riding in front of it and growing with the
+            // count. The same reading as the swept floor, in the form of a thing rather than a
+            // measurement — and the part that makes the figure look like it is doing work
+            // rather than walking.
+            let collected = SweepFloor.collected(by: x)
+            if collected > 0 && !scene.isFinished {
+                let heap = point(CGPoint(x: pose.broomRight.x + 0.012, y: SweeperFigure.floorY))
+                let w = canvas.width * (0.03 + Double(collected) * 0.0085)
+                let h = canvas.height * (0.018 + Double(collected) * 0.0047)
+                var pile = Path()
+                pile.move(to: CGPoint(x: heap.x - w, y: heap.y))
+                pile.addQuadCurve(
+                    to: CGPoint(x: heap.x, y: heap.y - h * 0.72),
+                    control: CGPoint(x: heap.x - w * 0.35, y: heap.y - h)
+                )
+                pile.addQuadCurve(
+                    to: CGPoint(x: heap.x + w, y: heap.y),
+                    control: CGPoint(x: heap.x + w * 0.5, y: heap.y - h * 0.3)
+                )
+                pile.closeSubpath()
+                context.fill(pile, with: .color(DS.onSlabMuted.opacity(0.65)))
+            }
+
+            // And the puff as the figure steps off, so the heap is disposed of rather than
+            // simply deleted from the picture.
+            if scene.isFinished && exit < 1 {
+                let origin = point(CGPoint(x: SweeperFigure.travel.upperBound + 0.13, y: SweeperFigure.floorY))
+                for index in 0..<5 {
+                    let angle = -Double.pi * (0.15 + Double(index) * 0.175)
+                    let distance = exit * canvas.width * 0.12
+                    let r = 2.6 * (1 - exit)
+                    context.fill(
+                        Path(
+                            ellipseIn: CGRect(
+                                x: origin.x + cos(angle) * distance - r,
+                                y: origin.y + sin(angle) * distance * 0.8 - r,
+                                width: r * 2,
+                                height: r * 2
+                            )
+                        ),
+                        with: .color(DS.onSlabMuted.opacity(0.5 * (1 - exit)))
+                    )
+                }
+            }
+
+            // The figure keeps walking through the exit beat, then it is gone.
+            guard !scene.isFinished || exit < 1 else { return }
+            context.translateBy(x: exit * canvas.width * 0.16, y: 0)
+            context.opacity = 1 - exit
 
             let body = GraphicsContext.Shading.color(DS.onSlab)
 
@@ -231,6 +334,8 @@ struct SweeperRingView: View {
             .trim(from: 0, to: tickTrim)
             .stroke(DS.onSlabAccent, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
             .frame(width: size * 0.42, height: size * 0.42)
+            // The only flourish in the whole thing, and it is three and a half per cent.
+            .scaleEffect(tickTrim >= 1 ? 1 + sin(min(pulse, 1) * .pi) * 0.035 : 1)
             .accessibilityIdentifier("sweeper.tick")
     }
 
@@ -250,12 +355,15 @@ struct SweeperRingView: View {
         guard !reduceMotion else {
             tickTrim = 1
             pulse = 1
+            exit = 1
             return
         }
         tickTrim = 0
         pulse = 0
-        withAnimation(.snappy(duration: 0.42)) { tickTrim = 1 }
-        withAnimation(.easeOut(duration: 0.5)) { pulse = 1 }
+        exit = 0
+        withAnimation(.easeOut(duration: 0.26)) { exit = 1 }
+        withAnimation(.snappy(duration: 0.42).delay(0.26)) { tickTrim = 1 }
+        withAnimation(.easeOut(duration: 0.56).delay(0.26)) { pulse = 1 }
     }
 
     private var spokenValue: String {

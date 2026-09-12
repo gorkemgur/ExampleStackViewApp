@@ -136,6 +136,29 @@ final class SweepSceneTests: XCTestCase {
         XCTAssertEqual(SweepFloor.specks(), SweepFloor.specks())
     }
 
+    /// The heap in front of the broom is the same reading as the swept floor: it may only ever
+    /// grow, and it has to end holding everything the sweep passed.
+    func testTheHeapGrowsWithTheSweepAndNeverShrinks() {
+        var previous = -1
+        for step in 0...20 {
+            let x = SweeperFigure.travel.lowerBound
+                + (SweeperFigure.travel.upperBound - SweeperFigure.travel.lowerBound) * Double(step) / 20
+            let collected = SweepFloor.collected(by: x)
+            XCTAssertGreaterThanOrEqual(collected, previous)
+            previous = collected
+        }
+        XCTAssertGreaterThan(previous, 0, "a full sweep has to pick something up")
+    }
+
+    /// Fourteen identical dots read as a diagram. A floor has grain.
+    func testEverySpeckHasItsOwnSize() {
+        let grain = SweepFloor.grain()
+
+        XCTAssertEqual(grain.count, SweepFloor.specks().count)
+        XCTAssertGreaterThan(Set(grain).count, 3, "the sizes should vary, not alternate between two")
+        XCTAssertTrue(grain.allSatisfy { $0 >= 1.6 && $0 <= 3.2 })
+    }
+
     /// The figure stops at `travel.upperBound`, which is short of the far edge, so the last two
     /// specks sit past where the broom ever reaches. Left as they were, the finished state
     /// showed a tick over a floor that still had dirt on it.

@@ -143,6 +143,18 @@ enum SweeperFigure {
 /// a screenshot is comparable with the one before it.
 enum SweepFloor {
 
+    /// Each speck's own size. Fourteen identical dots read as a diagram; a floor has grain.
+    static func grain(count: Int = 14) -> [CGFloat] {
+        (0..<count).map { 1.6 + CGFloat((($0 * 37) % 11)) / 11 * 1.5 }
+    }
+
+    /// How many specks the broom has collected by the time it reaches `x`. The heap in front
+    /// of it is drawn from this, which makes the pile the same reading as the swept floor — in
+    /// a form you watch rather than measure.
+    static func collected(by x: Double, count: Int = 14) -> Int {
+        specks(count: count).filter { isSwept($0, by: x) }.count
+    }
+
     static func specks(count: Int = 14) -> [CGPoint] {
         var value: UInt64 = 0x9E3779B97F4A7C15
         func next() -> Double {
