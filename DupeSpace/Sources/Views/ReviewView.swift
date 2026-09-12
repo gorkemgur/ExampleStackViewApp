@@ -240,6 +240,18 @@ struct ReviewView: View {
         // that silently selected a hundred and fifty hidden photos would be the single worst
         // thing this app could do.
         let scope = model.kindFilter.map { " Within \(KindCopy.title(for: $0).lowercased()) only." } ?? ""
+
+        // The depth setting, not the target, is what has run out — and "nothing is selected by
+        // a plan of zero" blamed the target, which the person had just dragged to the far end.
+        // After a first pass this is the ordinary state: everything lossless has gone, and what
+        // is left is theirs to judge.
+        if reachableBytes <= 0 {
+            let remaining = ByteFormatting.string(Int64(model.plannableBytes))
+            return model.plannableBytes > 0
+                ? "Nothing left at this depth. The \(remaining) still on offer is in the rungs you have to judge — allow more to reach it.\(scope)"
+                : "Nothing left to offer.\(scope)"
+        }
+
         guard !plan.selected.isEmpty else {
             return "Drag to set a target. Nothing is selected by a plan of zero.\(scope)"
         }
@@ -279,7 +291,12 @@ struct ReviewView: View {
             ForEach(model.kindSections) { kindSection in
                 Section {
                     ForEach(Array(kindSection.sections.enumerated()), id: \.element.id) { index, section in
-                        rung(section, in: kindSection.kind, isLast: index == kindSection.sections.count - 1)
+                        rung(
+                            section,
+                            in: kindSection.kind,
+                            isLast: index == kindSection.sections.count - 1,
+                            explains: explainsTier(section.tier, in: kindSection.kind)
+                        )
                     }
                     .padding(.bottom, DS.Space.xxl)
                 } header: {
@@ -399,6 +416,13 @@ struct ReviewView: View {
         .accessibilityIdentifier("review.kinds")
     }
 
+    /// A filter, and only that.
+    ///
+    /// It carried each kind's byte figure, which put "Videos 2.02 GB" a hundred points above a
+    /// pinned header reading "Videos 2.02 GB" — the same three words and the same number twice
+    /// on one screen, on a screen that already prints a byte figure in the budget readout, in
+    /// every rung header and on every row. The header is the reading; this is the switch. The
+    /// count still reaches VoiceOver, where there is no pinned header to read it from.
     private func filterChip(_ kind: MediaKind?) -> some View {
         let selected = model.kindFilter == kind
         let tally = model.tally(for: kind)
@@ -411,10 +435,6 @@ struct ReviewView: View {
                     .font(.caption2.weight(.bold))
                 Text(KindCopy.title(for: kind))
                     .font(.footnote.weight(selected ? .bold : .medium))
-                Text(ByteFormatting.string(tally.bytes))
-                    .font(.caption2)
-                    .monospacedDigit()
-                    .opacity(0.75)
             }
             .foregroundStyle(selected ? DS.deep : Color.secondary)
             .padding(.horizontal, 12)
@@ -437,14 +457,25 @@ struct ReviewView: View {
         .accessibilityIdentifier("review.kind.\(KindCopy.slug(for: kind))")
     }
 
-    private func rung(_ section: ReviewSection, in kind: MediaKind, isLast: Bool) -> some View {
+    /// Whether this rung carries the sentence that explains its tier.
+    ///
+    /// Once the list nested tiers under kinds, "Byte for byte the same file. Deleting these
+    /// loses nothing at all." was printed once per kind — up to three times on one screen, and
+    /// eight or twelve paragraphs of explanation on a screen whose job is to show files. The
+    /// sentence explains the *tier*, and a tier means the same thing whether it holds a
+    /// photograph or a video, so it is said the first time that tier appears and not again.
+    private func explainsTier(_ tier: RegretTier, in kind: MediaKind) -> Bool {
+        model.kindSections.first { $0.sections.contains { $0.tier == tier } }?.kind == kind
+    }
+
+    private func rung(_ section: ReviewSection, in kind: MediaKind, isLast: Bool, explains: Bool) -> some View {
         let tint = DS.tier(section.tier)
 
         return HStack(alignment: .top, spacing: 14) {
             rail(tint: tint, isLast: isLast)
 
             VStack(alignment: .leading, spacing: 12) {
-                rungHeader(section, in: kind, tint: tint)
+                rungHeader(section, in: kind, tint: tint, explains: explains)
 
                 LazyVStack(spacing: 8) {
                     ForEach(section.groups) { group in
@@ -486,7 +517,7 @@ struct ReviewView: View {
     /// list nested tiers under kinds, "Identical copies" appeared up to three times on one
     /// screen — so `review.section.identical` matched three elements and the UI test that
     /// tapped `review.selectall.identical` tapped whichever one the query happened to return.
-    private func rungHeader(_ section: ReviewSection, in kind: MediaKind, tint: Color) -> some View {
+    private func rungHeader(_ section: ReviewSection, in kind: MediaKind, tint: Color, explains: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -542,10 +573,12 @@ struct ReviewView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(ScanCopy.subtitle(for: section.tier))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if explains {
+                Text(ScanCopy.subtitle(for: section.tier))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             // A "Select all" that quietly leaves things behind is worse than one that refuses:
             // the user reads a lower count in the dock than this rung's own figure and has no

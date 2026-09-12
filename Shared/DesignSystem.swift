@@ -729,7 +729,12 @@ struct TargetSlider: View {
 
                 // Where the depth setting stops. Everything past it is space this plan will
                 // not take however far the target is dragged.
-                if limitFraction < 1 {
+                //
+                // Not at either end. At zero it sat on top of the track's own left cap and
+                // read as a stray scratch on the control; at one it marks the end of a track
+                // that already ends there. A marker has to have something on both sides of it
+                // to be marking anything.
+                if limitFraction > 0.02, limitFraction < 0.98 {
                     Rectangle()
                         .fill(Color.white.opacity(0.45))
                         .frame(width: 2, height: trackHeight)
@@ -787,13 +792,22 @@ struct TargetSlider: View {
     /// the fill stops somewhere the colours say a different rung begins, which is the one thing
     /// this control exists to say. The trailing rectangle takes up whatever is left.
     ///
-    /// Rungs past the depth limit are drawn at a tenth of the strength: they are still on the
-    /// track, because the space is real, but they are visibly not on offer.
+    /// Rungs past the depth limit lose their hue entirely rather than being faded: they become
+    /// the groove they are drawn in.
+    ///
+    /// They were `color.opacity(0.3)`, and a warm hue killed to a third over a navy slab is
+    /// mud — measured off the screenshot, amber `#F5B944` came out `#6A5F40`, an olive nobody
+    /// chose. Worse, in the state where the depth setting can reach *nothing*, every rung is
+    /// beyond the limit, so the whole control was one olive bar with a grey tick at its left
+    /// end: a graphic that reads as broken rather than as "none of this is on offer".
+    ///
+    /// A hue at low alpha still claims to be a colour. A slate groove claims to be a groove,
+    /// which is what an unavailable stretch of track is.
     private func ladder(in width: CGFloat) -> some View {
         HStack(spacing: 0) {
             ForEach(laidOutRungs, id: \.rung.id) { entry in
                 Rectangle()
-                    .fill(entry.rung.color.opacity(entry.isBeyondLimit ? 0.3 : 1))
+                    .fill(entry.isBeyondLimit ? DS.neutralOnSlab.opacity(0.45) : entry.rung.color)
                     .frame(width: max(width * entry.share, 2))
             }
             Rectangle().fill(Color.white.opacity(0.10))

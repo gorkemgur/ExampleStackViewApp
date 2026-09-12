@@ -60,12 +60,18 @@ struct GroupRowView: View {
                     .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .monospacedDigit()
 
-                Text("\(selectedCount)/\(group.candidates.count) ticked")
-                    .font(.caption2)
-                    .monospacedDigit()
-                    .foregroundStyle(selectedCount > 0 ? tint : Color.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                // Only when there is a fraction to report. A group with one candidate beside a
+                // tick box that is already either ticked or not says "1/1 ticked" — a second
+                // reading of a control six points to its left, on a screen that prints a byte
+                // figure four times before you reach a filename.
+                if group.candidates.count > 1 {
+                    Text("\(selectedCount)/\(group.candidates.count) ticked")
+                        .font(.caption2)
+                        .monospacedDigit()
+                        .foregroundStyle(selectedCount > 0 ? tint : Color.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
             }
 
             Image(systemName: "chevron.right")
