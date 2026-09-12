@@ -30,7 +30,7 @@ struct StorageCardView: View {
             }
 
             CapacityBar(
-                segments: parts.map { CapacityBar.Segment(id: $0.id, bytes: $0.bytes, color: $0.color) },
+                segments: usedParts.map { CapacityBar.Segment(id: $0.id, bytes: $0.bytes, color: $0.color) },
                 total: snapshot.totalCapacity,
                 height: 12
             )
@@ -68,13 +68,17 @@ struct StorageCardView: View {
         var isActionable: Bool = false
     }
 
-    /// The three parts of the disk, largest first.
+    /// What is on the disk, largest first.
     ///
     /// Sorted rather than fixed, because the bar is a comparison: reading it should tell you
-    /// which of the three is biggest without doing arithmetic on the figures underneath. The
-    /// legend is built from this same list, so the order under the bar can never disagree with
-    /// the order in it.
-    private var parts: [Part] {
+    /// which part is biggest without doing arithmetic on the figures underneath.
+    ///
+    /// Free space is deliberately not in here. It is the track's own remainder, so the bar
+    /// fills left to right with what is used and stops where the disk runs out — which is how
+    /// a disk reads. Sorting it in with the rest put Free between the two used segments on any
+    /// phone with room to spare, breaking the bar into two unrelated pieces, and painted it in
+    /// the same colour the track already uses for its empty end, so it was invisible anyway.
+    private var usedParts: [Part] {
         [
             Part(
                 id: "library",
@@ -83,10 +87,17 @@ struct StorageCardView: View {
                 color: DS.deep,
                 isActionable: true
             ),
-            Part(id: "other", title: "Everything else", bytes: otherBytes, color: DS.neutral),
-            Part(id: "free", title: "Free", bytes: snapshot.availableCapacity, color: DS.well)
+            Part(id: "other", title: "Everything else", bytes: otherBytes, color: DS.neutral)
         ]
         .sorted { $0.bytes > $1.bytes }
+    }
+
+    /// The legend, in the order the bar draws them: the used parts largest first, then the
+    /// empty end of the track. The order under the bar can never disagree with the order in it.
+    private var parts: [Part] {
+        usedParts + [
+            Part(id: "free", title: "Free", bytes: snapshot.availableCapacity, color: DS.well)
+        ]
     }
 
     /// Each legend repeats its slug from the bar above rather than using a dot, so the eye can
@@ -99,8 +110,15 @@ struct StorageCardView: View {
         isActionable: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
+            // Outlined as well as filled: "Free" carries the colour of the track's empty end,
+            // which is a shade off the page it is drawn on, so without an edge that swatch was
+            // a blank space above the word.
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(color)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .strokeBorder(DS.hairline, lineWidth: 0.5)
+                )
                 .frame(height: 3)
                 .frame(maxWidth: 34, alignment: .leading)
 

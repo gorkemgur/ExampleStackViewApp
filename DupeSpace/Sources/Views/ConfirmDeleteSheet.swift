@@ -121,28 +121,66 @@ struct ConfirmDeleteSheet: View {
 
     /// A ledger rather than a card of rows: hairline-ruled, figures right-aligned and lined up
     /// on the digit, because this is the part someone actually audits.
+    @ViewBuilder
     private var breakdown: some View {
-        Card("When you get it back", symbolName: "clock", identifier: "confirm.breakdown") {
-            VStack(spacing: 0) {
-                row(
-                    "After emptying Recently Deleted",
-                    bytes: model.savings.deferredBytes,
-                    note: "iOS keeps deleted photos for 30 days. The space returns when you empty that album, or when the 30 days are up."
-                )
-                if model.savings.immediateBytes > 0 {
-                    Divider().overlay(DS.hairline)
-                    row("Right away", bytes: model.savings.immediateBytes, note: "Files deleted outside the photo library are gone immediately.")
-                }
-                if model.savings.cloudOnlyBytes > 0 {
-                    Divider().overlay(DS.hairline)
-                    row(
-                        "In iCloud only",
-                        bytes: model.savings.cloudOnlyBytes,
-                        note: "These originals are not on this device, so deleting them frees iCloud storage rather than local storage."
-                    )
+        // Only the rows that carry something. The Recently Deleted row used to be
+        // unconditional, so a selection made entirely of files in a Files folder — which are
+        // gone the moment they are deleted — opened this sheet with "After emptying Recently
+        // Deleted  0 KB" at the top and a paragraph about a thirty-day album that had nothing
+        // to do with anything the user had picked.
+        let rows = ledgerRows
+        if !rows.isEmpty {
+            Card("When you get it back", symbolName: "clock", identifier: "confirm.breakdown") {
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.title) { index, entry in
+                        if index > 0 {
+                            Divider().overlay(DS.hairline)
+                        }
+                        row(entry.title, bytes: entry.bytes, note: entry.note)
+                    }
                 }
             }
         }
+    }
+
+    private struct LedgerRow {
+        let title: String
+        let bytes: Int64
+        let note: String
+    }
+
+    private var ledgerRows: [LedgerRow] {
+        let savings = model.savings
+        var rows: [LedgerRow] = []
+
+        if savings.immediateBytes > 0 {
+            rows.append(
+                LedgerRow(
+                    title: "Right away",
+                    bytes: savings.immediateBytes,
+                    note: "Files deleted outside the photo library are gone immediately."
+                )
+            )
+        }
+        if savings.deferredBytes > 0 {
+            rows.append(
+                LedgerRow(
+                    title: "After emptying Recently Deleted",
+                    bytes: savings.deferredBytes,
+                    note: "iOS keeps deleted photos for 30 days. The space returns when you empty that album, or when the 30 days are up."
+                )
+            )
+        }
+        if savings.cloudOnlyBytes > 0 {
+            rows.append(
+                LedgerRow(
+                    title: "In iCloud only",
+                    bytes: savings.cloudOnlyBytes,
+                    note: "These originals are not on this device, so deleting them frees iCloud storage rather than local storage."
+                )
+            )
+        }
+        return rows
     }
 
     private var judgementWarning: some View {

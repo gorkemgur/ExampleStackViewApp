@@ -231,6 +231,21 @@ final class ReviewViewModel: ObservableObject {
         if !stale.isEmpty {
             selection.setSelected(false, for: Array(stale))
         }
+        clampBudget()
+    }
+
+    /// Pulls the target back inside what is actually still on offer.
+    ///
+    /// The slider's range is `0...maxReclaimableBytes`, so the user can never drag past the
+    /// ceiling — but the ceiling moves. Delete 2 GB and the value the user set against the old
+    /// ceiling survives, so the card read "I NEED 2.02 GB BACK" with the handle pinned to the
+    /// far end of a track whose end was now 12.3 MB, under a plan that could only ever select
+    /// everything. The number has to follow the ceiling down.
+    private func clampBudget() {
+        let ceiling = Double(maxReclaimableBytes)
+        if budgetBytes > ceiling {
+            budgetBytes = ceiling
+        }
     }
 
     func applyBudgetPlan() {
@@ -245,6 +260,7 @@ final class ReviewViewModel: ObservableObject {
     func resetToSafeDefaults() {
         overrides = [:]
         selection = .preSelected(from: liveCandidates)
+        clampBudget()
     }
 
     /// True once the user has changed anything the app proposed.
@@ -298,6 +314,7 @@ final class ReviewViewModel: ObservableObject {
             outcome = completed
             deletedIDs.formUnion(completed.deletedIDs)
             selection.clear()
+            clampBudget()
 
             if !completed.deletedIDs.isEmpty {
                 history?.record(

@@ -342,6 +342,38 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertNotNil(model.failure)
     }
 
+    // MARK: - The budget follows what is left
+
+    /// The slider's range is `0...maxReclaimableBytes`, so the user cannot drag past the
+    /// ceiling — but deleting moves the ceiling. The target used to survive that: the card read
+    /// "I NEED 2.02 GB BACK" with the handle pinned to the end of a track whose end was now a
+    /// few megabytes.
+    func testDeletingPullsTheTargetBackInsideWhatIsLeft() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        model.budgetBytes = Double(model.maxReclaimableBytes)
+
+        await model.delete()
+
+        XCTAssertFalse(model.outcome?.deletedIDs.isEmpty ?? true, "fixture should delete something")
+        XCTAssertLessThanOrEqual(
+            Int64(model.budgetBytes),
+            model.maxReclaimableBytes,
+            "the target may never exceed what is still on offer"
+        )
+    }
+
+    func testClearingAGroupCannotLeaveTheTargetAboveTheCeiling() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard let groupID = exactGroupID(model) else {
+            return XCTFail("fixture has no exact group")
+        }
+
+        model.budgetBytes = Double(model.maxReclaimableBytes)
+        model.chooseKeeper(model.result.decisions.first { $0.id == groupID }!.allCandidates.first!, inGroup: groupID)
+
+        XCTAssertLessThanOrEqual(Int64(model.budgetBytes), model.maxReclaimableBytes)
+    }
+
     func testAFailedDeletionIsReported() async {
         let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter(behaviour: .fail("disk on fire")))
         await model.delete()

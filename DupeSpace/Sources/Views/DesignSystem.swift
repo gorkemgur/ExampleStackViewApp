@@ -220,19 +220,27 @@ struct KeyButtonStyle: ButtonStyle {
 
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+        /// `.disabled(…)` on the button sets this, and it is the only signal most call sites
+        /// give. Without reading it a disabled key kept the full brand gradient and its white
+        /// label: a button that looks like the most important thing on the screen and does
+        /// nothing when tapped.
+        @Environment(\.isEnabled) private var isEnabled
+
+        private var isLive: Bool { style.isEnabled && isEnabled }
+
         var body: some View {
             configuration.label
                 .font(.body.weight(.semibold))
-                .foregroundStyle(style.isEnabled ? style.foreground : Color.secondary)
+                .foregroundStyle(isLive ? style.foreground : Color.secondary)
                 .frame(maxWidth: style.expands ? .infinity : nil)
                 .frame(minHeight: style.height)
                 .background(
                     RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .fill(style.isEnabled ? style.fill : AnyShapeStyle(DS.well))
+                        .fill(isLive ? style.fill : AnyShapeStyle(DS.well))
                 )
                 .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                .opacity(configuration.isPressed ? 0.82 : 1)
-                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+                .opacity(configuration.isPressed && isLive ? 0.82 : 1)
+                .scaleEffect(configuration.isPressed && isLive && !reduceMotion ? 0.985 : 1)
                 .animation(Motion.control, value: configuration.isPressed)
         }
     }
@@ -289,6 +297,13 @@ struct MeterTrack: View {
                     .fill(DS.well)
             }
             .clipShape(Capsule(style: .continuous))
+            // The empty end of the track is DS.well, which sits a shade off the page it is
+            // drawn on — enough on a white card, not enough on the page itself, where the bar
+            // simply stopped in mid-air. The edge says how long the whole disk is.
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(DS.hairline, lineWidth: 1)
+            )
         }
         .frame(height: height)
         .animation(Motion.content, value: segments)
