@@ -376,9 +376,9 @@ struct ReviewView: View {
         .dsPanel(radius: 16)
     }
 
-    private func boxState(selected: Int, of total: Int) -> TickBox.State {
-        if selected == 0 { return .none }
-        return selected == total ? .all : .some
+    private func boxMark(selected: Int, of total: Int) -> TickBox.Mark {
+        if selected == 0 { return .empty }
+        return selected == total ? .full : .partial
     }
 
     // MARK: - The bar
