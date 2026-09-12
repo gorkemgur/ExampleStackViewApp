@@ -211,6 +211,23 @@ jobs:
             -enableCodeCoverage NO \
             2>&1 | tee -a xcodebuild.log
 
+      # Between the two runs, because they are not independent.
+      #
+      # `TEST EXECUTE FAILED` with `SBMainWorkspace` denying the launch of
+      # `DupeSpaceUITests.xctrunner`, and not one assertion in the log: the UI half never
+      # started. The unit run leaves the device booted with the app installed and its process
+      # alive; the UI run then asks Xcode to *clone* that device twice, and a clone taken from
+      # a live SpringBoard is where this denial comes from.
+      #
+      # Shut down and boot again, so the clones are taken from a device at rest. Twenty
+      # seconds against a job that costs twelve minutes when it has to be run twice.
+      - name: Settle the simulator
+        if: always() && steps.unit.conclusion != 'skipped'
+        run: |
+          xcrun simctl shutdown "${{ steps.simulator.outputs.udid }}" || true
+          xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
+          xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b || true
+
       # The slow half. Every one of these launches the app and scans the fixture from scratch,
       # which is twenty seconds apiece — so they run two simulators at once. `if: always()`
       # because a unit failure must not hide a UI failure: finding out about them one round
@@ -231,8 +248,10 @@ jobs:
             -enableCodeCoverage NO \
             2>&1 | tee -a xcodebuild.log
 
+      # Only when something went wrong. It came back at 203 MB on a green run — a fifth of a
+      # gigabyte of coverage and attachment data uploaded so that nobody opens it.
       - name: Upload test results
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: xcresult
