@@ -41,7 +41,10 @@ final class ReviewViewModel: ObservableObject {
     /// videos" is a real thing to want, because videos are where the bytes are, and until now
     /// there was no way to ask it.
     @Published var kindFilter: MediaKind? {
-        didSet { cachedVisibleSections = nil }
+        didSet {
+            cachedVisibleSections = nil
+            cachedKindSections = nil
+        }
     }
 
     /// Where the user has overruled the engine: a different survivor, or a group they want gone
@@ -83,6 +86,7 @@ final class ReviewViewModel: ObservableObject {
     private var cachedSavings: SavingsBreakdown?
     private var cachedSelectedCandidates: [DeletionCandidate]?
     private var cachedVisibleSections: [ReviewSection]?
+    private var cachedKindSections: [KindSection]?
 
     init(result: ScanResult, deleter: MediaDeleting, history: (any HistoryRecording)? = nil) {
         self.result = result
@@ -113,6 +117,7 @@ final class ReviewViewModel: ObservableObject {
         cachedSavings = nil
         cachedSelectedCandidates = nil
         cachedVisibleSections = nil
+        cachedKindSections = nil
     }
 
     var sections: [ReviewSection] {
@@ -150,8 +155,49 @@ final class ReviewViewModel: ObservableObject {
         return value
     }
 
-    /// The kinds this scan actually turned up, cheapest axis first. A filter offering "Videos"
-    /// on a library with none is a control that can only disappoint.
+    /// One kind of thing, with its own tier rungs inside it.
+    struct KindSection: Identifiable {
+        let kind: MediaKind
+        let sections: [ReviewSection]
+
+        var id: Int { kind.rawValue }
+        var bytes: Int64 { sections.reduce(Int64(0)) { $0 + $1.bytes } }
+        var groupCount: Int { sections.reduce(0) { $0 + $1.groups.count } }
+        var itemCount: Int { sections.reduce(0) { $0 + $1.itemCount } }
+    }
+
+    /// The list as two levels: what kind of thing, then what deleting it costs.
+    ///
+    /// Kind is the outer level because it is the question people arrive with — "how much of
+    /// this is video" — and because the two axes are independent: a video can be an identical
+    /// copy or a merely similar one, exactly as a photo can. Cost stays the inner level,
+    /// because that is what the decision is made on and what the safety model is defined in
+    /// terms of; it is not being demoted, it is being nested under the coarser question.
+    ///
+    /// Biggest kind first. On a phone the answer is almost always video, and the point of
+    /// opening this screen is to find the space.
+    var kindSections: [KindSection] {
+        if let cachedKindSections { return cachedKindSections }
+
+        let value = availableKinds
+            .map { kind in
+                KindSection(
+                    kind: kind,
+                    sections: sections.compactMap { section in
+                        let groups = section.groups.filter { $0.keeper.kind == kind }
+                        return groups.isEmpty ? nil : ReviewSection(tier: section.tier, groups: groups)
+                    }
+                )
+            }
+            .filter { !$0.sections.isEmpty }
+            .sorted { $0.bytes > $1.bytes }
+
+        cachedKindSections = value
+        return value
+    }
+
+    /// The kinds this scan actually turned up. A section or a filter offering "Videos" on a
+    /// library with none is a control that can only disappoint.
     var availableKinds: [MediaKind] {
         let present = Set(sections.flatMap { $0.groups.map { $0.keeper.kind } })
         return [.image, .video, .document].filter(present.contains)
@@ -378,6 +424,18 @@ final class ReviewViewModel: ObservableObject {
             selection.setSelected(false, for: Array(stale))
         }
         clampBudget()
+        clearFilterIfItHasNothingLeft()
+    }
+
+    /// Drops a filter whose kind no longer exists.
+    ///
+    /// Filter to Videos, delete the twenty videos, and the chip row disappeared — it only drew
+    /// when more than one kind was live — while `kindFilter` stayed `.video`. The result was an
+    /// empty screen saying "nothing of that kind" over a hundred and fifty hidden photo groups,
+    /// with no control anywhere on it to undo the filter.
+    private func clearFilterIfItHasNothingLeft() {
+        guard let kindFilter, !availableKinds.contains(kindFilter) else { return }
+        self.kindFilter = nil
     }
 
     /// Pulls the target back inside what is actually still on offer.
@@ -461,6 +519,7 @@ final class ReviewViewModel: ObservableObject {
             deletedIDs.formUnion(completed.deletedIDs)
             selection.clear()
             clampBudget()
+            clearFilterIfItHasNothingLeft()
 
             // A deletion that spans both sources can half-succeed. The outcome says so rather
             // than throwing, so the receipt below is still written for what actually went and

@@ -65,6 +65,7 @@ struct GroupRowView: View {
                     .monospacedDigit()
                     .foregroundStyle(selectedCount > 0 ? tint : Color.secondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
 
             Image(systemName: "chevron.right")
@@ -76,6 +77,11 @@ struct GroupRowView: View {
     }
 
     private var detail: String {
-        return "keeping this one · \(Counting.copies(group.candidates.count))"
+        // Not "keeping this one · N other copies". That already truncated at the six-item
+        // fixture size — "keeping this one · 1 othe…" — squeezed between a 52pt thumbnail and
+        // a right column that grows to "999.9 MB" over "120/127 ticked" at real scale. The
+        // seal on the picture says which one is being kept; the words only have to say how
+        // many are on offer.
+        Counting.copies(group.candidates.count)
     }
 }

@@ -234,27 +234,70 @@ struct ReviewView: View {
     /// whose `.task` fires on appear. A hundred and seventy items form about eighty-five
     /// groups: eighty-five rows and eighty-five PhotoKit requests, all on the first frame, for
     /// a screen showing six of them.
+    /// Two levels: what kind of thing, then what deleting it costs.
+    ///
+    /// Kind is the outer one because it is the question people arrive with — how much of this
+    /// is video — and because the two axes are independent: a video can be an identical copy
+    /// or a merely similar one, exactly as a photo can. Cost is not demoted by being the inner
+    /// level; it is still what every decision is made on, and it is still what the safety
+    /// model is defined in terms of. It is nested under the coarser question.
+    ///
+    /// Biggest kind first. On a phone that is almost always video, and finding the space is
+    /// the reason anybody opened this screen.
+    ///
+    /// Lazy, and it has to be said out loud, because the outer `LazyVStack` was doing nothing
+    /// for it: a lazy stack only defers the children it owns directly, and this was one opaque
+    /// child. A hundred and seventy items form about eighty-five groups, and every group row
+    /// holds a thumbnail that requests itself on appear.
     private var ladder: some View {
-        let sections = model.visibleSections
-        return LazyVStack(alignment: .leading, spacing: 0) {
-            if model.availableKinds.count > 1 {
+        LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+            if model.availableKinds.count > 1 || model.kindFilter != nil {
                 kindFilter
                     .padding(.bottom, DS.Space.l)
             }
 
-            if sections.isEmpty {
-                Text("Nothing of that kind in this scan.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, DS.Space.l)
-            } else {
-                ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
-                    rung(section, isLast: index == sections.count - 1)
+            ForEach(model.kindSections) { kindSection in
+                Section {
+                    ForEach(Array(kindSection.sections.enumerated()), id: \.element.id) { index, section in
+                        rung(section, isLast: index == kindSection.sections.count - 1)
+                    }
+                    .padding(.bottom, DS.Space.xxl)
+                } header: {
+                    // Pinned: with eighty-five groups the ladder is thousands of points long,
+                    // and knowing which pile you are in should not require scrolling back.
+                    kindHeader(kindSection)
                 }
             }
         }
         .animation(Motion.content, value: model.kindFilter)
+    }
+
+    private func kindHeader(_ kindSection: ReviewViewModel.KindSection) -> some View {
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: KindCopy.symbolName(for: kindSection.kind))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(DS.deep)
+
+            Text(KindCopy.title(for: kindSection.kind))
+                .font(.system(.title3, design: .rounded).weight(.bold))
+
+            Spacer(minLength: 8)
+
+            Text(ByteFormatting.string(kindSection.bytes))
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(DS.deep)
+        }
+        .padding(.vertical, DS.Space.s)
+        .padding(.horizontal, DS.Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.ink.opacity(0.96))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DS.hairline).frame(height: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(KindCopy.title(for: kindSection.kind)), \(Counting.items(kindSection.itemCount)), \(ByteFormatting.string(kindSection.bytes))")
+        .accessibilityIdentifier("review.kindsection.\(kindSection.kind.rawValue)")
     }
 
     /// Photos, videos and files share every tier, because what deleting something costs you has
@@ -411,7 +454,9 @@ struct ReviewView: View {
     /// A group row you can act on without opening it: the box ticks the whole group, the rest of
     /// the row goes in to look at the copies one by one.
     private func groupRow(_ group: ReviewGroup, tint: Color) -> some View {
-        let selected = group.candidateIDs.filter { model.selection.isSelected($0) }.count
+        // No intermediate arrays: `candidateIDs` is a `map` and `.filter{}.count` is a second
+        // allocation, twice per row per body pass on a list that can be eighty-five rows.
+        let selected = group.candidates.reduce(0) { model.selection.isSelected($1.id) ? $0 + 1 : $0 }
         let all = group.candidates.count
 
         return HStack(spacing: 0) {

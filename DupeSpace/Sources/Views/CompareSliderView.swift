@@ -20,7 +20,14 @@ struct CompareSliderView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let side: CGFloat = 400
+    /// The comparator is 180pt tall and never wider than the screen.
+    ///
+    /// It was asking for 400 points, which the loader multiplies by the display scale into a
+    /// 1200x1200 pixel request — about six megabytes decoded, per face. A group of sixty
+    /// copies is a hundred and twenty of those, and sixty of them are the same survivor asked
+    /// for sixty times. Asking for what is drawn is the whole fix; the loader's cache takes
+    /// care of the survivor being asked for at all.
+    private let side: CGFloat = 200
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

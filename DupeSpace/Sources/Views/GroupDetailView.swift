@@ -24,6 +24,11 @@ struct GroupDetailView: View {
             LazyVStack(spacing: 16) {
                 keeperPanel
 
+                // A group can hold sixty copies of a burst. Without this the only way to tick
+                // a subset was sixty taps, or ticking the whole group on the row before and
+                // untapping back down.
+                copiesHeader
+
                 ForEach(group.items) { item in
                     candidatePanel(item)
                 }
@@ -41,6 +46,46 @@ struct GroupDetailView: View {
         .sensoryFeedback(.selection, trigger: model.selection.count)
         .navigationTitle(ScanCopy.title(for: group.tier))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var selectedCount: Int {
+        group.candidates.reduce(0) { model.selection.isSelected($1.id) ? $0 + 1 : $0 }
+    }
+
+    /// How many copies are on offer here, and one control for all of them.
+    ///
+    /// It can never tick the survivor: `candidateIDs` excludes it by construction, and the
+    /// only thing in this app allowed to leave a group with nothing is the deliberately
+    /// awkward control at the bottom of this screen.
+    private var copiesHeader: some View {
+        HStack(spacing: DS.Space.s) {
+            Text(Counting.copies(group.candidates.count))
+                .font(.subheadline.weight(.semibold))
+
+            Text("\(selectedCount) selected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+            Spacer(minLength: 8)
+
+            Button {
+                withAnimation(Motion.control) {
+                    model.setSelected(selectedCount < group.candidates.count, in: group)
+                }
+            } label: {
+                Text(selectedCount < group.candidates.count ? "Select all" : "Deselect all")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 34)
+                    .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("group.selectall")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - The survivor
