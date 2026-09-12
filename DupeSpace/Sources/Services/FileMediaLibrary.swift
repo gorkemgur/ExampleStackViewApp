@@ -20,17 +20,20 @@ final class FileMediaLibrary: MediaLibrary {
     func requestAccess() async -> LibraryAccess { .authorized }
 
     func loadInventory() async throws -> [MediaItem] {
+        let registry = self.registry
         let folders = registry.folders()
         guard !folders.isEmpty else { return [] }
 
         return await Task.detached(priority: .userInitiated) {
-            folders.flatMap { Self.items(in: $0) }
+            folders.flatMap { Self.items(in: $0, registry: registry) }
         }.value
     }
 
     // MARK: - Enumeration
 
-    static func items(in folder: GrantedFolder) -> [MediaItem] {
+    /// The registry is passed in rather than read off `self`: this runs on a detached task and
+    /// is where a stale bookmark gets written back, so it needs the store, not the instance.
+    static func items(in folder: GrantedFolder, registry: (any FolderRegistering)? = nil) -> [MediaItem] {
         FolderAccess.withFolder(folder, renewingWith: registry) { root -> [MediaItem] in
             let keys: [URLResourceKey] = [
                 .isRegularFileKey,

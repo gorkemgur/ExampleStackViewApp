@@ -458,6 +458,7 @@ final class VideoScanTests: XCTestCase {
             video("wide", seconds: 10.0, width: 1920, height: 1080),
             video("tall", seconds: 10.1, width: 1080, height: 1920)
         ]
+        // Portrait against landscape: 69% apart, well outside even the generous pre-filter.
         XCTAssertTrue(ScanPipeline.videoCandidatePairs(items, tolerance: 0.5).isEmpty)
     }
 
@@ -468,6 +469,17 @@ final class VideoScanTests: XCTestCase {
         let items = [
             video("known", seconds: 10.0, width: 1920, height: 1080),
             video("unknown", seconds: 10.1, width: 0, height: 0)
+        ]
+        XCTAssertEqual(ScanPipeline.videoCandidatePairs(items, tolerance: 0.5).count, 1)
+    }
+
+    /// A re-export can change the framing, so the pre-filter has to be far looser than the
+    /// tolerance that decides whether a pair is the same shot. 16:9 against 1:1 is 44% apart:
+    /// not the same shot, but certainly worth opening.
+    func testAReframedVideoIsStillWorthOpening() {
+        let items = [
+            video("wide", seconds: 10.0, width: 1920, height: 1080),
+            video("square", seconds: 10.1, width: 1080, height: 1080)
         ]
         XCTAssertEqual(ScanPipeline.videoCandidatePairs(items, tolerance: 0.5).count, 1)
     }

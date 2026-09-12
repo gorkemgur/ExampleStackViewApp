@@ -11,6 +11,17 @@ public struct ScanConfiguration: Sendable, Hashable {
     public var similarDistance: Int
     /// Re-encodes keep their framing, so a different aspect ratio means a different crop.
     public var aspectRatioTolerance: Double
+    /// How different two videos' proportions may be and still be worth opening.
+    ///
+    /// Far looser than `aspectRatioTolerance`, because it answers a different question. That
+    /// one decides whether a pair is the *same shot*, where 1% is right. This one only decides
+    /// whether to spend a decode on them, and a re-export can legitimately change the framing:
+    /// 16:9 against 4:3 is 25% and must still be examined, while 16:9 against 9:16 is 69% and
+    /// is a portrait video and a landscape one, which is never the same recording.
+    ///
+    /// Reusing the strict tolerance here threw away every pair that had been reaching the
+    /// `.similar` tier — the test for exactly that case is what caught it.
+    public var videoShapeTolerance: Double
     /// Seconds two videos may differ by and still be worth comparing frame by frame.
     /// Transcoding shifts a duration slightly; it does not change it.
     public var videoDurationTolerance: Double
@@ -24,6 +35,7 @@ public struct ScanConfiguration: Sendable, Hashable {
         nearExactDistance: Int = 6,
         similarDistance: Int = 12,
         aspectRatioTolerance: Double = 0.01,
+        videoShapeTolerance: Double = 0.5,
         videoDurationTolerance: Double = 0.5,
         videoAverageDistance: Double = 8,
         videoWorstFrameDistance: Int = 16
@@ -32,6 +44,7 @@ public struct ScanConfiguration: Sendable, Hashable {
         self.nearExactDistance = nearExactDistance
         self.similarDistance = max(similarDistance, nearExactDistance)
         self.aspectRatioTolerance = aspectRatioTolerance
+        self.videoShapeTolerance = videoShapeTolerance
         self.videoDurationTolerance = videoDurationTolerance
         self.videoAverageDistance = videoAverageDistance
         self.videoWorstFrameDistance = videoWorstFrameDistance
@@ -216,7 +229,7 @@ public struct ScanPipeline: Sendable {
         let videoPairs = Self.videoCandidatePairs(
             items.filter { !consumed.contains($0.id) && !cloudOnly.contains($0.id) },
             tolerance: configuration.videoDurationTolerance,
-            aspectRatioTolerance: configuration.aspectRatioTolerance
+            shapeTolerance: configuration.videoShapeTolerance
         )
         let videoPairIDs = Set(videoPairs.flatMap { [$0.a, $0.b] })
         let videoTargets = items.filter { videoPairIDs.contains($0.id) }
@@ -429,7 +442,7 @@ public struct ScanPipeline: Sendable {
     static func videoCandidatePairs(
         _ items: [MediaItem],
         tolerance: Double,
-        aspectRatioTolerance: Double = ScanConfiguration.default.aspectRatioTolerance
+        shapeTolerance: Double = ScanConfiguration.default.videoShapeTolerance
     ) -> [SimilarityEdge] {
         let videos = items
             .filter { $0.kind == .video && $0.duration > 0 }
@@ -444,7 +457,7 @@ public struct ScanPipeline: Sendable {
                 guard couldShareFraming(
                     videos[outer],
                     videos[inner],
-                    tolerance: aspectRatioTolerance
+                    tolerance: shapeTolerance
                 ) else { continue }
                 pairs.append(SimilarityEdge(a: videos[outer].id, b: videos[inner].id, distance: 0))
             }
