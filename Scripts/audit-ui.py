@@ -5,12 +5,16 @@
 runs past the edge of the screen, any button smaller than a finger, and anything laid out to
 nothing can be found by arithmetic rather than by eye.
 
-**Animation.** Whether a transition animates is not visible in a still. Screenshots taken in a
-burst are: a transition that animates passes through frames that are neither the old screen nor
-the new one, and one that snaps goes straight from the first to the second. The sampler runs as
-fast as `simctl` will produce a frame — a few per second — so a short animation may show only
-one or two intermediate frames. That is enough to tell moving from snapping; it is not enough
-to measure a duration, and this script does not claim to.
+**Animation.** Whether a transition animates is not visible in a still, and it turned out not to
+be visible in a burst of stills either: `simctl io screenshot` costs two to three seconds a
+frame on a CI runner, so the first attempt sampled one or two frames across an entire
+transition and reported every animation in the app as static. That was the instrument failing,
+not the app.
+
+So the screen is recorded instead, and the recording is cut into frames afterwards. A
+transition that animates passes through frames that are neither the old screen nor the new one;
+one that snaps goes straight from the first to the second. With frames a thirtieth of a second
+apart, the number of distinct ones is also a usable estimate of how long the movement lasted.
 
 Everything is tolerant. A screen that cannot be reached is reported and skipped, so a partial
 run still reports what it did reach.
@@ -18,6 +22,8 @@ run still reports what it did reach.
 import hashlib
 import json
 import os
+import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -30,6 +36,9 @@ BUNDLE_ID = "com.gorkemgur.dupespace"
 MIN_TAP_TARGET = 44.0
 # The tree reports fractional frames; a point of slack keeps rounding out of the findings.
 EDGE_SLACK = 1.0
+# Anything above this is in the status or navigation bar, where the system gives a control the
+# bar's full height to be tapped in whatever its label measures.
+NAVIGATION_BAR_BOTTOM = 100.0
 
 findings = []
 notes = []
@@ -151,50 +160,103 @@ def audit_layout(screen, tree):
             )
 
         if kind == "Button" and (w < MIN_TAP_TARGET or h < MIN_TAP_TARGET):
-            findings.append(
-                f"{screen}: {describe_element(element)} is {w:.0f}x{h:.0f}pt, "
-                f"under the {MIN_TAP_TARGET:.0f}pt tap target"
-            )
+            if y < NAVIGATION_BAR_BOTTOM:
+                notes.append(
+                    f"{screen}: {describe_element(element)} is {w:.0f}x{h:.0f}pt, in the "
+                    "navigation bar — the bar supplies the hit area"
+                )
+            else:
+                findings.append(
+                    f"{screen}: {describe_element(element)} is {w:.0f}x{h:.0f}pt, "
+                    f"under the {MIN_TAP_TARGET:.0f}pt tap target"
+                )
 
     notes.append(f"{screen}: {seen} named elements checked against a {width:.0f}pt screen")
 
 
-def sample(label, seconds=2.0, interval=0.0):
-    """Hash every frame the display will give us for a while.
+def frames_from(video, directory):
+    """Cut a recording into PNGs. Returns their digests in order, or None without ffmpeg."""
+    if shutil.which("ffmpeg") is None:
+        return None
 
-    `interval` is a floor, not a cadence: a screenshot takes as long as it takes.
+    os.makedirs(directory, exist_ok=True)
+    result = run([
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-i", video,
+        "-vf", "fps=30,scale=iw/4:-1",
+        os.path.join(directory, "f%04d.png")
+    ], timeout=180)
+    if result.returncode != 0:
+        return None
+
+    digests = []
+    for name in sorted(os.listdir(directory)):
+        if not name.endswith(".png"):
+            continue
+        with open(os.path.join(directory, name), "rb") as handle:
+            digests.append(hashlib.md5(handle.read()).hexdigest())
+    shutil.rmtree(directory, ignore_errors=True)
+    return digests
+
+
+def sample(label, action, seconds=2.5):
+    """Record the screen across `action`, then count the frames that differ.
+
+    The action is performed while the recorder is running, which is the only way to catch a
+    transition that is over in a third of a second.
     """
-    started = time.time()
-    frames = []
-    while time.time() - started < seconds:
-        digest = frame_hash()
-        if digest is not None:
-            frames.append((time.time() - started, digest))
-        if interval:
-            time.sleep(interval)
+    video = os.path.join(OUT_DIR, "_clip.mp4")
+    if os.path.exists(video):
+        os.remove(video)
 
-    if not frames:
-        notes.append(f"animation: {label} produced no frames")
+    recorder = subprocess.Popen(
+        ["xcrun", "simctl", "io", UDID, "recordVideo", "--codec", "h264", video],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(1.5)  # the recorder needs a moment before it is actually capturing
+
+    action()
+    time.sleep(seconds)
+
+    # SIGINT rather than kill: recordVideo only writes a playable file when asked to stop.
+    recorder.send_signal(signal.SIGINT)
+    try:
+        recorder.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        recorder.kill()
+
+    digests = frames_from(video, os.path.join(OUT_DIR, "_frames"))
+    if os.path.exists(video):
+        os.remove(video)
+
+    if digests is None:
+        notes.append(f"animation: {label} — not measured (no ffmpeg on this machine)")
+        return
+    if len(digests) < 4:
+        notes.append(f"animation: {label} — only {len(digests)} frames recorded, inconclusive")
         return
 
-    distinct = []
-    for _, digest in frames:
-        if not distinct or distinct[-1] != digest:
-            distinct.append(digest)
+    changes = sum(1 for index in range(1, len(digests)) if digests[index] != digests[index - 1])
+    # A transition is over once the frames stop differing; the tail is the settled screen.
+    last_change = 0
+    for index in range(1, len(digests)):
+        if digests[index] != digests[index - 1]:
+            last_change = index
+    moving_for = last_change / 30.0
 
-    changes = len(distinct) - 1
-    last_change = 0.0
-    for index in range(1, len(frames)):
-        if frames[index][1] != frames[index - 1][1]:
-            last_change = frames[index][0]
-
-    verdict = "moving" if changes >= 2 else ("one step only" if changes == 1 else "static")
+    verdict = "animated" if changes >= 3 else ("one step only" if changes >= 1 else "static")
     notes.append(
-        f"animation: {label} — {len(frames)} frames sampled over {frames[-1][0]:.1f}s, "
-        f"{changes} change(s), settled at {last_change:.1f}s [{verdict}]"
+        f"animation: {label} — {len(digests)} frames at 30fps, {changes} differing, "
+        f"movement ends at {moving_for:.2f}s [{verdict}]"
     )
     if changes == 0:
         findings.append(f"animation: {label} never changed the screen at all")
+    elif changes < 3:
+        findings.append(
+            f"animation: {label} went from one screen to the next in {changes} frame(s) — "
+            "that is a cut, not a transition"
+        )
 
 
 def relaunch(text_size=None):
@@ -241,8 +303,7 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
 
     # The entrance animation happens once, on the first paint after launch.
-    relaunch()
-    sample("cards entering on launch", seconds=2.5)
+    sample("cards entering on launch", relaunch, seconds=3.0)
     time.sleep(2)
 
     overview = describe()
@@ -250,9 +311,7 @@ def main():
 
     live = find(overview, "Live surfaces", types={"Button"})
     if live is not None:
-        x, y = center(live)
-        run(["idb", "ui", "tap", "--udid", UDID, str(x), str(y)])
-        sample("live surfaces sheet presenting", seconds=2.0)
+        sample("live surfaces sheet presenting", lambda: tap(live, settle=0), seconds=2.0)
         time.sleep(1.5)
         sheet = describe()
         audit_layout("live surfaces", sheet)
@@ -275,9 +334,7 @@ def main():
         write_report()
         return 0
 
-    x, y = center(entry)
-    run(["idb", "ui", "tap", "--udid", UDID, str(x), str(y)])
-    sample("scan screen pushing in", seconds=2.0)
+    sample("scan screen pushing in", lambda: tap(entry, settle=0), seconds=2.0)
     time.sleep(1.5)
 
     scan = describe()
@@ -289,9 +346,7 @@ def main():
         write_report()
         return 0
 
-    x, y = center(start)
-    run(["idb", "ui", "tap", "--udid", UDID, str(x), str(y)])
-    sample("progress card replacing the intro", seconds=2.5)
+    sample("progress card replacing the intro", lambda: tap(start, settle=0), seconds=2.5)
 
     # The scan itself is the longest wait in the app; sample the tail of it so the results
     # transition is caught rather than guessed at.
@@ -311,9 +366,7 @@ def main():
         review = find(describe(), "scan.review")
 
     if review is not None:
-        x, y = center(review)
-        run(["idb", "ui", "tap", "--udid", UDID, str(x), str(y)])
-        sample("review screen pushing in", seconds=2.0)
+        sample("review screen pushing in", lambda: tap(review, settle=0), seconds=2.0)
         time.sleep(1.5)
         audit_layout("review", describe())
 
@@ -352,7 +405,11 @@ def audit_large_text():
         return
 
     tap(entry, settle=2.5)
-    audit_layout("scan at accessibility text size", describe())
+    tree = describe()
+    if find(tree, "scan.start") is None:
+        notes.append("large text: the tap on the scan entry did not land, overview audited twice")
+        return
+    audit_layout("scan at accessibility text size", tree)
     shot(os.path.join(OUT_DIR, "large-text-scan.png"))
 
 

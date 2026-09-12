@@ -155,8 +155,11 @@ struct ReviewView: View {
                 }
                 .font(.caption.weight(.semibold))
                 .textCase(nil)
-                .padding(.vertical, 10)
+                .padding(.vertical, 12)
                 .padding(.leading, 12)
+                // Measured at 34pt after the first pass. A control that selects a whole tier
+                // for deletion gets the full 44.
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
                 .accessibilityIdentifier("review.selectall.\(section.tier.rawValue)")
             }
