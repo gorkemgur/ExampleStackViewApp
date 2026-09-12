@@ -29,7 +29,8 @@ struct ReviewView: View {
             wrappedValue: ReviewViewModel(
                 result: result,
                 deleter: AppEnvironment.makeDeleter(),
-                history: history
+                history: history,
+                exporter: AppEnvironment.makeExporter()
             )
         )
         loader = AppEnvironment.makeThumbnailLoader()

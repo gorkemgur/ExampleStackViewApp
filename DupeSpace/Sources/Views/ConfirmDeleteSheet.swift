@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import DupeCore
 
 /// The last screen before anything is destroyed.
@@ -10,6 +11,8 @@ struct ConfirmDeleteSheet: View {
 
     @ObservedObject var model: ReviewViewModel
     @Environment(\.dismiss) private var dismiss
+
+    @State private var pickingFolder = false
 
     var body: some View {
         content
@@ -30,6 +33,8 @@ struct ConfirmDeleteSheet: View {
                         judgementWarning
                     }
 
+                    keepACopy
+
                     if let failure = model.failure {
                         Card(
                             "Nothing was deleted",
@@ -49,6 +54,8 @@ struct ConfirmDeleteSheet: View {
                 .padding(.bottom, 20)
                 .animation(Motion.content, value: model.judgementCallCount)
                 .animation(Motion.content, value: model.failure)
+                .animation(Motion.content, value: model.exportReceipt)
+                .animation(Motion.content, value: model.isExporting)
             }
             .background(DS.ink, ignoresSafeAreaEdges: .all)
             .navigationTitle("Confirm")
@@ -63,6 +70,100 @@ struct ConfirmDeleteSheet: View {
                 deleteKey
             }
         }
+    }
+
+    // MARK: - Keeping the originals
+
+    /// The promise the concept document has made since day one, and the one thing in it that
+    /// had no code behind it: before anything is destroyed, the original bytes can be written
+    /// to a folder the user chooses, with a manifest beside them saying what each file was and
+    /// which copy it was being deleted in favour of.
+    ///
+    /// Offered, never forced. Recently Deleted already covers photos for thirty days, and
+    /// making someone pick a folder before they can tidy up their library would be the app
+    /// deciding how careful they have to be. Files in a granted folder have no thirty days at
+    /// all, so the copy says so when the selection contains any.
+    @ViewBuilder
+    private var keepACopy: some View {
+        Card(
+            "Keep the originals first",
+            symbolName: "square.and.arrow.down",
+            identifier: "confirm.export.title",
+            rail: DS.deep
+        ) {
+            if let receipt = model.exportReceipt {
+                Label {
+                    Text("\(Counting.items(receipt.exportedCount)) written to \(receipt.folderName)")
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(DS.deep)
+                }
+                .font(.footnote)
+                .accessibilityIdentifier("confirm.export.done")
+
+                Text("The folder holds the original bytes and a manifest.json naming, for each one, the copy that stays.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !model.exportCoversSelection {
+                    // Silence here would be the dangerous kind: a green tick above a red key,
+                    // covering a selection it no longer describes.
+                    Text("The selection has changed since then, so the export no longer covers all of it.")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(DS.tier(.burstLeftover))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("confirm.export.stale")
+                }
+
+                if receipt.failedCount > 0 {
+                    Text("\(Counting.items(receipt.failedCount)) could not be written — the originals are in iCloud rather than on this device, and nothing was downloaded.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("confirm.export.failed")
+                }
+            } else {
+                Text(exportPitch)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    pickingFolder = true
+                } label: {
+                    if model.isExporting {
+                        ProgressView().tint(DS.deep)
+                    } else {
+                        Label("Choose a folder", systemImage: "folder.badge.plus")
+                    }
+                }
+                .buttonStyle(.keyQuiet)
+                .disabled(model.isExporting || !model.canDelete)
+                .accessibilityIdentifier("confirm.export")
+            }
+
+            if let failure = model.exportFailure {
+                Text(failure)
+                    .font(.caption)
+                    .foregroundStyle(DS.destructive)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("confirm.export.failure")
+            }
+        }
+        .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { outcome in
+            guard case let .success(url) = outcome else { return }
+            Task { await model.exportOriginals(to: url) }
+        }
+    }
+
+    private var exportPitch: String {
+        let immediate = model.savings.immediateBytes > 0
+        let base = "Write the original bytes of \(Counting.items(model.selection.count)) to a folder you pick, with a manifest saying what each one was and which copy stays."
+        guard immediate else {
+            return base + " Optional — photos also go to Recently Deleted for 30 days."
+        }
+        return base + " Some of this selection lives outside the photo library, where deletion is immediate and there is no Recently Deleted to fall back on."
     }
 
     /// The one place in the app that is red. Everything before this point is reversible; this

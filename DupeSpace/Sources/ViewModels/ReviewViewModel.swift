@@ -58,10 +58,22 @@ final class ReviewViewModel: ObservableObject {
         didSet { invalidateDerived() }
     }
 
+    /// What the last export wrote, if the user asked for one before deleting.
+    ///
+    /// `docs/CONCEPT.md` has promised this since the first day of the project and nothing
+    /// implemented it: the original bytes of everything about to be deleted, written to a
+    /// folder the user picks, with a manifest beside them naming the copy that stayed. It is
+    /// the difference between "Recently Deleted holds this for thirty days" and a decision that
+    /// is recoverable at all — for files outside the photo library there is no thirty days.
+    @Published private(set) var exportReceipt: ExportReceipt?
+    @Published private(set) var isExporting = false
+    @Published private(set) var exportFailure: String?
+
     let result: ScanResult
 
     private let allSections: [ReviewSection]
     private let deleter: MediaDeleting
+    private let exporter: any OriginalExporting
     private weak var history: (any HistoryRecording)?
 
     /// Every id the scan knows about. Hoisted out of `violations`, which is read through
@@ -94,10 +106,16 @@ final class ReviewViewModel: ObservableObject {
     private var cachedKindSections: [KindSection]?
     private var cachedPlannable: [DeletionCandidate]?
 
-    init(result: ScanResult, deleter: MediaDeleting, history: (any HistoryRecording)? = nil) {
+    init(
+        result: ScanResult,
+        deleter: MediaDeleting,
+        history: (any HistoryRecording)? = nil,
+        exporter: any OriginalExporting = StubOriginalExporter()
+    ) {
         self.result = result
         self.deleter = deleter
         self.history = history
+        self.exporter = exporter
         self.allSections = ReviewBuilder.sections(for: result)
         self.knownItemIDs = Set(result.items.keys)
         self.selection = .preSelected(from: result.candidates)
@@ -482,6 +500,41 @@ final class ReviewViewModel: ObservableObject {
         if budgetBytes > ceiling {
             budgetBytes = ceiling
         }
+    }
+
+    // MARK: - Keeping a copy first
+
+    /// What an export would write: every selected copy, in the order the list offers them,
+    /// each with the manifest row that names what it was and what stays in its place.
+    var exportPlan: [(item: MediaItem, entry: ExportManifest.Entry)] {
+        ExportManifestBuilder.entries(for: selectedCandidates, items: result.items)
+    }
+
+    /// True once every selected copy has been written out. Re-ticking something after an export
+    /// invalidates it, because the receipt no longer covers the selection.
+    var exportCoversSelection: Bool {
+        guard let exportReceipt else { return false }
+        let written = Set(exportReceipt.exportedIDs)
+        return !selection.isEmpty && selection.selectedIDs.allSatisfy(written.contains)
+    }
+
+    func exportOriginals(to destination: URL) async {
+        guard !isExporting, !selection.isEmpty else { return }
+        isExporting = true
+        exportFailure = nil
+
+        let plan = exportPlan
+        do {
+            exportReceipt = try await exporter.export(plan, to: destination)
+        } catch {
+            exportReceipt = nil
+            exportFailure = error.localizedDescription
+        }
+        isExporting = false
+    }
+
+    func clearExportFailure() {
+        exportFailure = nil
     }
 
     func applyBudgetPlan() {

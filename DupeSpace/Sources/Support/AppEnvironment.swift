@@ -65,6 +65,10 @@ enum AppEnvironment {
     }
 
     @MainActor
+    static func makeExporter() -> OriginalExporting {
+        isUITesting ? StubOriginalExporter() : FileSystemOriginalExporter(registry: folderRegistry)
+    }
+
     static func makeThumbnailLoader() -> ThumbnailLoading {
         isUITesting ? StubThumbnailLoader() : PhotoKitThumbnailLoader(scale: UIScreen.main.scale)
     }

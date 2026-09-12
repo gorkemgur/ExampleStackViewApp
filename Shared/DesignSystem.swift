@@ -684,13 +684,36 @@ struct TargetSlider: View {
             let fillWidth = fraction > 0 ? max(width * fraction, gripWidth) : 0
 
             ZStack(alignment: .leading) {
+                // The ladder is the track, and the target lights it up rather than painting
+                // over it.
+                //
+                // The fill used to be an opaque brand capsule laid on top, which meant the one
+                // thing this control exists to say — which rung your target reaches into —
+                // disappeared the moment the target got large. And the card opens at the app's
+                // own suggestion, which in a typical library is most of the bar: the screenshot
+                // showed a plain blue-to-cyan gradient with no rung visible anywhere on it.
+                // Now the rung colours are always on the track, dimmed past the target, and the
+                // brand runs as a thin line under them so the reading still has an owner.
+                ladder(in: width)
+                    .frame(height: trackHeight)
+                    .opacity(0.3)
+                    .clipShape(Capsule(style: .continuous))
+
                 ladder(in: width)
                     .frame(height: trackHeight)
                     .clipShape(Capsule(style: .continuous))
+                    .mask(alignment: .leading) {
+                        Rectangle().frame(width: fillWidth)
+                    }
 
-                Capsule(style: .continuous)
-                    .fill(DS.brandRow)
-                    .frame(width: fillWidth, height: trackHeight)
+                // A plain brand capsule for a track with no ladder on it — the fader is used
+                // for one thing that has rungs and nothing that does not, but an empty `rungs`
+                // must still draw a fill rather than an empty groove.
+                if rungs.isEmpty {
+                    Capsule(style: .continuous)
+                        .fill(DS.brandRow)
+                        .frame(width: fillWidth, height: trackHeight)
+                }
 
                 // Where the depth setting stops. Everything past it is space this plan will
                 // not take however far the target is dragged.
@@ -742,7 +765,9 @@ struct TargetSlider: View {
         }
     }
 
-    /// The ladder, at rest, behind the fill.
+    /// The ladder, drawn twice: dimmed for the whole track, then again at full strength and
+    /// masked to the target. So the rung colours are on the control at every value, and the
+    /// target reads as how far along the ladder the brightness reaches.
     ///
     /// Normalised to `span`, the same denominator the fill uses — not to the sum of the rungs.
     /// The two are only equal when every rung is present and they add up exactly to the range,
@@ -756,7 +781,7 @@ struct TargetSlider: View {
         HStack(spacing: 0) {
             ForEach(laidOutRungs, id: \.rung.id) { entry in
                 Rectangle()
-                    .fill(entry.rung.color.opacity(entry.isBeyondLimit ? 0.08 : 0.30))
+                    .fill(entry.rung.color.opacity(entry.isBeyondLimit ? 0.3 : 1))
                     .frame(width: max(width * entry.share, 2))
             }
             Rectangle().fill(Color.white.opacity(0.10))
