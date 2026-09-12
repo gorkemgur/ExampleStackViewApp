@@ -1,0 +1,22 @@
+{
+  "extraKnownMarketplaces": {
+    "swiftui-agent-skill": {
+      "source": { "source": "github", "repo": "twostraws/swiftui-agent-skill" }
+    },
+    "swiftui-expert-skill": {
+      "source": { "source": "github", "repo": "AvdLee/SwiftUI-Agent-Skill" }
+    },
+    "apple-design-marketplace": {
+      "source": { "source": "github", "repo": "tekgnosis-net/apple-design-marketplace" }
+    },
+    "claude-swift-engineering": {
+      "source": { "source": "github", "repo": "johnrogers/claude-swift-engineering" }
+    }
+  },
+  "enabledPlugins": {
+    "swiftui-pro@swiftui-agent-skill": true,
+    "swiftui-expert@swiftui-expert-skill": true,
+    "apple-design@apple-design-marketplace": true,
+    "swift-engineering@claude-swift-engineering": true
+  }
+}

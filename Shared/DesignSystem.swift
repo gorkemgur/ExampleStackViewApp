@@ -705,3 +705,68 @@ extension View {
         }
     }
 }
+
+/// The selection mark: drawn, not an SF Symbol.
+///
+/// `checkmark.square.fill` / `minus.square.fill` / `square` are the stock tri-state, and they
+/// are stock in the way that matters — the corner radius, the weight of the tick and the
+/// hairline of the empty box all belong to the system's shape language rather than to this
+/// app's. They also change *size* between states, because the filled and unfilled symbols have
+/// different optical weights, so a list of them shifts as you tick it.
+///
+/// One shape, three states, the app's own corner radius, and the tint is the rung's colour so
+/// a tick says which part of the ladder it belongs to.
+struct TickBox: View {
+
+    enum State {
+        case none, some, all
+    }
+
+    let state: State
+    let tint: Color
+    var side: CGFloat = 24
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: side * 0.32, style: .continuous)
+    }
+
+    var body: some View {
+        ZStack {
+            shape
+                .fill(state == .none ? Color.clear : tint)
+
+            shape
+                .strokeBorder(state == .none ? DS.neutral : .clear, lineWidth: 1.5)
+
+            switch state {
+            case .none:
+                EmptyView()
+            case .some:
+                // A bar, not a minus glyph: the same stroke weight as the tick, so the two
+                // states weigh the same on the row.
+                Capsule(style: .continuous)
+                    .fill(.white)
+                    .frame(width: side * 0.46, height: side * 0.115)
+            case .all:
+                Tick()
+                    .stroke(.white, style: StrokeStyle(lineWidth: side * 0.115, lineCap: .round, lineJoin: .round))
+                    .frame(width: side * 0.5, height: side * 0.38)
+            }
+        }
+        .frame(width: side, height: side)
+        .animation(Motion.control, value: state)
+    }
+}
+
+/// The checkmark itself. Three points, drawn to this app's proportions rather than the
+/// system's — shallower and wider, so it reads at 24pt without looking cramped.
+private struct Tick: Shape {
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY + rect.height * 0.06))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.36, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        return path
+    }
+}

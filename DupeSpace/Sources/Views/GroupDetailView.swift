@@ -187,10 +187,7 @@ struct GroupDetailView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: model.selection.isSelected(item.id) ? "checkmark.square.fill" : "square")
-                    .font(.title3)
-                    .foregroundStyle(model.selection.isSelected(item.id) ? tint : Color.secondary)
-                    .symbolEffect(.bounce, value: model.selection.isSelected(item.id))
+                TickBox(state: model.selection.isSelected(item.id) ? .all : .none, tint: tint)
 
                 ThumbnailView(item: item, side: 52, loader: loader)
 

@@ -355,11 +355,8 @@ struct ReviewView: View {
             } label: {
                 // No bounce. It fired on every checkbox, so ticking thirty groups was thirty
                 // pieces of decoration on a screen about choices that cannot be taken back.
-                // The symbol changing is the feedback.
-                Image(systemName: boxSymbol(selected: selected, of: all))
-                    .font(.title3)
-                    .foregroundStyle(selected > 0 ? tint : Color.secondary)
-                    .contentTransition(.symbolEffect(.replace))
+                // The mark changing is the feedback.
+                TickBox(state: boxState(selected: selected, of: all), tint: tint)
                     .frame(width: 46, height: 46)
                     .contentShape(Rectangle())
             }
@@ -379,9 +376,9 @@ struct ReviewView: View {
         .dsPanel(radius: 16)
     }
 
-    private func boxSymbol(selected: Int, of total: Int) -> String {
-        if selected == 0 { return "square" }
-        return selected == total ? "checkmark.square.fill" : "minus.square.fill"
+    private func boxState(selected: Int, of total: Int) -> TickBox.State {
+        if selected == 0 { return .none }
+        return selected == total ? .all : .some
     }
 
     // MARK: - The bar

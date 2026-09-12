@@ -40,22 +40,26 @@ struct Card<Content: View>: View {
                     .frame(width: DS.railWidth)
             }
 
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
                 if let title {
-                    HStack(spacing: 8) {
+                    // No icon chip.
+                    //
+                    // A tinted rounded square holding an SF Symbol is the single most common
+                    // component on the App Store — every settings row, every section header,
+                    // in every app. It was also saying nothing the rail beside it does not
+                    // already say in the same colour. The glyph stays, inline and unboxed,
+                    // where it reads as punctuation rather than as an icon slot.
+                    HStack(spacing: 7) {
                         if let symbolName {
                             Image(systemName: symbolName)
-                                .font(.caption2.weight(.bold))
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(rail ?? DS.deep)
-                                .frame(width: 22, height: 22)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .fill((rail ?? DS.deep).opacity(0.14))
-                                )
+                                .imageScale(.small)
                         }
+                        // A card title was 13pt, smaller than the 15pt body inside it — a
+                        // heading quieter than the thing it heads.
                         Text(title)
-                            .font(.footnote.weight(.semibold))
-                            .kerning(0.2)
+                            .font(.subheadline.weight(.semibold))
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier(identifier ?? "")
                         Spacer(minLength: 0)
@@ -66,7 +70,7 @@ struct Card<Content: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
+        .padding(DS.Space.xl)
         .dsPanel()
     }
 }
