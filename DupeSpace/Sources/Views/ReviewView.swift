@@ -8,9 +8,13 @@ struct ReviewView: View {
 
     private let loader: any ThumbnailLoading
 
-    init(result: ScanResult) {
+    init(result: ScanResult, history: HistoryViewModel) {
         _model = StateObject(
-            wrappedValue: ReviewViewModel(result: result, deleter: AppEnvironment.makeDeleter())
+            wrappedValue: ReviewViewModel(
+                result: result,
+                deleter: AppEnvironment.makeDeleter(),
+                history: history
+            )
         )
         loader = AppEnvironment.makeThumbnailLoader()
     }
@@ -19,6 +23,7 @@ struct ReviewView: View {
         List {
             if let outcome = model.outcome {
                 outcomeSection(outcome)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
 
             if let failure = model.failure, model.outcome == nil {
@@ -37,6 +42,10 @@ struct ReviewView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .animation(.snappy(duration: 0.32), value: model.selection)
+        .animation(.snappy(duration: 0.35), value: model.deletedIDs)
+        .sensoryFeedback(.selection, trigger: model.selection.count)
+        .sensoryFeedback(.success, trigger: model.outcome != nil)
         .navigationTitle("Review")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -59,6 +68,7 @@ struct ReviewView: View {
                     Text(ByteFormatting.string(Int64(model.budgetBytes)))
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                        .contentTransition(.numericText())
                         .accessibilityIdentifier("budget.target")
                     Text("back")
                         .font(.subheadline)
@@ -156,6 +166,7 @@ struct ReviewView: View {
                 Text(ByteFormatting.string(model.savings.onDeviceBytes))
                     .font(.headline)
                     .monospacedDigit()
+                    .contentTransition(.numericText())
                     .accessibilityIdentifier("review.total")
                 Text("\(model.selection.count) selected")
                     .font(.caption)
@@ -187,7 +198,12 @@ struct ReviewView: View {
                 Label("\(Counting.items(outcome.deletedCount)) removed", systemImage: "checkmark.circle.fill")
                     .font(.headline)
                     .foregroundStyle(.green)
+                    .symbolEffect(.bounce, value: outcome.deletedCount)
                     .accessibilityIdentifier("review.result")
+
+                Text("The receipt is in History: what went, and what was kept in its place.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Text("They are in Recently Deleted for 30 days. Empty that album in Photos to get the space back now.")
                     .font(.caption)

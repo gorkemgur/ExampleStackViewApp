@@ -1,0 +1,65 @@
+import Foundation
+
+/// Turns live engine state into the frozen records the history keeps.
+public enum HistoryBuilder {
+
+    public static func scanRecord(
+        result: ScanResult,
+        itemsScanned: Int,
+        startedAt: Date,
+        finishedAt: Date
+    ) -> ScanRecord {
+        ScanRecord(
+            startedAt: startedAt,
+            finishedAt: finishedAt,
+            itemsScanned: itemsScanned,
+            groupsFound: result.groups.count,
+            reclaimableBytes: result.reclaimableBytes,
+            tiers: result.tierSummaries.map {
+                TierTotal(tier: $0.tier, itemCount: $0.itemCount, bytes: $0.bytes)
+            },
+            cloudOnlyCount: result.cloudOnlyIDs.count
+        )
+    }
+
+    /// A receipt for one deletion.
+    ///
+    /// Names are copied in rather than referenced. The whole point of a receipt is that it
+    /// still reads correctly after the thing it describes is gone.
+    public static func deletionRecord(
+        deletedIDs: [String],
+        result: ScanResult,
+        savings: SavingsBreakdown,
+        performedAt: Date
+    ) -> DeletionRecord {
+
+        let candidatesByID = Dictionary(
+            result.candidates.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let items: [DeletedItemRecord] = deletedIDs.sorted().compactMap { id in
+            guard let item = result.items[id] else { return nil }
+            let candidate = candidatesByID[id]
+            let keeperName = candidate
+                .flatMap { result.items[$0.keeperID]?.displayName }
+                ?? "another copy"
+
+            return DeletedItemRecord(
+                id: id,
+                displayName: item.displayName,
+                bytes: item.totalByteSize,
+                kind: item.kind,
+                tier: candidate?.tier ?? .similar,
+                keptInsteadName: keeperName
+            )
+        }
+
+        return DeletionRecord(
+            performedAt: performedAt,
+            items: items,
+            deferredBytes: savings.deferredBytes,
+            immediateBytes: savings.immediateBytes
+        )
+    }
+}

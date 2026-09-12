@@ -24,10 +24,12 @@ final class ReviewViewModel: ObservableObject {
 
     private let allSections: [ReviewSection]
     private let deleter: MediaDeleting
+    private weak var history: (any HistoryRecording)?
 
-    init(result: ScanResult, deleter: MediaDeleting) {
+    init(result: ScanResult, deleter: MediaDeleting, history: (any HistoryRecording)? = nil) {
         self.result = result
         self.deleter = deleter
+        self.history = history
         self.allSections = ReviewBuilder.sections(for: result)
         self.selection = .preSelected(from: result.candidates)
     }
@@ -128,11 +130,26 @@ final class ReviewViewModel: ObservableObject {
         isDeleting = true
         failure = nil
 
+        // Captured before the selection is cleared: the receipt describes what was sent,
+        // not what is left.
+        let sentSavings = SavingsCalculator.breakdown(for: Set(ids), items: result.items)
+
         do {
             let completed = try await deleter.delete(ids: ids)
             outcome = completed
             deletedIDs.formUnion(completed.deletedIDs)
             selection.clear()
+
+            if !completed.deletedIDs.isEmpty {
+                history?.record(
+                    deletion: HistoryBuilder.deletionRecord(
+                        deletedIDs: completed.deletedIDs,
+                        result: result,
+                        savings: sentSavings,
+                        performedAt: Date()
+                    )
+                )
+            }
         } catch {
             failure = error.localizedDescription
         }

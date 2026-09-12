@@ -63,6 +63,36 @@ final class ScanViewModelTests: XCTestCase {
         XCTAssertEqual(violations, [])
     }
 
+    func testAFinishedScanLeavesARecordBehind() async {
+        let history = HistoryViewModel(store: InMemoryHistoryStore())
+        await history.load()
+
+        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture(), history: history)
+        model.start(items: StubMediaLibrary.sampleItems())
+        await waitUntilFinished(model)
+
+        XCTAssertEqual(history.log.scans.count, 1)
+        let record = history.log.scans[0]
+        XCTAssertEqual(record.itemsScanned, StubMediaLibrary.sampleItems().count)
+        XCTAssertTrue(record.foundSomething)
+        XCTAssertEqual(record.reclaimableBytes, model.result?.reclaimableBytes)
+    }
+
+    func testACancelledScanLeavesNoRecord() async {
+        let history = HistoryViewModel(store: InMemoryHistoryStore())
+        await history.load()
+
+        let model = ScanViewModel(
+            analyzer: StubAssetAnalyzer(digests: [:], hashes: [:], stepDelay: .milliseconds(50)),
+            history: history
+        )
+        model.start(items: StubMediaLibrary.sampleItems())
+        model.cancel()
+        await waitUntilFinished(model)
+
+        XCTAssertTrue(history.log.scans.isEmpty, "a scan that did not finish did not happen")
+    }
+
     func testCancellingLeavesNoResultAndNoError() async {
         let slow = StubAssetAnalyzer(
             digests: [:],

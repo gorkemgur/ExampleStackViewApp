@@ -34,6 +34,8 @@ struct CapacityBar: View {
         }
         .frame(height: height)
         .clipShape(Capsule())
+        .animation(.smooth(duration: 0.45), value: segments)
+        .animation(.smooth(duration: 0.45), value: total)
         .accessibilityHidden(true)
     }
 

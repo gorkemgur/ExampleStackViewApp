@@ -5,17 +5,29 @@ struct ScanView: View {
 
     let items: [MediaItem]
 
-    @StateObject private var model = ScanViewModel(analyzer: AppEnvironment.makeAnalyzer())
+    private let history: HistoryViewModel
+    @StateObject private var model: ScanViewModel
+
+    init(items: [MediaItem], history: HistoryViewModel) {
+        self.items = items
+        self.history = history
+        _model = StateObject(
+            wrappedValue: ScanViewModel(analyzer: AppEnvironment.makeAnalyzer(), history: history)
+        )
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 if let result = model.result {
                     resultsSection(result)
+                        .transition(.opacity.combined(with: .offset(y: 16)))
                 } else if model.isScanning {
                     progressCard
+                        .transition(.opacity)
                 } else {
                     introCard
+                        .transition(.opacity)
                 }
 
                 if let failure = model.failure {
@@ -37,8 +49,11 @@ struct ScanView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+            .animation(.snappy(duration: 0.35), value: model.isScanning)
+            .animation(.snappy(duration: 0.35), value: model.result?.candidates.count)
         }
         .background(Color(uiColor: .systemGroupedBackground))
+        .sensoryFeedback(.success, trigger: model.result != nil)
         .navigationTitle("Find duplicates")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
@@ -79,16 +94,21 @@ struct ScanView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(ScanCopy.title(for: model.progress?.stage ?? .bucketing))
                     .font(.headline)
+                    .id(model.progress?.stage ?? .bucketing)
+                    .transition(.blurReplace)
                     .accessibilityIdentifier("scan.stage")
 
                 ProgressView(value: model.progress?.fraction ?? 0)
+                    .animation(.smooth(duration: 0.3), value: model.progress?.fraction)
 
                 Text(countsText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .contentTransition(.numericText())
                     .accessibilityIdentifier("scan.counts")
             }
+            .animation(.snappy(duration: 0.3), value: model.progress?.stage)
 
             Button(role: .destructive) {
                 model.cancel()
@@ -117,6 +137,7 @@ struct ScanView: View {
                     Image(systemName: "checkmark.seal")
                         .font(.title)
                         .foregroundStyle(.green)
+                        .symbolEffect(.bounce, value: result.candidates.count)
                     Text("No duplicates found")
                         .font(.title3.weight(.semibold))
                         .accessibilityIdentifier("scan.empty")
@@ -137,7 +158,7 @@ struct ScanView: View {
                 }
 
                 NavigationLink {
-                    ReviewView(result: result)
+                    ReviewView(result: result, history: history)
                 } label: {
                     Text("Review and choose")
                         .frame(maxWidth: .infinity)
@@ -149,6 +170,7 @@ struct ScanView: View {
 
             ForEach(summaries) { summary in
                 tierCard(summary)
+                    .cardEntrance()
             }
 
             if !result.cloudOnlyIDs.isEmpty {

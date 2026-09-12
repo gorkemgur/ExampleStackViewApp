@@ -13,11 +13,17 @@ final class ScanViewModel: ObservableObject {
 
     private let analyzer: any AssetAnalyzing
     private let configuration: ScanConfiguration
+    private weak var history: (any HistoryRecording)?
     private var task: Task<Void, Never>?
 
-    init(analyzer: any AssetAnalyzing, configuration: ScanConfiguration = .default) {
+    init(
+        analyzer: any AssetAnalyzing,
+        configuration: ScanConfiguration = .default,
+        history: (any HistoryRecording)? = nil
+    ) {
         self.analyzer = analyzer
         self.configuration = configuration
+        self.history = history
     }
 
     var hasFinished: Bool { result != nil }
@@ -36,10 +42,20 @@ final class ScanViewModel: ObservableObject {
             Task { @MainActor in self?.progress = update }
         }
 
+        let startedAt = Date()
+
         task = Task {
             do {
                 let scan = try await pipeline.run(items: items, progress: onProgress)
                 self.result = scan
+                self.history?.record(
+                    scan: HistoryBuilder.scanRecord(
+                        result: scan,
+                        itemsScanned: items.count,
+                        startedAt: startedAt,
+                        finishedAt: Date()
+                    )
+                )
             } catch is CancellationError {
                 self.wasCancelled = true
             } catch {

@@ -3,6 +3,7 @@ import DupeCore
 
 struct RootView: View {
 
+    @EnvironmentObject private var history: HistoryViewModel
     @StateObject private var model = OverviewViewModel(library: AppEnvironment.makeLibrary())
 
     var body: some View {
@@ -11,12 +12,15 @@ struct RootView: View {
                 VStack(spacing: 16) {
                     if let snapshot = model.storage {
                         StorageCardView(snapshot: snapshot, libraryBytes: model.onDeviceLibraryBytes)
+                            .cardEntrance()
                     }
 
                     if model.access != .authorized {
                         AccessCardView(access: model.access) {
                             Task { await model.requestAccess() }
                         }
+                        .cardEntrance()
+                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
                     }
 
                     if model.isLoading {
@@ -29,20 +33,28 @@ struct RootView: View {
 
                     if !model.items.isEmpty {
                         scanEntryCard
+                            .cardEntrance()
+                            .transition(.opacity.combined(with: .offset(y: 12)))
                     }
 
                     if !model.breakdown.isEmpty {
                         BreakdownCardView(breakdown: model.breakdown, totalBytes: model.libraryBytes)
+                            .cardEntrance()
                     }
 
                     if !model.largestItems.isEmpty {
                         LargestItemsCardView(items: model.largestItems)
+                            .cardEntrance()
                     }
 
                     LimitsCardView(cloudOnlyBytes: model.cloudOnlyBytes)
+                        .cardEntrance()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+                .animation(.snappy(duration: 0.35), value: model.items.count)
+                .animation(.snappy(duration: 0.3), value: model.access)
+                .animation(.snappy(duration: 0.3), value: model.isLoading)
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("DupeSpace")
@@ -67,7 +79,7 @@ struct RootView: View {
             }
 
             NavigationLink {
-                ScanView(items: model.items)
+                ScanView(items: model.items, history: history)
             } label: {
                 Text("Scan for duplicates")
                     .frame(maxWidth: .infinity)
@@ -101,4 +113,5 @@ struct RootView: View {
 
 #Preview("Authorised") {
     RootView()
+        .environmentObject(HistoryViewModel(store: InMemoryHistoryStore()))
 }

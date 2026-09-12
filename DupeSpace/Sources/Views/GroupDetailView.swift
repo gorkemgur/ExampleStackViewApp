@@ -36,6 +36,7 @@ struct GroupDetailView: View {
                 }
             }
         }
+        .sensoryFeedback(.selection, trigger: model.selection.count)
         .navigationTitle(ScanCopy.title(for: group.tier))
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -43,12 +44,16 @@ struct GroupDetailView: View {
     @ViewBuilder
     private func candidateRow(_ item: MediaItem) -> some View {
         Button {
-            model.toggle(item.id)
+            withAnimation(.snappy(duration: 0.25)) {
+                model.toggle(item.id)
+            }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: model.selection.isSelected(item.id) ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
                     .foregroundStyle(model.selection.isSelected(item.id) ? Color.accentColor : Color.secondary)
+                    .symbolEffect(.bounce, value: model.selection.isSelected(item.id))
+                    .scaleEffect(model.selection.isSelected(item.id) ? 1.08 : 1)
 
                 ThumbnailView(item: item, side: 56, loader: loader)
 

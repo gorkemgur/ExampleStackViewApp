@@ -13,6 +13,7 @@ struct StorageCardView: View {
                 Text(ByteFormatting.string(snapshot.usedCapacity))
                     .font(.system(size: 38, weight: .semibold, design: .rounded))
                     .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.4), value: snapshot.usedCapacity)
                     .accessibilityIdentifier("storage.headline")
 
                 Text("used of \(ByteFormatting.string(snapshot.totalCapacity))")

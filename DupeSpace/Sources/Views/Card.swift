@@ -49,3 +49,19 @@ struct Card<Content: View>: View {
         )
     }
 }
+
+extension View {
+
+    /// Cards settle in as they scroll instead of popping into place.
+    ///
+    /// Deliberately subtle: this is a screen where people make irreversible decisions, and
+    /// motion that draws attention to itself is motion that distracts from the decision.
+    func cardEntrance() -> some View {
+        scrollTransition { content, phase in
+            content
+                .opacity(phase.isIdentity ? 1 : 0.45)
+                .scaleEffect(phase.isIdentity ? 1 : 0.97)
+                .blur(radius: phase.isIdentity ? 0 : 1.5)
+        }
+    }
+}

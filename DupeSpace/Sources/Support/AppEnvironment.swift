@@ -27,4 +27,10 @@ enum AppEnvironment {
     static func makeThumbnailLoader() -> ThumbnailLoading {
         isUITesting ? StubThumbnailLoader() : PhotoKitThumbnailLoader()
     }
+
+    /// UI tests start from a clean slate so an assertion about "one deletion in the history"
+    /// means this run's deletion, not one left behind by an earlier run on the same simulator.
+    static func makeHistoryStore() -> any HistoryStoring {
+        isUITesting ? InMemoryHistoryStore() : FileHistoryStore()
+    }
 }

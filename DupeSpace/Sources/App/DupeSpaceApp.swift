@@ -2,9 +2,13 @@ import SwiftUI
 
 @main
 struct DupeSpaceApp: App {
+
+    @StateObject private var history = HistoryViewModel(store: AppEnvironment.makeHistoryStore())
+
     var body: some Scene {
         WindowGroup {
-            RootView()
+            AppShell()
+                .environmentObject(history)
         }
     }
 }

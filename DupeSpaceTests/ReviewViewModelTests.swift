@@ -143,6 +143,41 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertEqual(model.savings.totalBytes, 0, "nothing is selected right after a deletion")
     }
 
+    func testADeletionLeavesAReceiptNamingWhatWasKept() async {
+        let history = HistoryViewModel(store: InMemoryHistoryStore())
+        await history.load()
+
+        let scan = await makeResult()
+        let model = ReviewViewModel(result: scan, deleter: StubDeleter(), history: history)
+        let expected = model.selection.count
+
+        await model.delete()
+
+        XCTAssertEqual(history.log.deletions.count, 1)
+        let receipt = history.log.deletions[0]
+        XCTAssertEqual(receipt.itemCount, expected)
+        XCTAssertTrue(
+            receipt.items.allSatisfy { !$0.keptInsteadName.isEmpty },
+            "every line of the receipt has to say what survived in its place"
+        )
+        XCTAssertEqual(receipt.judgementCallCount, 0, "the safe default deletes nothing risky")
+        XCTAssertGreaterThan(receipt.reclaimedBytes, 0)
+    }
+
+    func testACancelledDeletionLeavesNoReceipt() async {
+        let history = HistoryViewModel(store: InMemoryHistoryStore())
+        await history.load()
+
+        let model = ReviewViewModel(
+            result: await makeResult(),
+            deleter: StubDeleter(behaviour: .cancel),
+            history: history
+        )
+        await model.delete()
+
+        XCTAssertTrue(history.log.deletions.isEmpty, "nothing was deleted, so nothing is recorded")
+    }
+
     func testCancellingAtTheSystemPromptKeepsTheSelection() async {
         let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter(behaviour: .cancel))
         let before = model.selection.selectedIDs

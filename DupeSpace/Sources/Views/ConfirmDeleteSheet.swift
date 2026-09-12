@@ -32,6 +32,8 @@ struct ConfirmDeleteSheet: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+                .animation(.snappy(duration: 0.3), value: model.judgementCallCount)
+                .animation(.snappy(duration: 0.3), value: model.failure)
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Confirm")
@@ -63,6 +65,7 @@ struct ConfirmDeleteSheet: View {
                 .disabled(!model.canDelete)
                 .padding(16)
                 .background(.regularMaterial)
+                .sensoryFeedback(.impact(weight: .heavy), trigger: model.isDeleting)
                 .accessibilityIdentifier("confirm.delete")
             }
         }
@@ -73,6 +76,7 @@ struct ConfirmDeleteSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(ByteFormatting.string(model.savings.onDeviceBytes))
                     .font(.system(size: 36, weight: .semibold, design: .rounded))
+                    .contentTransition(.numericText())
                     .accessibilityIdentifier("confirm.total")
                 Text("comes back to this device")
                     .font(.subheadline)
