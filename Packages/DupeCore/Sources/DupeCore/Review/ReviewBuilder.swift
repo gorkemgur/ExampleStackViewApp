@@ -53,15 +53,40 @@ public struct ReviewSection: Sendable, Identifiable, Equatable {
 /// there. The survivor is shown in both; it is the same photo either way.
 public enum ReviewBuilder {
 
-    public static func sections(for result: ScanResult) -> [ReviewSection] {
-        sections(candidates: result.candidates, items: result.items)
+    /// What decides the order of the groups inside a rung.
+    ///
+    /// The list only ever had one axis of its own: bytes, largest first. That is the right
+    /// default — the screen exists to free space — but it made date unaskable, and date is the
+    /// instinct people actually arrive with. "The old ones" is how someone thinks about a
+    /// library they have not looked at in four years, and `creationDate` was sitting on every
+    /// item, computed and unused by this screen.
+    public enum Order: String, Sendable, CaseIterable {
+        /// Largest first. Fewest taps to the target.
+        case biggest
+        /// Oldest first, by the survivor's own date.
+        case oldest
+        /// Newest first, for the opposite instinct: the pile that built up this month.
+        case newest
+
+        public var title: String {
+            switch self {
+            case .biggest: return "Biggest"
+            case .oldest: return "Oldest"
+            case .newest: return "Newest"
+            }
+        }
+    }
+
+    public static func sections(for result: ScanResult, order: Order = .biggest) -> [ReviewSection] {
+        sections(candidates: result.candidates, items: result.items, order: order)
     }
 
     /// The same arrangement over a candidate list the caller has revised — after the user has
     /// chosen a different survivor, the offer is no longer the one the scan produced.
     public static func sections(
         candidates: [DeletionCandidate],
-        items: [String: MediaItem]
+        items: [String: MediaItem],
+        order: Order = .biggest
     ) -> [ReviewSection] {
         var byTier: [RegretTier: [String: [DeletionCandidate]]] = [:]
 
@@ -74,9 +99,7 @@ public enum ReviewBuilder {
 
             let groups: [ReviewGroup] = groupsForTier
                 .sorted { lhs, rhs in
-                    let lhsBytes = lhs.value.reduce(Int64(0)) { $0 + $1.bytes }
-                    let rhsBytes = rhs.value.reduce(Int64(0)) { $0 + $1.bytes }
-                    return lhsBytes == rhsBytes ? lhs.key < rhs.key : lhsBytes > rhsBytes
+                    Self.isOrdered(lhs, before: rhs, by: order, items: items)
                 }
                 .compactMap { groupID, candidates -> ReviewGroup? in
                     guard
@@ -103,6 +126,52 @@ public enum ReviewBuilder {
             guard !groups.isEmpty else { return nil }
             return ReviewSection(tier: tier, groups: groups)
         }
+    }
+
+    /// Group ordering, with the group id as the final tie-break in every case.
+    ///
+    /// The tie-break is not a detail: without it two groups of the same size — which is the
+    /// common case for a burst — could swap places between two reads of the same data, and the
+    /// list would shuffle under the user's finger as they ticked things.
+    private static func isOrdered(
+        _ lhs: (key: String, value: [DeletionCandidate]),
+        before rhs: (key: String, value: [DeletionCandidate]),
+        by order: Order,
+        items: [String: MediaItem]
+    ) -> Bool {
+        switch order {
+        case .biggest:
+            let lhsBytes = lhs.value.reduce(Int64(0)) { $0 + $1.bytes }
+            let rhsBytes = rhs.value.reduce(Int64(0)) { $0 + $1.bytes }
+            return lhsBytes == rhsBytes ? lhs.key < rhs.key : lhsBytes > rhsBytes
+
+        case .oldest, .newest:
+            // The survivor's date, because that is the photograph the group is *about*. A
+            // re-send arrives years after the original and sorting by it would file the group
+            // under the day someone forwarded it.
+            let lhsDate = date(of: lhs.value, items: items)
+            let rhsDate = date(of: rhs.value, items: items)
+
+            // A group with no date at all goes last either way. Undated items are a real case —
+            // a file in a granted folder can have no creation date — and putting them first in
+            // "oldest" would hand the top of the list to the least informative rows.
+            switch (lhsDate, rhsDate) {
+            case let (left?, right?):
+                if left == right { return lhs.key < rhs.key }
+                return order == .oldest ? left < right : left > right
+            case (nil, nil):
+                return lhs.key < rhs.key
+            case (nil, _):
+                return false
+            case (_, nil):
+                return true
+            }
+        }
+    }
+
+    private static func date(of candidates: [DeletionCandidate], items: [String: MediaItem]) -> Date? {
+        guard let keeperID = candidates.first?.keeperID else { return nil }
+        return items[keeperID]?.creationDate
     }
 }
 

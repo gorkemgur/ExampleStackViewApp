@@ -273,10 +273,8 @@ struct ReviewView: View {
     /// holds a thumbnail that requests itself on appear.
     private var ladder: some View {
         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-            if model.availableKinds.count > 1 || model.kindFilter != nil {
-                kindFilter
-                    .padding(.bottom, DS.Space.l)
-            }
+            listControls
+                .padding(.bottom, DS.Space.l)
 
             ForEach(model.kindSections) { kindSection in
                 Section {
@@ -292,6 +290,60 @@ struct ReviewView: View {
             }
         }
         .animation(Motion.content, value: model.kindFilter)
+    }
+
+    /// What to show, and in what order.
+    ///
+    /// Two rows rather than one crowded one. The kinds are a filter — they change what is on
+    /// the screen, and so what a plan may select. The order changes nothing about what is
+    /// offered, only where to start looking, which is why it is quieter and sits underneath.
+    @ViewBuilder
+    private var listControls: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            if model.availableKinds.count > 1 || model.kindFilter != nil {
+                kindFilter
+            }
+            orderPicker
+        }
+    }
+
+    /// Date, finally askable.
+    ///
+    /// Bytes stays the default because the screen exists to free space, but "the old ones" is
+    /// the instinct people arrive with about a library they have not opened in four years —
+    /// and `creationDate` was computed on every item and used by nothing on this screen.
+    private var orderPicker: some View {
+        HStack(spacing: 6) {
+            Text("Sort")
+                .font(.caption2.weight(.bold))
+                .textCase(.uppercase)
+                .kerning(0.6)
+                .foregroundStyle(.secondary)
+
+            ForEach(ReviewBuilder.Order.allCases, id: \.self) { option in
+                let selected = model.order == option
+                Button {
+                    withAnimation(Motion.content) { model.order = option }
+                } label: {
+                    Text(option.title)
+                        .font(.caption.weight(selected ? .bold : .medium))
+                        .foregroundStyle(selected ? DS.deep : Color.secondary)
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 32)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(selected ? DS.deep.opacity(0.12) : Color.clear)
+                        )
+                        .contentShape(Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
+                .accessibilityIdentifier("review.order.\(option.rawValue)")
+            }
+
+            Spacer(minLength: 0)
+        }
+        .accessibilityIdentifier("review.order")
     }
 
     private func kindHeader(_ kindSection: ReviewViewModel.KindSection) -> some View {

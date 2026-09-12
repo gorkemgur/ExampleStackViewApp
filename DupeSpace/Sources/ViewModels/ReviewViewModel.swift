@@ -71,6 +71,19 @@ final class ReviewViewModel: ObservableObject {
     /// would double the headings and bury the decision under navigation. But "just show me the
     /// videos" is a real thing to want, because videos are where the bytes are, and until now
     /// there was no way to ask it.
+    /// What decides the order inside a rung.
+    ///
+    /// Bytes is the default and stays the default: the screen exists to free space. But date
+    /// was unaskable anywhere in the app while sitting computed on every item, and "the old
+    /// ones" is the instinct people arrive with about a library they have not opened in years.
+    @Published var order: ReviewBuilder.Order = .biggest {
+        didSet {
+            guard oldValue != order else { return }
+            allSections = ReviewBuilder.sections(for: result, order: order)
+            invalidateDerived()
+        }
+    }
+
     @Published var kindFilter: MediaKind? {
         didSet {
             cachedVisibleSections = nil
@@ -102,7 +115,8 @@ final class ReviewViewModel: ObservableObject {
 
     let result: ScanResult
 
-    private let allSections: [ReviewSection]
+    /// Rebuilt when the order changes, which is the only thing that moves it.
+    private var allSections: [ReviewSection]
     private let deleter: MediaDeleting
     private let exporter: any OriginalExporting
     private weak var history: (any HistoryRecording)?
@@ -185,7 +199,7 @@ final class ReviewViewModel: ObservableObject {
             value = allSections.compactMap { $0.removing(deletedIDs) }
         } else {
             value = ReviewBuilder
-                .sections(candidates: revisedCandidates, items: result.items)
+                .sections(candidates: revisedCandidates, items: result.items, order: order)
                 .compactMap { $0.removing(deletedIDs) }
         }
         cachedSections = value
