@@ -20,9 +20,8 @@
   --ink-3: #737b86;
   --accent: #0a6fdb;
   --accent-bright: #0a85ff;
-  --teal: #1596ad;
   --teal-bright: #32d6eb;
-  --grad: linear-gradient(115deg, #0a85ff, #32d6eb);
+  --grad: linear-gradient(115deg, var(--accent-bright), var(--teal-bright));
   --ok: #1d8a4e;
   --warn: #b06a10;
   --neutral: #6b7280;
@@ -46,7 +45,6 @@
     --ink-3: #858d99;
     --accent: #57adff;
     --accent-bright: #0a85ff;
-    --teal: #4cd9ee;
     --teal-bright: #32d6eb;
     --ok: #46c97e;
     --warn: #e0a044;
@@ -83,7 +81,7 @@ section { padding: 56px 0; border-top: 1px solid var(--line); }
 h1, h2, h3 { line-height: 1.2; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
 h2 { font-size: clamp(1.5rem, 4.2vw, 2rem); }
 h3 { font-size: 1.0625rem; letter-spacing: -.01em; }
-p { margin: 0 0 1em; }
+p { margin: 0 0 1em; overflow-wrap: break-word; }
 p:last-child { margin-bottom: 0; }
 .eyebrow {
   font-size: .75rem; font-weight: 650; letter-spacing: .09em; text-transform: uppercase;
@@ -91,16 +89,16 @@ p:last-child { margin-bottom: 0; }
 }
 .lede { color: var(--ink-2); font-size: 1.0625rem; max-width: 62ch; }
 .small { font-size: .875rem; color: var(--ink-3); }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; overflow-wrap: anywhere; }
 
 /* ---------- hero ---------- */
 .hero { position: relative; border-top: 0; padding: 44px 0 56px; overflow: hidden; }
 .glow {
   position: absolute; z-index: 0; pointer-events: none;
-  top: -280px; left: 50%; width: 900px; max-width: 150vw; height: 620px;
-  margin-left: -450px; border-radius: 50%;
+  top: -280px; left: 50%; width: min(900px, 150vw); height: 620px;
+  border-radius: 50%;
   background: radial-gradient(closest-side, rgba(10,133,255,.20), rgba(50,214,235,.10) 55%, transparent 78%);
-  transform: translate3d(0, calc(var(--sy, 0) * 1px), 0);
+  transform: translate3d(-50%, calc(var(--sy, 0) * 1px), 0);
   will-change: transform;
 }
 @media (prefers-color-scheme: dark) {
@@ -283,18 +281,26 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
 .stagger.in > *:nth-child(3) { transition-delay: .16s; }
 .stagger.in > *:nth-child(4) { transition-delay: .24s; }
 .stagger.in > *:nth-child(5) { transition-delay: .32s; }
+.stagger.in > *:nth-child(6) { transition-delay: .40s; }
+
+.skip {
+  position: absolute; left: 12px; top: -60px; z-index: 10;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong);
+  padding: 10px 16px; border-radius: 10px; text-decoration: none; font-weight: 600;
+}
+.skip:focus { top: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
   .reveal, .stagger > * { opacity: 1 !important; transform: none !important; }
-  .glow { transform: none !important; }
+  .glow { transform: translate3d(-50%, 0, 0) !important; }
 }
 </style>
 </head>
 <body>
 
-<a class="btn-skip" href="#main" style="position:absolute;left:-9999px">Skip to content</a>
+<a class="skip" href="#main">Skip to content</a>
 
 <header class="hero">
   <div class="glow" aria-hidden="true"></div>
@@ -436,9 +442,9 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
         <div class="ticks" aria-hidden="true"><span>1 GB</span><span>10 GB</span><span>20 GB</span></div>
         <div class="plan">
           <div id="plan-out" aria-live="polite">
-            <p class="plan-main">Plan: <span class="num">12.0 GB</span> across 173 items.</p>
-            <p class="plan-cost">The two zero-loss tiers give 9.4 GB. The rest comes from
-              <span class="plan-reach">burst leftovers</span>.</p>
+            <p class="plan-main">Plan: 12.0 GB across 193 items.</p>
+            <p class="plan-cost">The two zero-loss tiers give 9.4 GB. The rest comes from bursts —
+              other frames of one shutter press, with the sharpest frame staying.</p>
           </div>
         </div>
         <p class="small" style="margin-top:12px">Sample numbers, to show the shape of the answer. The app works
@@ -484,7 +490,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
       </li>
       <li class="step">
         <h3>Two fingerprints that must agree</h3>
-        <p>Images byte equality did not settle get a dHash and a DCT-based pHash. The two are sensitive to
+        <p>Images that byte equality did not settle get a dHash and a DCT-based pHash. The two are sensitive to
           different mistakes, so both have to agree before a pair counts as a match.</p>
       </li>
       <li class="step">
@@ -494,7 +500,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
       </li>
     </ol>
 
-    <div class="grid-2 reveal" style="margin-top:34px;align-items:center">
+    <div class="grid-2 reveal" style="margin-top:34px;align-items:start">
       <div class="card">
         <h3>And then it remembers</h3>
         <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">Everything expensive is cached against a
@@ -549,9 +555,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
         <h3>Where the rules live</h3>
         <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">Every decision that can destroy a file
           sits in <span class="mono">DupeCore</span>, a package with no PhotoKit, Vision or SwiftUI types in it, so all of
-          it runs under unit test without a simulator. Which copy survives is a rule you can read on screen — favourite or
-          album member, then edited, then highest resolution, then largest file, then oldest — and change whenever you
-          disagree.</p>
+          it runs under unit test without a simulator. Which copy survives is scored, not guessed: a favourite or album member outranks everything, then a copy carrying edits, then resolution, size and age, with screenshots and iCloud-only originals pushed down. The reason is written next to each pair on screen, and the survivor is never offered for deletion.</p>
       </div>
       <figure>
         <div class="phone">
@@ -595,7 +599,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
           <img src="screenshots/01b-live-surfaces.png" width="750" height="1334" loading="lazy"
                alt="A Live surfaces sheet previewing each scan state twice, as a Dynamic Island pill and as a Lock Screen card. Running shows Scanning, Fingerprinting 1,204 of 5,000, 24% with a blue progress bar. Held shows Paused, held at 2,600 of 5,000 in amber. Finished shows Found space, 4.3 GB in 128 items, with a green-to-teal bar.">
         </div>
-        <figcaption>Every scan state, on both surfaces, rendered from one source.</figcaption>
+        <figcaption>Every scan state, drawn from one source. No simulator will show a real Live Activity, so the app renders the same views on a screen of its own — which is the only way there is a picture of them at all.</figcaption>
       </figure>
     </div>
   </div>
@@ -730,9 +734,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
 
   var TIERS = tiers.map(function (el, i) {
     return {
-      el: el,
       fill: el.querySelector(".tier-taken"),
-      name: el.querySelector("h3").textContent,
       gb: parseFloat(el.getAttribute("data-gb")),
       items: parseInt(el.getAttribute("data-items"), 10),
       index: i
@@ -759,12 +761,12 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
     TIERS.forEach(function (tier) {
       var take = Math.max(0, Math.min(remaining, tier.gb));
       remaining -= take;
-      if (take > 0) {
+      // A hair of floating-point slop is not a tier the plan reached into.
+      if (take > 0.01) {
         items += Math.round(tier.items * (take / tier.gb));
         reached = tier;
       }
       tier.fill.style.width = (take / tier.gb * 100) + "%";
-      tier.el.style.opacity = "";
     });
 
     var got = Math.min(target, TOTAL);
@@ -778,9 +780,6 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
     } else {
       main = "Plan: " + gb(got) + " across " + items + " items.";
       cost = COST[reached ? reached.index : 0];
-      if (reached && reached.index >= 2) {
-        cost = cost.replace(reached.name.toLowerCase(), reached.name.toLowerCase());
-      }
     }
 
     planOut.innerHTML = "";

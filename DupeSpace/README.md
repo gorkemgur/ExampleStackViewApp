@@ -69,6 +69,17 @@ can be held rather than cancelled, and slows itself down on a hot phone or in Lo
 Every scan and every deletion leaves a record: what went, what was kept in its place, what it
 was worth, and how many days remain to undo it from Recently Deleted.
 
+## The page
+
+`docs/index.html` is a landing page for the app: one self-contained file, no build step, and no
+request to any server — system fonts, inline styles and scripts, and the same simulator
+screenshots this repository already carries. To publish it, switch on GitHub Pages with the
+source set to the default branch and the `/docs` folder; there is nothing to deploy.
+
+`Scripts/check-site.py` runs in CI and catches the three faults a browser reports as nothing at
+all: an asset that is not there, something loaded from a third party, and an absolute path that
+works locally and resolves to the domain root once it is served from a subdirectory.
+
 ## Outside the app
 
 A widget carries the same numbers to the Home and Lock Screens — free space, what the last scan
