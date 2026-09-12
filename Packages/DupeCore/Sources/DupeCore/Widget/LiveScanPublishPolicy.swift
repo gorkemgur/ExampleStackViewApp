@@ -33,10 +33,21 @@ public struct LiveScanPublishPolicy: Sendable, Hashable {
         if next.phase != previous.phase { return true }
         if next.stage != previous.stage { return true }
 
+        // The first thing the scan finds changes the card's layout — a whole row appears — and
+        // that is exactly the "anything a person would notice" this type promises to let
+        // through immediately.
+        if next.foundSomething != previous.foundSomething { return true }
+
         guard now.timeIntervalSince(publishedAt) >= minimumInterval else { return false }
 
-        // Past the interval, still nothing to say if the bar has not visibly moved.
-        return percent(next) != percent(previous)
+        // Past the interval, something has to have visibly moved.
+        //
+        // This used to be the percentage alone, which made the percentage the only value
+        // capable of triggering a push — and then the surfaces made it the hero, because it
+        // was the only number guaranteed to be current. The running total is the figure people
+        // are actually waiting for; it gets to speak for itself.
+        if percent(next) != percent(previous) { return true }
+        return ByteText.compact(next.reclaimableBytes) != ByteText.compact(previous.reclaimableBytes)
     }
 
     private func percent(_ state: LiveScanState) -> Int {

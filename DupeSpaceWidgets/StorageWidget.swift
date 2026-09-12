@@ -65,6 +65,23 @@ struct StorageWidgetView: View {
     let entry: StorageEntry
 
     var body: some View {
+        // The placeholder is not this phone's numbers.
+        //
+        // `isPlaceholder` was set in three places and read in none, so an install with no App
+        // Group entitlement — or any phone before the app had ever written — rendered
+        // `WidgetSnapshot.placeholder` verbatim: "34 GB free", "4.3 GB to reclaim", "128
+        // copies", and a last-scan date of June 2025, because that is the fixed timestamp the
+        // fixture carries. Somebody else's figures, on your Home Screen, presented as yours.
+        // A widget may be empty. It may not invent.
+        if entry.isPlaceholder {
+            unscanned
+        } else {
+            measured
+        }
+    }
+
+    @ViewBuilder
+    private var measured: some View {
         switch family {
         case .accessoryCircular:
             circular
@@ -76,6 +93,44 @@ struct StorageWidgetView: View {
             medium
         default:
             small
+        }
+    }
+
+    /// What a widget says before it has anything true to say.
+    @ViewBuilder
+    private var unscanned: some View {
+        switch family {
+        case .accessoryInline:
+            Text("DupeSpace — not scanned yet")
+        case .accessoryCircular:
+            Image(systemName: "sparkle.magnifyingglass")
+                .font(.title3)
+        case .accessoryRectangular:
+            VStack(alignment: .leading, spacing: 2) {
+                Text("DupeSpace").font(.headline)
+                Text("Not scanned yet").font(.caption)
+            }
+        default:
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                Eyebrow("Not scanned yet", tint: DS.deep)
+
+                Text("Find what you can remove")
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(2)
+
+                // An empty track rather than a fabricated one: the shape of the reading is
+                // there, with nothing claimed about it.
+                MeterTrack(segments: [], total: 1, height: 8, motion: nil)
+
+                Spacer(minLength: 4)
+
+                Text("Open DupeSpace to scan this iPhone.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
@@ -223,15 +278,28 @@ struct StorageWidgetView: View {
 
     private var legend: some View {
         HStack(spacing: 10) {
-            legendDot(color: DS.deep, title: "Photos")
-            legendDot(color: DS.neutral, title: "Other")
-            legendDot(color: DS.well, title: "Free")
+            legendDot(color: DS.deep, title: "Photos & videos")
+            legendDot(color: DS.neutral, title: "Everything else")
+            legendDot(color: DS.well, title: "Free", outlined: true)
         }
     }
 
-    private func legendDot(color: Color, title: String) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
+    /// A slug, not a dot, and the same slug the app uses.
+    ///
+    /// `StorageCardView` explains why: the eye carries a colour straight from the measurement
+    /// to the figure that names it, and a bar is made of bars. The outline is for "Free",
+    /// whose colour is the track's own empty end — a shade off whatever it is drawn on, so
+    /// without an edge the swatch is a blank space above a word. The app fixed that and wrote
+    /// it down; this copy never got it.
+    private func legendDot(color: Color, title: String, outlined: Bool = false) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(color)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                        .strokeBorder(DS.hairline, lineWidth: outlined ? 0.5 : 0)
+                )
+                .frame(width: 12, height: 3)
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(.secondary)

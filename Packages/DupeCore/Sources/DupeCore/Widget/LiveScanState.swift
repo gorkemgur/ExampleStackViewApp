@@ -43,10 +43,17 @@ public struct LiveScanState: Sendable, Hashable, Codable {
         self.startedAt = startedAt
     }
 
-    /// A scan that has ended reads as complete however far the counter got: a bar that stops at
+    /// A *finished* scan reads as complete however far the counter got: a bar that stops at
     /// 94% and then says "done" looks like something went wrong.
+    ///
+    /// That reasoning applies to finishing and to nothing else. It used to cover cancelled and
+    /// failed too, so a scan you stopped at eighteen per cent drew a completely full bar, and
+    /// one that crashed drew a completely full bar in the app's destructive red. A full track
+    /// is the universal glyph for "done", and both of those are the opposite of done. Stopping
+    /// where the work stopped is also the strongest signal on these surfaces that is not a
+    /// colour: a silhouette you can read across a room.
     public var fraction: Double {
-        guard isRunning else { return 1 }
+        guard phase != .finished else { return 1 }
         guard total > 0 else { return 0 }
         return min(Double(completed) / Double(total), 1)
     }
@@ -91,23 +98,36 @@ public struct LiveScanState: Sendable, Hashable, Codable {
     /// Two or three glyphs: the compact trailing slot and the circular gauge label, neither of
     /// which is wide enough for "4.32 GB".
     ///
-    /// Paused says nothing, because the slot next to it already carries a pause glyph and a
-    /// second symbol for the same fact is noise.
+    /// Empty wherever the glyph in the neighbouring slot already carries the whole fact. Paused
+    /// was already this way; cancelled and failed were an em dash, which is not information —
+    /// a lone dash tinted grey beside a cross reads as a value that failed to load. Letting the
+    /// pill shrink to its glyph is a silhouette change, which is a stronger signal at a glance
+    /// than any character.
+    ///
+    /// The contract, which the surfaces have to keep: `compactValue` may be empty whenever the
+    /// adjacent glyph says everything, and `displayValue` may never be empty on a surface that
+    /// reserves a slot for it.
     public var compactValue: String {
         switch phase {
         case .scanning: return "\(Int((fraction * 100).rounded()))%"
-        case .paused: return ""
-        case .finished: return foundSomething ? ByteText.tight(reclaimableBytes) : "0"
-        case .cancelled, .failed: return "—"
+        case .paused, .cancelled, .failed: return ""
+        case .finished: return foundSomething ? ByteText.tight(reclaimableBytes) : ""
         }
     }
 
-    /// The same value for a surface with room for it — the Lock Screen card, where "4.3 GB"
-    /// fits and "4.3G" reads like a truncation.
+    /// The same value for a surface with room for it — the Lock Screen card and the expanded
+    /// island, where "4.3 GB" fits and "4.3G" reads like a truncation.
+    ///
+    /// This used to fall through to `compactValue` for everything but `.finished`, so a paused
+    /// scan gave the Lock Screen card an empty string for its hero figure and left the whole
+    /// right-hand column a hole. Every phase answers here.
     public var displayValue: String {
         switch phase {
-        case .finished: return foundSomething ? ByteText.string(reclaimableBytes) : "0"
-        default: return compactValue
+        case .scanning: return "\(Int((fraction * 100).rounded()))%"
+        case .paused: return "Held"
+        case .finished: return foundSomething ? ByteText.string(reclaimableBytes) : "All clean"
+        case .cancelled: return "Stopped"
+        case .failed: return "Failed"
         }
     }
 

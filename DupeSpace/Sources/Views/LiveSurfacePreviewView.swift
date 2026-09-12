@@ -75,6 +75,19 @@ struct LiveSurfacePreviewView: View {
                     total: 5_000,
                     startedAt: started
                 )
+            ),
+            // The phase this sheet was missing, under a doc comment promising every state on
+            // one screen — and the one whose bar used to draw completely full, in red, for a
+            // scan that had got nowhere.
+            (
+                "Failed",
+                LiveScanState(
+                    phase: .failed,
+                    stage: .fingerprinting,
+                    completed: 1_450,
+                    total: 5_000,
+                    startedAt: started
+                )
             )
         ]
     }
@@ -146,7 +159,7 @@ private struct LockScreenMock: View {
 
             Spacer(minLength: 18)
 
-            ScanLockScreenView(state: state, total: 5_000)
+            ScanLockScreenView(state: state)
                 .background(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(.black.opacity(0.55))

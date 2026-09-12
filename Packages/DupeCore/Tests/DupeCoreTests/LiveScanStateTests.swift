@@ -38,10 +38,36 @@ final class LiveScanStateTests: XCTestCase {
     }
 
     /// A bar that stops short and then says "done" reads as something having gone wrong.
-    func testAnEndedScanReadsAsComplete() {
-        for phase in [LiveScanState.Phase.finished, .cancelled, .failed] {
-            let state = LiveScanState(phase: phase, stage: .matching, completed: 94, total: 100)
-            XCTAssertEqual(state.fraction, 1, "\(phase) should not leave the bar short")
+    func testAFinishedScanReadsAsComplete() {
+        let state = LiveScanState(phase: .finished, stage: .matching, completed: 94, total: 100)
+        XCTAssertEqual(state.fraction, 1, "a finished scan must not leave the bar short")
+    }
+
+    /// The other half of that, which used to be wrong: a full track is the universal glyph for
+    /// "done", and a scan you stopped at eighteen per cent is the opposite of done. It used to
+    /// draw a completely full bar — and a failed one drew a completely full bar in the app's
+    /// destructive red.
+    func testAScanThatDidNotFinishStopsWhereTheWorkStopped() {
+        for phase in [LiveScanState.Phase.cancelled, .failed] {
+            let state = LiveScanState(phase: phase, stage: .matching, completed: 18, total: 100)
+            XCTAssertEqual(
+                state.fraction, 0.18, accuracy: 0.0001,
+                "\(phase) must not claim to have got further than it did"
+            )
+        }
+    }
+
+    /// The contract the surfaces rely on: the compact slot may be silent when the glyph beside
+    /// it says everything, but a surface that reserves room for a figure always gets one. A
+    /// paused Lock Screen card used to render an empty string as its hero.
+    func testEveryPhaseHasSomethingToShowWhereThereIsRoomForIt() {
+        let phases: [LiveScanState.Phase] = [.scanning, .paused, .finished, .cancelled, .failed]
+        for phase in phases {
+            let state = LiveScanState(phase: phase, stage: .matching, completed: 18, total: 100)
+            XCTAssertFalse(
+                state.displayValue.isEmpty,
+                "\(phase) leaves the Lock Screen's figure slot empty"
+            )
         }
     }
 
@@ -52,6 +78,7 @@ final class LiveScanStateTests: XCTestCase {
         XCTAssertEqual(state.headline, "Paused")
         XCTAssertEqual(state.detail, "Held at 10 of 100")
         XCTAssertEqual(state.compactValue, "", "the pause glyph beside it already says this")
+        XCTAssertFalse(state.displayValue.isEmpty, "but the Lock Screen has room for a word")
     }
 
     func testARunningScanSaysWhatItIsDoingAndHowFar() {

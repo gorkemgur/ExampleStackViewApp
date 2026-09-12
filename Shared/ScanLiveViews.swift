@@ -5,7 +5,15 @@ import DupeCore
 struct ScanLockScreenView: View {
 
     let state: LiveScanState
-    let total: Int
+
+    /// What the card leads with: how much you are getting back, as soon as there is an answer,
+    /// and how far along only until then.
+    private var headlineFigure: String {
+        if state.isRunning && state.foundSomething {
+            return ByteText.string(state.reclaimableBytes)
+        }
+        return state.displayValue
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -27,14 +35,26 @@ struct ScanLockScreenView: View {
                         .minimumScaleFactor(0.8)
                     Text(state.detail)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.onSlabMuted)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
 
                 Spacer(minLength: 8)
 
-                Text(state.displayValue)
+                // The figure slot, and what goes in it is the question this card answers.
+                //
+                // It was the percentage, always — while the reclaimable bytes, the reason
+                // anyone started a scan and the only number on the card the app can act on,
+                // sat at caption2 in the bottom row under a comment claiming it was "the
+                // loudest thing on the surface". It was the quietest. Progress was also
+                // encoded three times on one card — the bar, the timer and the percent — and
+                // the found total once, smallest.
+                //
+                // This is the same inversion the overview card was already fixed for. Once
+                // there is something to report, it leads; how far along is context, and the
+                // bar carries that on its own.
+                Text(headlineFigure)
                     .font(.system(.title2, design: .rounded, weight: .semibold))
                     .contentTransition(.numericText())
                     .monospacedDigit()
@@ -47,32 +67,31 @@ struct ScanLockScreenView: View {
             ScanProgressTrack(state: state, height: 8)
 
             HStack(spacing: 8) {
-                if state.isRunning {
+                if state.isRunning && state.foundSomething {
+                    Text("\(Int((state.fraction * 100).rounded()))%")
+                        .font(.caption2)
+                        .monospacedDigit()
+                        .foregroundStyle(DS.onSlabMuted)
+                        .lineLimit(1)
+                }
+
+                if state.phase == .scanning {
                     Text(state.startedAt, style: .timer)
                         .font(.caption2)
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.onSlabMuted)
                         .lineLimit(1)
                         .fixedSize()
                 }
 
-                if state.isRunning && state.foundSomething {
-                    RunningTotal(state: state)
-                } else if state.isRunning {
+                if state.isRunning && !state.foundSomething {
                     Text("Totals when it finishes")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.onSlabMuted)
                         .lineLimit(1)
                 }
 
                 Spacer(minLength: 0)
-
-                if state.isRunning && total > 0 {
-                    Text("\(total.formatted()) to check")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
             }
         }
         .padding(14)
@@ -92,7 +111,7 @@ struct RunningTotal: View {
         HStack(spacing: 4) {
             Image(systemName: "arrow.down.circle.fill")
                 .font(.caption2)
-            Text(ByteText.compact(state.reclaimableBytes))
+            Text(ByteText.string(state.reclaimableBytes))
                 .contentTransition(.numericText())
                 .monospacedDigit()
         }
@@ -149,13 +168,28 @@ struct ScanProgressTrack: View {
 /// Four states, four meanings, and each one already has a colour in this app.
 enum ScanPalette {
 
+    /// Fixed values only — never an adaptive pair.
+    ///
+    /// These surfaces are dark in both appearances: the activity forces a near-black tint on
+    /// its own card. An adaptive colour resolves against the *device* setting, so on a
+    /// light-appearance phone `DS.tier(.burstLeftover)` came out as its light value, #996100,
+    /// which is a dark brown on a near-black card, and `.secondary` came out as dark grey on
+    /// black. `DesignSystem` already says this in as many words about `tierVivid`: the
+    /// light-mode ladder colours are darkened for text on white and disappear on a dark slab.
+    ///
+    /// Five phases and three hues with a clean conscience, which is the proof that colour
+    /// cannot carry this on its own — the glyph, the bar's length and the words do the work.
+    /// Pausing is the brand at half strength, because a held scan is still yours to resume;
+    /// it was the ladder's amber, which in this app means deleting something costs you.
+    /// Cancelled and failed are both neutral dead ends, told apart by their glyphs and their
+    /// words; failed was the destructive red, which is reserved for the key that erases files
+    /// and is worth nothing if it also appears when a scan gave up having destroyed nothing.
     static func tint(for state: LiveScanState) -> Color {
         switch state.phase {
-        case .scanning: return DS.brandBottom
-        case .paused: return DS.tier(.burstLeftover)
+        case .scanning: return DS.onSlabAccent
+        case .paused: return DS.onSlabAccent.opacity(0.55)
         case .finished: return state.foundSomething ? DS.brandBottom : DS.onSlabAccent
-        case .cancelled: return DS.neutral
-        case .failed: return DS.destructive
+        case .cancelled, .failed: return DS.onSlabMuted
         }
     }
 
@@ -163,13 +197,12 @@ enum ScanPalette {
         switch state.phase {
         // The icon's own order, top stop first. Not reversed.
         case .scanning: return [DS.brandTop, DS.brandBottom]
-        case .paused: return [DS.tier(.burstLeftover), DS.tier(.burstLeftover).opacity(0.7)]
+        case .paused: return [DS.brandTop.opacity(0.5), DS.brandBottom.opacity(0.5)]
         case .finished:
             return state.foundSomething
                 ? [DS.brandTop, DS.brandBottom]
                 : [DS.onSlabAccent, DS.brandBottom]
-        case .cancelled: return [DS.neutral, DS.neutral]
-        case .failed: return [DS.destructive, DS.destructive.opacity(0.7)]
+        case .cancelled, .failed: return [DS.onSlabMuted, DS.onSlabMuted]
         }
     }
 }
