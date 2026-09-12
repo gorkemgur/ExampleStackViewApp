@@ -45,6 +45,10 @@ enum AppEnvironment {
         return CachingAnalyzer(base: base, cache: fingerprintCache)
     }
 
+    static func makeChangeObserver() -> any LibraryChangeObserving {
+        isUITesting ? StubLibraryChangeObserver() : PhotoLibraryChangeObserver()
+    }
+
     static func makeDeleter() -> MediaDeleting {
         guard !isUITesting else { return StubDeleter() }
         return CompositeDeleter(

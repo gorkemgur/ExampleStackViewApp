@@ -7,7 +7,8 @@ struct RootView: View {
     @EnvironmentObject private var history: HistoryViewModel
     @StateObject private var model = OverviewViewModel(
         library: AppEnvironment.makeLibrary(),
-        folderRegistry: AppEnvironment.folderRegistry
+        folderRegistry: AppEnvironment.folderRegistry,
+        changeObserver: AppEnvironment.makeChangeObserver()
     )
     @State private var pickingFolder = false
 
@@ -77,6 +78,7 @@ struct RootView: View {
         }
         .task {
             await model.refresh()
+            model.beginObservingLibrary()
         }
         .fileImporter(
             isPresented: $pickingFolder,

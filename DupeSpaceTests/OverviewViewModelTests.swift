@@ -65,12 +65,85 @@ final class OverviewViewModelTests: XCTestCase {
         XCTAssertEqual(model.onDeviceLibraryBytes, model.libraryBytes - model.cloudOnlyBytes)
     }
 
+    func testAChangeInTheLibraryRefreshesWhatIsOnScreen() async {
+        let library = MutableLibrary(items: [
+            MediaItem(id: "a", source: .photoLibrary, kind: .image, byteSize: 10)
+        ])
+        let observer = StubLibraryChangeObserver()
+        let model = OverviewViewModel(library: library, changeObserver: observer)
+
+        await model.refresh()
+        XCTAssertEqual(model.items.count, 1)
+
+        model.beginObservingLibrary()
+        XCTAssertTrue(observer.isObserving)
+
+        library.replace(with: [
+            MediaItem(id: "a", source: .photoLibrary, kind: .image, byteSize: 10),
+            MediaItem(id: "b", source: .photoLibrary, kind: .video, byteSize: 20)
+        ])
+        observer.simulateChange()
+
+        let deadline = Date().addingTimeInterval(5)
+        while model.items.count < 2 && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(model.items.count, 2, "stale numbers are the one thing this app must not show")
+        XCTAssertEqual(model.libraryBytes, 30)
+    }
+
+    func testNothingIsWatchedUntilItIsAskedFor() async {
+        let observer = StubLibraryChangeObserver()
+        let model = OverviewViewModel(library: StubMediaLibrary.previewFixture(), changeObserver: observer)
+
+        await model.refresh()
+        XCTAssertFalse(observer.isObserving)
+
+        model.beginObservingLibrary()
+        XCTAssertTrue(observer.isObserving)
+
+        model.stopObservingLibrary()
+        XCTAssertFalse(observer.isObserving)
+    }
+
     func testFailureIsSurfacedRatherThanSwallowed() async {
         let model = OverviewViewModel(library: FailingLibrary())
         await model.refresh()
 
         XCTAssertNotNil(model.failureMessage)
         XCTAssertTrue(model.items.isEmpty)
+    }
+}
+
+/// A library whose contents can change between reads, which is what makes "did it actually
+/// reload" an assertion rather than a guess.
+private final class MutableLibrary: MediaLibrary, @unchecked Sendable {
+
+    private let lock = NSLock()
+    private var storage: [MediaItem]
+    private var _loadCount = 0
+
+    init(items: [MediaItem]) { storage = items }
+
+    var loadCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return _loadCount
+    }
+
+    func replace(with items: [MediaItem]) {
+        lock.lock(); storage = items; lock.unlock()
+    }
+
+    func currentAccess() -> LibraryAccess { .authorized }
+    func requestAccess() async -> LibraryAccess { .authorized }
+
+    func loadInventory() async throws -> [MediaItem] {
+        lock.lock()
+        _loadCount += 1
+        let items = storage
+        lock.unlock()
+        return items
     }
 }
 

@@ -21,10 +21,16 @@ final class OverviewViewModel: ObservableObject {
 
     private let library: MediaLibrary
     private let folderRegistry: any FolderRegistering
+    private let changeObserver: (any LibraryChangeObserving)?
 
-    init(library: MediaLibrary, folderRegistry: any FolderRegistering = InMemoryFolderRegistry()) {
+    init(
+        library: MediaLibrary,
+        folderRegistry: any FolderRegistering = InMemoryFolderRegistry(),
+        changeObserver: (any LibraryChangeObserving)? = nil
+    ) {
         self.library = library
         self.folderRegistry = folderRegistry
+        self.changeObserver = changeObserver
     }
 
     var libraryBytes: Int64 { InventoryAnalyzer.totalBytes(items) }
@@ -37,6 +43,24 @@ final class OverviewViewModel: ObservableObject {
     var failureMessage: String? {
         if case let .failed(message) = state { return message }
         return nil
+    }
+
+    /// Starts watching the library so the numbers on screen keep describing the library that
+    /// actually exists — deleting photos in Photos should not leave a stale total here.
+    func beginObservingLibrary() {
+        guard let changeObserver else { return }
+        changeObserver.startObserving { [weak self] in
+            Task { await self?.reloadAfterExternalChange() }
+        }
+    }
+
+    func stopObservingLibrary() {
+        changeObserver?.stopObserving()
+    }
+
+    private func reloadAfterExternalChange() async {
+        state = .idle
+        await loadInventory()
     }
 
     func refresh() async {
