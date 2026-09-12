@@ -356,7 +356,7 @@ struct ReviewView: View {
                 // No bounce. It fired on every checkbox, so ticking thirty groups was thirty
                 // pieces of decoration on a screen about choices that cannot be taken back.
                 // The mark changing is the feedback.
-                TickBox(state: boxState(selected: selected, of: all), tint: tint)
+                TickBox(state: boxMark(selected: selected, of: all), tint: tint)
                     .frame(width: 46, height: 46)
                     .contentShape(Rectangle())
             }
