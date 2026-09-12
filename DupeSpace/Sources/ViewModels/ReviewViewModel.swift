@@ -6,16 +6,24 @@ import DupeCore
 final class ReviewViewModel: ObservableObject {
 
     @Published private(set) var selection: CleanupSelection {
-        didSet { cachedViolations = nil }
+        didSet {
+            cachedViolations = nil
+            cachedSavings = nil
+            cachedSelectedCandidates = nil
+        }
     }
     @Published private(set) var isDeleting = false
     @Published private(set) var outcome: DeletionOutcome?
     @Published private(set) var failure: String?
 
     /// Target for the "I need this much back" slider, in bytes.
-    @Published var budgetBytes: Double = 0
+    @Published var budgetBytes: Double = 0 {
+        didSet { cachedBudgetPlan = nil }
+    }
     /// How far the slider is allowed to reach. Starts at the tiers that cost the user nothing.
-    @Published var budgetDepth: RegretTier = .inferiorCopy
+    @Published var budgetDepth: RegretTier = .inferiorCopy {
+        didSet { cachedBudgetPlan = nil }
+    }
 
     /// Items that have actually been removed. Kept so the list stops offering copies that no
     /// longer exist the moment a deletion succeeds, rather than leaving the user staring at
@@ -55,6 +63,13 @@ final class ReviewViewModel: ObservableObject {
     private var cachedSections: [ReviewSection]?
     private var cachedSafeDefault: CleanupSelection?
     private var cachedViolations: [CleanupViolation]?
+    // Read several times per body pass, and every frame of a fader drag: `budgetPlan` is a
+    // filter and a sort through every live candidate, `savings` walks every selected id, and
+    // `selectedCandidates` is a full pass that `deepestSelectedTier` and `judgementCallCount`
+    // each walk again.
+    private var cachedBudgetPlan: BudgetPlan?
+    private var cachedSavings: SavingsBreakdown?
+    private var cachedSelectedCandidates: [DeletionCandidate]?
 
     init(result: ScanResult, deleter: MediaDeleting, history: (any HistoryRecording)? = nil) {
         self.result = result
@@ -81,6 +96,9 @@ final class ReviewViewModel: ObservableObject {
         cachedSections = nil
         cachedSafeDefault = nil
         cachedViolations = nil
+        cachedBudgetPlan = nil
+        cachedSavings = nil
+        cachedSelectedCandidates = nil
     }
 
     var sections: [ReviewSection] {
@@ -175,7 +193,10 @@ final class ReviewViewModel: ObservableObject {
     var isFinished: Bool { liveCandidates.isEmpty }
 
     var savings: SavingsBreakdown {
-        SavingsCalculator.breakdown(for: selection.selectedIDs, items: result.items)
+        if let cachedSavings { return cachedSavings }
+        let value = SavingsCalculator.breakdown(for: selection.selectedIDs, items: result.items)
+        cachedSavings = value
+        return value
     }
 
     var violations: [CleanupViolation] {
@@ -193,7 +214,10 @@ final class ReviewViewModel: ObservableObject {
     var canDelete: Bool { !selection.isEmpty && violations.isEmpty && !isDeleting }
 
     var selectedCandidates: [DeletionCandidate] {
-        liveCandidates.filter { selection.isSelected($0.id) }
+        if let cachedSelectedCandidates { return cachedSelectedCandidates }
+        let value = liveCandidates.filter { selection.isSelected($0.id) }
+        cachedSelectedCandidates = value
+        return value
     }
 
     /// The worst tier the current selection reaches into. What the confirmation has to lead
@@ -208,12 +232,15 @@ final class ReviewViewModel: ObservableObject {
     }
 
     var budgetPlan: BudgetPlan {
+        if let cachedBudgetPlan { return cachedBudgetPlan }
         let allowed = Set(RegretTier.allCases.filter { $0 <= budgetDepth })
-        return BudgetPlanner.plan(
+        let value = BudgetPlanner.plan(
             target: Int64(budgetBytes),
             candidates: liveCandidates,
             allowedTiers: allowed
         )
+        cachedBudgetPlan = value
+        return value
     }
 
     // MARK: - Selection

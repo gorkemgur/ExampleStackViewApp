@@ -116,14 +116,13 @@ enum DS {
     /// There are two states here, so there are two colours: quiet for the rungs that cost
     /// nothing, the ladder's warning amber for the ones that are a judgement call. The rail
     /// beside the row still says which rung it is.
-    static func costTint(_ rung: RegretTier, onSlab: Bool = false) -> Color {
+    /// The parameters are `rung` and `isOnSlab` because `tier` and `onSlab` are both names
+    /// this type already uses — a five-line body had two shadowed names in it.
+    static func costTint(_ rung: RegretTier, isOnSlab: Bool = false) -> Color {
         guard !rung.isLossless else {
-            return onSlab ? onSlabMuted : .secondary
+            return isOnSlab ? onSlabMuted : .secondary
         }
-        // The parameter is `rung`, not `tier`: `tier` is the name of the function right above
-        // this one, and a parameter called `tier` shadows it, so `tier(.burstLeftover)` reads
-        // as calling a `RegretTier` value.
-        return onSlab ? tierVivid(.burstLeftover) : Self.tier(.burstLeftover)
+        return isOnSlab ? tierVivid(.burstLeftover) : tier(.burstLeftover)
     }
 
     /// Secondary copy on the slab. `Color.secondary` resolves against the page, not against a
@@ -526,10 +525,14 @@ struct ReachPicker<Value: Hashable>: View {
     }
 
     private func width(for option: Option, in available: CGFloat) -> CGFloat {
-        let share = max(option.weight, 0) / totalWeight
-        // A hairline for a rung that is worth something but very little: a step you can still
-        // reach has to be visible on the track that says how far you have reached.
-        return max(available * share, 3)
+        // A hairline for a step worth something but very little — a step you can still reach
+        // has to be visible — but taken *out* of the available width first rather than added
+        // on top of it. Reserving 3pt per step and then apportioning the full width meant the
+        // row overran its own track, and with one dominant step the rest were clipped away
+        // entirely: the control read as a solid block and moving the selection changed nothing.
+        let floors = CGFloat(options.count) * 3
+        let apportionable = max(available - floors, 0)
+        return 3 + apportionable * (max(option.weight, 0) / totalWeight)
     }
 
     private var track: some View {
@@ -599,10 +602,17 @@ struct TargetSlider: View {
     var identifier: String
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// True for the whole of a drag. The fill must not animate while a finger is on it — a
+    /// 0.15s curve re-run on every touch-move leaves the cap trailing the finger for the
+    /// length of the gesture — but it should animate when the value moves for any other
+    /// reason, such as a deletion pulling the ceiling down.
+    @GestureState private var isDragging = false
 
     private let trackHeight: CGFloat = 16
     private let gripWidth: CGFloat = 7
     private let gripHeight: CGFloat = 30
+    /// The control is 30pt of paint in a 44pt target.
+    private let hitHeight: CGFloat = 44
 
     private var span: Double { max(range.upperBound - range.lowerBound, 1) }
 
@@ -632,7 +642,9 @@ struct TargetSlider: View {
 
                 Capsule(style: .continuous)
                     .fill(DS.brandRow)
-                    .frame(width: max(width * fraction, trackHeight), height: trackHeight)
+                    // No floor at zero: a 16pt minimum meant a target of nothing still drew a
+                    // blue stub under a readout saying 0 B.
+                    .frame(width: fraction > 0 ? max(width * fraction, trackHeight) : 0, height: trackHeight)
 
                 RoundedRectangle(cornerRadius: 3.5, style: .continuous)
                     .fill(.white)
@@ -640,20 +652,27 @@ struct TargetSlider: View {
                     .shadow(color: .black.opacity(0.45), radius: 5, y: 2)
                     .offset(x: max(min(width * fraction - gripWidth / 2, width - gripWidth), 0))
             }
-            .frame(height: gripHeight)
+            .frame(height: hitHeight)
             .contentShape(Rectangle())
-            // Anywhere on the track, not only on the grip. A 7pt cap is a hard thing to
-            // catch, and there is no reason to make someone catch it.
+            // Anywhere on the track, not only on the grip: a 7pt cap is a hard thing to catch
+            // and there is no reason to make someone catch it.
+            //
+            // But `minimumDistance: 0` is wrong here, and `CompareSliderView` already learned
+            // why — at zero the gesture claims the touch the instant a finger lands, so a
+            // scroll that happens to begin on this track sets a target instead of scrolling,
+            // and a stray tap moves the budget. One point of travel is enough to tell a drag
+            // from a touch, and a stock Slider does neither of those things.
             .gesture(
-                DragGesture(minimumDistance: 0)
+                DragGesture(minimumDistance: 1)
+                    .updating($isDragging) { _, state, _ in state = true }
                     .onChanged { drag in
                         let position = min(max(drag.location.x / max(width, 1), 0), 1)
                         value = range.lowerBound + position * span
                     }
             )
-            .animation(reduceMotion ? nil : Motion.readout, value: fraction)
+            .animation(isDragging || reduceMotion ? nil : Motion.readout, value: fraction)
         }
-        .frame(height: gripHeight)
+        .frame(height: hitHeight)
         .sensoryFeedback(.selection, trigger: reachedRung)
         .accessibilityRepresentation {
             Slider(value: $value, in: range)
@@ -662,14 +681,19 @@ struct TargetSlider: View {
     }
 
     /// The ladder, at rest, behind the fill.
+    ///
+    /// Normalised to `span`, the same denominator the fill uses — not to the sum of the rungs.
+    /// The two are only equal when every rung is present and they add up exactly to the range,
+    /// and a rung worth nothing is dropped before this ever sees it. Any other denominator and
+    /// the fill stops somewhere the colours say a different rung begins, which is the one thing
+    /// this control exists to say. The trailing rectangle takes up whatever is left.
     private var ladder: some View {
         GeometryReader { proxy in
-            let total = max(rungs.reduce(0) { $0 + max($1.bytes, 0) }, 1)
             HStack(spacing: 0) {
                 ForEach(rungs) { rung in
                     Rectangle()
                         .fill(rung.color.opacity(0.30))
-                        .frame(width: max(proxy.size.width * (max(rung.bytes, 0) / total), 2))
+                        .frame(width: max(proxy.size.width * (max(rung.bytes, 0) / span), 2))
                 }
                 Rectangle().fill(Color.white.opacity(0.10))
             }
@@ -718,11 +742,16 @@ extension View {
 /// a tick says which part of the ladder it belongs to.
 struct TickBox: View {
 
-    enum State {
-        case none, some, all
+    /// Named `Mark` rather than `State`, and `empty/partial/full` rather than
+    /// `none/some/all`. A nested `State` shadows `SwiftUI.State` inside this type, so the day
+    /// someone adds an `@State` here the error names the wrong thing entirely; and
+    /// `.none`/`.some` are how an `Optional` is spelled, so a function returning one reads as
+    /// returning an optional.
+    enum Mark {
+        case empty, partial, full
     }
 
-    let state: State
+    let state: Mark
     let tint: Color
     var side: CGFloat = 24
 
@@ -733,21 +762,21 @@ struct TickBox: View {
     var body: some View {
         ZStack {
             shape
-                .fill(state == .none ? Color.clear : tint)
+                .fill(state == .empty ? Color.clear : tint)
 
             shape
-                .strokeBorder(state == .none ? DS.neutral : .clear, lineWidth: 1.5)
+                .strokeBorder(state == .empty ? DS.neutral : .clear, lineWidth: 1.5)
 
             switch state {
-            case .none:
+            case .empty:
                 EmptyView()
-            case .some:
+            case .partial:
                 // A bar, not a minus glyph: the same stroke weight as the tick, so the two
                 // states weigh the same on the row.
                 Capsule(style: .continuous)
                     .fill(.white)
                     .frame(width: side * 0.46, height: side * 0.115)
-            case .all:
+            case .full:
                 Tick()
                     .stroke(.white, style: StrokeStyle(lineWidth: side * 0.115, lineCap: .round, lineJoin: .round))
                     .frame(width: side * 0.5, height: side * 0.38)

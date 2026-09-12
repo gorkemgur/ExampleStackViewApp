@@ -187,7 +187,7 @@ struct GroupDetailView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                TickBox(state: model.selection.isSelected(item.id) ? .all : .none, tint: tint)
+                TickBox(state: model.selection.isSelected(item.id) ? .full : .empty, tint: tint)
 
                 ThumbnailView(item: item, side: 52, loader: loader)
 
@@ -208,6 +208,13 @@ struct GroupDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // The tick is drawn shapes, so it says nothing on its own — and this button never had
+        // a label either. Without both, the row announced a filename and a size with no
+        // indication of whether it was selected, on the screen where selection is the decision.
+        .accessibilityLabel(item.displayName)
+        .accessibilityValue(model.selection.isSelected(item.id) ? "Selected for deletion" : "Not selected")
+        .accessibilityAddTraits(model.selection.isSelected(item.id) ? [.isSelected] : [])
+        .accessibilityHint("Double tap to change whether this copy is deleted")
         .accessibilityIdentifier("candidate.\(item.id)")
     }
 }

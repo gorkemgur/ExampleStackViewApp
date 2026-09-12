@@ -69,7 +69,7 @@ struct FoldersCardView: View {
                 onRemove(folder.id)
             } label: {
                 // Removing a grant is destructive and was drawn as decoration: a grey glyph in
-                // a 22pt box. Red, and a finger wide.
+                // a 22pt box. A finger wide, in the app's own accent.
                 Image(systemName: "minus.circle.fill")
                     .foregroundStyle(DS.deep)
                     .frame(width: 44, height: 44)

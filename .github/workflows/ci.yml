@@ -26,6 +26,16 @@ jobs:
           xcodebuild -version
           swift --version
 
+          # The app calls `glassEffect`, which exists only in the iOS 26 SDK. It is guarded at
+          # runtime with `#available`, but `#available` compiles against any SDK — so on an
+          # older image the failure is a bare "has no member 'glassEffect'" a thousand lines
+          # into a build log. Said out loud here instead.
+          MAJOR=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
+          if [ "$MAJOR" -lt 26 ]; then
+            echo "::error::This project needs Xcode 26 or newer for the iOS 26 SDK; this runner has $MAJOR."
+            exit 1
+          fi
+
       # The rule the whole layering rests on, enforced by the build rather than by
       # discipline. DupeCore holds the reasoning that decides what gets deleted, and it is
       # testable on a Linux box precisely because none of it can reach a platform framework.

@@ -219,6 +219,14 @@ final class ProgressThrottle: @unchecked Sendable {
     private let lock = NSLock()
     private var lastStage: ScanProgress.Stage?
     private var lastTick: Int = -1
+    /// The highest `completed` allowed through for the current stage.
+    ///
+    /// Every accepted update starts its own task on the main actor, and two independently
+    /// created tasks have no order between them — so the bar could tick backwards under load,
+    /// which is the "looks stuck" symptom this throttle exists to remove. Anything not
+    /// strictly newer than what has already gone through is dropped here, where the ordering
+    /// is still knowable.
+    private var lastCompleted: Int = -1
 
     func shouldPublish(_ update: ScanProgress) -> Bool {
         let tick = update.total > 0
@@ -233,9 +241,12 @@ final class ProgressThrottle: @unchecked Sendable {
         let isStageChange = update.stage != lastStage
         let isComplete = update.total > 0 && update.completed >= update.total
         guard isStageChange || isComplete || tick != lastTick else { return false }
+        // A new stage resets the count, so "newer" only means anything within one stage.
+        guard isStageChange || update.completed > lastCompleted else { return false }
 
         lastStage = update.stage
         lastTick = tick
+        lastCompleted = update.completed
         return true
     }
 }

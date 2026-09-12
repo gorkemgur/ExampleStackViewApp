@@ -228,7 +228,7 @@ struct RootView: View {
 
                     Spacer(minLength: 8)
 
-                    Eyebrow(DS.cost(tier), tint: DS.costTint(tier, onSlab: true))
+                    Eyebrow(DS.cost(tier), tint: DS.costTint(tier, isOnSlab: true))
                 }
             }
         }
