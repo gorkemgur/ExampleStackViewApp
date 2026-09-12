@@ -535,6 +535,10 @@ struct ReviewView: View {
                 GroupRowView(group: group, selectedCount: selected, tint: tint, loader: loader)
             }
             .buttonStyle(.plain)
+            // Named, because the tick box beside it is also a control on the same row: without
+            // this the only way into a group was to tap something and hope, and a test that
+            // taps and hopes is a test that toggles a deletion by accident.
+            .accessibilityIdentifier("review.open.\(group.id)")
         }
         .padding(.trailing, 12)
         .dsPanel(radius: 16)

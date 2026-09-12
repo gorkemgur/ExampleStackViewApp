@@ -88,6 +88,44 @@ final class ScanViewModelTests: XCTestCase {
         XCTAssertEqual(violations, [])
     }
 
+    /// The rescan panel exists because a finished scan used to be the end of the road: the
+    /// intro card only draws while `result` is nil, so "No duplicates found" on Strict had no
+    /// way on. Starting again has to actually clear the last answer, or the panel would sit
+    /// under the previous result forever.
+    func testScanningAgainClearsTheLastAnswerFirst() async {
+        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture())
+        model.start(items: StubMediaLibrary.sampleItems())
+        await waitUntilFinished(model)
+        XCTAssertNotNil(model.result)
+
+        model.start(items: StubMediaLibrary.sampleItems())
+
+        XCTAssertNil(model.result, "the previous result must not survive into the new scan")
+        XCTAssertTrue(model.isScanning)
+        XCTAssertFalse(model.wasCancelled)
+        XCTAssertNil(model.failure)
+
+        await waitUntilFinished(model)
+        XCTAssertNotNil(model.result)
+    }
+
+    /// And the strictness the user picks for the second run is the one it uses, rather than
+    /// whatever the first run was configured with.
+    func testTheSecondScanUsesTheStrictnessSetForIt() async {
+        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture())
+        model.strictness = .strict
+        model.start(items: StubMediaLibrary.sampleItems())
+        await waitUntilFinished(model)
+        let strict = model.result?.candidates.count ?? 0
+
+        model.strictness = .loose
+        model.start(items: StubMediaLibrary.sampleItems())
+        await waitUntilFinished(model)
+        let loose = model.result?.candidates.count ?? 0
+
+        XCTAssertGreaterThanOrEqual(loose, strict, "a looser setting cannot find less")
+    }
+
     func testAFinishedScanLeavesARecordBehind() async {
         let history = HistoryViewModel(store: InMemoryHistoryStore())
         await history.load()

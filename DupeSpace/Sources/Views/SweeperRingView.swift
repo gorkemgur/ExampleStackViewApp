@@ -172,7 +172,7 @@ struct SweeperRingView: View {
                 var swept = Path()
                 swept.move(to: CGPoint(x: inset, y: floorY))
                 swept.addLine(to: CGPoint(x: sweptTo, y: floorY))
-                context.opacity = scene.isFinished ? 1 - exit : 1
+                context.opacity = scene.isFinished ? Double(1 - exit) : 1
                 context.stroke(
                     swept,
                     with: .linearGradient(
@@ -268,7 +268,7 @@ struct SweeperRingView: View {
             // The figure keeps walking through the exit beat, then it is gone.
             guard !scene.isFinished || exit < 1 else { return }
             context.translateBy(x: exit * canvas.width * 0.16, y: 0)
-            context.opacity = 1 - exit
+            context.opacity = Double(1 - exit)
 
             let body = GraphicsContext.Shading.color(DS.onSlab)
 
