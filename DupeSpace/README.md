@@ -41,11 +41,33 @@ PhotoKit, Vision or SwiftUI types, so all of it runs under unit test:
 | `Matching` | BK-tree, pigeonhole-banded index, union-find, the clusterer |
 | `Scoring` | which copy survives, what may be pre-ticked, and the validator |
 | `Budget` | regret tiers and the "I need N bytes" planner |
-| `Scan` | the pipeline, its analyzer protocol and the thermal policy |
+| `Scan` | the pipeline, its analyzer protocol, the fingerprint cache, the thermal policy and the pause gate |
 | `Review` | selection state and the list the review screen reads |
+| `History` | the record of what was scanned and what was removed |
 
 `DupeSpace/Sources` is the app: PhotoKit adapters behind protocols, view models,
 and SwiftUI screens.
+
+## What it looks at
+
+Photos and videos from the photo library, plus any folders handed over from Files — iCloud
+Drive, On My iPhone, an external drive. The two sources are one library to the engine but keep
+their separate permission models, so a refused photo library does not take granted folders with
+it. Overlapping grants are refused: indexing one file through two of them would make it look
+like its own duplicate.
+
+Duplicates are found four ways, cheapest first. Metadata eliminates anything unique on kind,
+dimensions and size. Survivors are digested. Images that byte equality did not settle are
+fingerprinted twice, and both fingerprints have to agree. Videos are paired on duration — a
+transcode barely moves it — and only then opened and sampled frame by frame, which is what
+catches the copy that came back from a chat.
+
+Everything expensive is remembered, keyed by a content version derived from metadata the
+library already hands over, so a second scan of an unchanged library re-reads nothing. A scan
+can be held rather than cancelled, and slows itself down on a hot phone or in Low Power Mode.
+
+Every scan and every deletion leaves a record: what went, what was kept in its place, what it
+was worth, and how many days remain to undo it from Recently Deleted.
 
 ## The four rules it will not break
 
@@ -58,7 +80,9 @@ and SwiftUI screens.
    from scratch immediately before the library is told to destroy anything, because
    by then the selection has passed through UI state.
 3. **Favourites and album members are never pre-ticked**, and neither is anything
-   above the two tiers where deletion provably costs nothing.
+   above the two tiers where deletion provably costs nothing. Nor is a copy carrying edits the
+   survivor does not have: a digest covers the original resource, and work done on top of it is
+   not something "identical" can promise away.
 4. **Nothing is downloaded to be scanned.** Every read sets
    `isNetworkAccessAllowed = false`. An original that lives in iCloud is reported as
    deliberately unread rather than pulled down over someone's data plan.
@@ -71,6 +95,11 @@ only place that breaks that down. Free space is reported as an estimate because
 Photo deletions land in Recently Deleted for thirty days, so the confirmation
 separates space that comes back now from space that comes back then.
 
-Still to come: video keyframe similarity (`VideoMatcher` exists but the pipeline
-only matches videos byte-for-byte), scanning folders picked from Files, incremental
-rescans via `PHPhotoLibraryChangeObserver`, and background scanning.
+Background scanning is deliberately not built. A `BGProcessingTask` that requires external
+power may never run, nothing about it can be verified without a device, and the result would
+still be sitting there waiting to be reviewed. The fingerprint cache delivers what people
+actually wanted from it — a rescan that costs almost nothing — without any of that.
+
+What is genuinely untested: the app has never run against a real photo library. The perceptual
+thresholds are calibrated against synthetic images, so how the "similar" tier behaves on real
+photographs is the one thing only a device can answer.
