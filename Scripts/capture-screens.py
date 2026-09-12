@@ -73,6 +73,21 @@ def tap(element, settle=2.0):
     time.sleep(settle)
 
 
+def screen_bounds(tree):
+    """Widest and tallest extent any element reaches, in points."""
+    width = height = 0
+    for element in tree:
+        frame = element.get("frame") or {}
+        width = max(width, frame.get("x", 0) + frame.get("width", 0))
+        height = max(height, frame.get("y", 0) + frame.get("height", 0))
+    return width, height
+
+
+def tap_point(x, y, settle=2.0):
+    run(["idb", "ui", "tap", "--udid", UDID, str(int(x)), str(int(y))])
+    time.sleep(settle)
+
+
 def swipe_up():
     run(["idb", "ui", "swipe", "--udid", UDID, "200", "620", "200", "280"])
     time.sleep(1.0)
@@ -184,14 +199,20 @@ def capture_history():
     """The receipt, which only exists once something has actually been deleted."""
     tree = describe()
     tab = find(tree, "History", types={"Button"})
-    if tab is None:
-        print("History tab not found. Buttons on screen:")
-        for element in tree:
-            if element.get("type") == "Button" and element.get("AXLabel"):
-                print("   ", repr(element["AXLabel"]))
-        return 0
 
-    tap(tab, settle=2.5)
+    if tab is not None:
+        tap(tab, settle=2.5)
+    else:
+        # The floating tab bar is not part of the app's accessibility tree that idb walks,
+        # even though it is plainly on screen. Aim at it instead: second of two tabs, sitting
+        # just above the bottom edge.
+        width, height = screen_bounds(tree)
+        if width == 0 or height == 0:
+            print("could not work out the screen bounds")
+            return 0
+        print(f"tapping the History tab by position within {int(width)}x{int(height)}")
+        tap_point(width * 0.62, height * 0.925, settle=2.5)
+
     if wait_for("history.total", timeout=40) is None:
         return 0
 
