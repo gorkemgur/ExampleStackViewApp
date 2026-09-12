@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DupeSpace — a regret-ranked space budget for iOS</title>
+<meta name="description" content="DupeSpace is an on-device iOS duplicate finder that answers &quot;I need 12 GB back, what do I lose least?&quot; — candidates ranked by what deleting them actually costs you.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/icon.png" type="image/png">
+<style>
+:root {
+  --bg: #f4f5f7;
+  --bg-2: #eceef2;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --line: #e0e3e9;
+  --line-strong: #c9cfd9;
+  --ink: #14161a;
+  --ink-2: #4a5058;
+  --ink-3: #737b86;
+  --accent: #0a6fdb;
+  --accent-bright: #0a85ff;
+  --teal: #1596ad;
+  --teal-bright: #32d6eb;
+  --grad: linear-gradient(115deg, #0a85ff, #32d6eb);
+  --ok: #1d8a4e;
+  --warn: #b06a10;
+  --neutral: #6b7280;
+  --ok-soft: rgba(29,138,78,.20);
+  --warn-soft: rgba(176,106,16,.20);
+  --neutral-soft: rgba(107,114,128,.22);
+  --shadow: 0 1px 2px rgba(20,30,50,.05), 0 8px 24px -12px rgba(20,30,50,.18);
+  --radius: 16px;
+  --maxw: 1060px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0d11;
+    --bg-2: #101319;
+    --surface: #161a21;
+    --surface-2: #1b202a;
+    --line: #262c37;
+    --line-strong: #39404d;
+    --ink: #e9ecf1;
+    --ink-2: #b3bac5;
+    --ink-3: #858d99;
+    --accent: #57adff;
+    --accent-bright: #0a85ff;
+    --teal: #4cd9ee;
+    --teal-bright: #32d6eb;
+    --ok: #46c97e;
+    --warn: #e0a044;
+    --neutral: #8b94a1;
+    --ok-soft: rgba(70,201,126,.22);
+    --warn-soft: rgba(224,160,68,.22);
+    --neutral-soft: rgba(139,148,161,.24);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+section { padding: 56px 0; border-top: 1px solid var(--line); }
+h1, h2, h3 { line-height: 1.2; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+h2 { font-size: clamp(1.5rem, 4.2vw, 2rem); }
+h3 { font-size: 1.0625rem; letter-spacing: -.01em; }
+p { margin: 0 0 1em; }
+p:last-child { margin-bottom: 0; }
+.eyebrow {
+  font-size: .75rem; font-weight: 650; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0 0 12px;
+}
+.lede { color: var(--ink-2); font-size: 1.0625rem; max-width: 62ch; }
+.small { font-size: .875rem; color: var(--ink-3); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+
+/* ---------- hero ---------- */
+.hero { position: relative; border-top: 0; padding: 44px 0 56px; overflow: hidden; }
+.glow {
+  position: absolute; z-index: 0; pointer-events: none;
+  top: -280px; left: 50%; width: 900px; max-width: 150vw; height: 620px;
+  margin-left: -450px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(10,133,255,.20), rgba(50,214,235,.10) 55%, transparent 78%);
+  transform: translate3d(0, calc(var(--sy, 0) * 1px), 0);
+  will-change: transform;
+}
+@media (prefers-color-scheme: dark) {
+  .glow { background: radial-gradient(closest-side, rgba(10,133,255,.26), rgba(50,214,235,.12) 55%, transparent 78%); }
+}
+.hero .wrap { position: relative; z-index: 1; }
+.hero-grid { display: grid; gap: 40px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 800px) { .hero-grid { grid-template-columns: 1.15fr .85fr; gap: 48px; } }
+
+.brand { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
+.brand img { width: 60px; height: 60px; border-radius: 14px; box-shadow: var(--shadow); }
+.brand-name { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
+.brand-meta { font-size: .8125rem; color: var(--ink-3); }
+h1 { font-size: clamp(1.9rem, 6.4vw, 3rem); }
+h1 .grad {
+  background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero p.lede { margin-top: 18px; font-size: 1.09rem; }
+
+.cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 12px 20px; border-radius: 999px; font-weight: 600; font-size: .97rem;
+  text-decoration: none; border: 1px solid transparent; transition: transform .16s ease, box-shadow .16s ease;
+}
+.btn svg { width: 17px; height: 17px; fill: currentColor; flex: none; }
+.btn-primary { background: var(--grad); color: #fff; box-shadow: 0 6px 18px -8px rgba(10,133,255,.9); }
+.btn-primary:hover { transform: translateY(-1px); }
+.btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
+.btn-ghost:hover { border-color: var(--ink-3); }
+.hero-note { margin-top: 20px; max-width: 48ch; }
+
+/* ---------- phone frames ---------- */
+.phone {
+  border: 1px solid var(--line-strong);
+  border-radius: 26px; padding: 7px; background: var(--surface);
+  box-shadow: var(--shadow); max-width: 300px; margin: 0 auto;
+}
+.phone img { border-radius: 19px; }
+figure { margin: 0; }
+figcaption { font-size: .8125rem; color: var(--ink-3); margin-top: 12px; text-align: center; max-width: 34ch; margin-left: auto; margin-right: auto; }
+.shots { display: grid; gap: 28px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.shots .phone { max-width: 260px; }
+
+/* ---------- cards ---------- */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow);
+}
+.grid-2 { display: grid; gap: 18px; grid-template-columns: 1fr; }
+@media (min-width: 720px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+
+/* ---------- capacity bar ---------- */
+.capacity { margin-top: 34px; }
+.cap-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.cap-big { font-size: clamp(1.6rem, 5vw, 2.1rem); font-weight: 700; letter-spacing: -.03em; }
+.cap-bar {
+  display: flex; height: 14px; border-radius: 999px; overflow: hidden;
+  background: var(--bg-2); margin: 14px 0 16px; border: 1px solid var(--line);
+}
+.cap-seg { width: 0; min-width: 0; transition: width .9s cubic-bezier(.2,.7,.3,1); }
+.in .cap-seg { width: var(--w); }
+.cap-seg:nth-child(2) { transition-delay: .1s; }
+.cap-seg:nth-child(3) { transition-delay: .2s; }
+.cap-photos { background: var(--grad); min-width: 4px; }
+.cap-other { background: var(--line-strong); }
+.cap-free { background: repeating-linear-gradient(135deg, var(--bg-2), var(--bg-2) 5px, var(--line) 5px, var(--line) 10px); }
+.cap-key { display: flex; flex-wrap: wrap; gap: 6px 26px; }
+.cap-key div { font-size: .875rem; }
+.cap-key .k { display: flex; align-items: center; gap: 7px; color: var(--ink-3); }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dot-photos { background: var(--accent-bright); }
+.dot-other { background: var(--line-strong); }
+.dot-free { background: var(--neutral); opacity: .45; }
+.cap-key .v { font-weight: 650; }
+
+/* ---------- regret ladder ---------- */
+.ladder { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 12px; }
+.tier {
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+  border-radius: 14px; padding: 16px 18px;
+  opacity: .55; transition: opacity .45s ease, border-left-color .45s ease, transform .45s ease;
+}
+.tier.lit { opacity: 1; border-left-color: var(--tier-color); }
+.tier-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.tier-rank {
+  font-size: .75rem; font-weight: 700; color: var(--ink-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.tier-cost {
+  margin-left: auto; font-size: .75rem; font-weight: 650; letter-spacing: .02em;
+  padding: 3px 10px; border-radius: 999px; color: var(--tier-color);
+  border: 1px solid currentColor; white-space: nowrap;
+}
+.tier p { margin: 6px 0 0; color: var(--ink-2); font-size: .9375rem; max-width: 60ch; }
+.tier-meterrow { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.tier-track { flex: 1; min-width: 0; height: 8px; background: var(--bg-2); border-radius: 999px; overflow: hidden; }
+.tier-bar {
+  width: 0; height: 100%; border-radius: 999px; background: var(--line-strong);
+  transition: width .7s cubic-bezier(.2,.7,.3,1);
+  position: relative; overflow: hidden;
+}
+.tier.lit .tier-bar { width: var(--w); background: var(--tier-soft); }
+.tier-taken {
+  position: absolute; inset: 0 auto 0 0; width: var(--taken, 0%);
+  background: var(--tier-color); border-radius: 999px; transition: width .28s ease;
+}
+.tier-size { font-size: .8125rem; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.t0, .t1 { --tier-color: var(--ok); --tier-soft: var(--ok-soft); }
+.t2 { --tier-color: var(--warn); --tier-soft: var(--warn-soft); }
+.t3 { --tier-color: var(--neutral); --tier-soft: var(--neutral-soft); }
+
+/* ---------- budget slider ---------- */
+.budget { margin-top: 22px; }
+.budget-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.budget-need { font-size: 1.05rem; color: var(--ink-2); }
+.budget-value { font-size: clamp(1.6rem, 5vw, 2rem); font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; margin: 18px 0 6px;
+  background: transparent; height: 28px; display: block;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line);
+}
+input[type="range"]::-moz-range-track { height: 8px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border-radius: 50%;
+  background: #fff; border: 1px solid var(--line-strong); box-shadow: var(--shadow);
+  margin-top: -10px; cursor: grab;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 24px; height: 24px; border-radius: 50%; background: #fff;
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow); cursor: grab;
+}
+.ticks { display: flex; justify-content: space-between; font-size: .75rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.plan {
+  margin-top: 18px; padding: 16px 18px; border-radius: 12px;
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.plan-main { font-weight: 600; }
+.plan-cost { margin-top: 6px; color: var(--ink-2); font-size: .9375rem; }
+
+/* ---------- steps ---------- */
+.steps { list-style: none; counter-reset: s; margin: 26px 0 0; padding: 0; display: grid; gap: 16px; }
+@media (min-width: 760px) { .steps { grid-template-columns: 1fr 1fr; } }
+.step { counter-increment: s; position: relative; padding-left: 46px; }
+.step::before {
+  content: counter(s); position: absolute; left: 0; top: 1px;
+  width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  font-size: .8125rem; font-weight: 700; color: #fff; background: var(--grad);
+}
+.step p { margin: 5px 0 0; color: var(--ink-2); font-size: .9375rem; }
+
+/* ---------- rules ---------- */
+.rules { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 14px; }
+@media (min-width: 860px) { .rules { grid-template-columns: 1fr 1fr; } }
+.rule { border-left: 3px solid var(--accent-bright); padding: 2px 0 2px 16px; }
+.rule h3 { font-size: 1rem; }
+.rule p { margin: 5px 0 0; color: var(--ink-2); font-size: .9375rem; }
+
+/* ---------- limits ---------- */
+.limits { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 14px; }
+@media (min-width: 860px) { .limits { grid-template-columns: 1fr 1fr; } }
+.limit { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+.limit h3 { font-size: .9375rem; color: var(--warn); }
+.limit p { margin: 6px 0 0; font-size: .9375rem; color: var(--ink-2); }
+
+/* ---------- footer ---------- */
+footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: var(--bg-2); }
+.foot-grid { display: flex; flex-wrap: wrap; gap: 20px 40px; align-items: center; justify-content: space-between; }
+.foot-brand { display: flex; align-items: center; gap: 12px; }
+.foot-brand img { width: 36px; height: 36px; border-radius: 9px; }
+
+/* ---------- reveal ---------- */
+.reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.3,1); }
+.reveal.in { opacity: 1; transform: none; }
+.stagger > * { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s cubic-bezier(.2,.7,.3,1); }
+.stagger.in > * { opacity: 1; transform: none; }
+.stagger.in > *:nth-child(2) { transition-delay: .08s; }
+.stagger.in > *:nth-child(3) { transition-delay: .16s; }
+.stagger.in > *:nth-child(4) { transition-delay: .24s; }
+.stagger.in > *:nth-child(5) { transition-delay: .32s; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  .reveal, .stagger > * { opacity: 1 !important; transform: none !important; }
+  .glow { transform: none !important; }
+}
+</style>
+</head>
+<body>
+
+<a class="btn-skip" href="#main" style="position:absolute;left:-9999px">Skip to content</a>
+
+<header class="hero">
+  <div class="glow" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="brand reveal">
+          <img src="assets/icon.png" width="256" height="256" alt="The DupeSpace app icon: a white rounded square overlapping a lighter one, on a blue-to-teal gradient.">
+          <div>
+            <div class="brand-name">DupeSpace</div>
+            <div class="brand-meta">iOS 17+ · SwiftUI · entirely on-device</div>
+          </div>
+        </div>
+
+        <h1 class="reveal">I need 12 GB back.<br><span class="grad">What do I lose least?</span></h1>
+
+        <p class="lede reveal">Every duplicate finder hands you a list and leaves the arithmetic to you.
+          DupeSpace answers the sentence you actually had in your head. It ranks everything it is
+          willing to delete by what deleting it costs you — identical copies first, your judgement
+          calls last — and tells you what each tier is worth in gigabytes before you touch anything.</p>
+
+        <div class="cta-row reveal">
+          <a class="btn btn-primary" href="https://github.com/gorkemgur/ExampleStackViewApp">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+            See the code on GitHub
+          </a>
+          <a class="btn btn-ghost" href="#idea">Read how it decides</a>
+        </div>
+
+        <p class="small hero-note reveal">Not on the App Store, and there is nothing to buy. The screenshots on this
+          page come from a simulator run against fixture data, so the numbers in them are the fixtures'.</p>
+      </div>
+
+      <figure class="reveal">
+        <div class="phone">
+          <img src="screenshots/01-overview.png" width="750" height="1334"
+               alt="The DupeSpace overview screen. A card reads 299.68 GB used of 343.07 GB with a segmented bar, broken into Photos and videos 4.55 GB, Everything else 295.13 GB, Free 43.39 GB, and a note that free space is an estimate. Below it a card headed Find what you can lose least offers a Scan for duplicates button.">
+        </div>
+        <figcaption>The first screen is a budget, not a list.</figcaption>
+      </figure>
+    </div>
+
+    <div class="capacity card reveal" id="capacity">
+      <p class="eyebrow">What the app can actually see</p>
+      <div class="cap-top">
+        <span class="cap-big">299.68 GB</span>
+        <span class="lede">used of 343.07 GB</span>
+      </div>
+      <div class="cap-bar" role="img" aria-label="Storage split: photos and videos 4.55 gigabytes, everything else 295.13 gigabytes, free 43.39 gigabytes, of 343.07 gigabytes total.">
+        <span class="cap-seg cap-photos" style="--w:1.33%"></span>
+        <span class="cap-seg cap-other" style="--w:86.03%"></span>
+        <span class="cap-seg cap-free" style="--w:12.65%"></span>
+      </div>
+      <div class="cap-key">
+        <div><div class="k"><span class="dot dot-photos"></span>Photos &amp; videos</div><div class="v">4.55 GB</div></div>
+        <div><div class="k"><span class="dot dot-other"></span>Everything else</div><div class="v">295.13 GB</div></div>
+        <div><div class="k"><span class="dot dot-free"></span>Free</div><div class="v">43.39 GB</div></div>
+      </div>
+      <p class="small" style="margin-top:14px">Only the first slice is DupeSpace's to work with. Free space is an estimate —
+        iOS counts storage it can purge on demand as available.</p>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<section id="idea">
+  <div class="wrap">
+    <p class="eyebrow reveal">The idea</p>
+    <h2 class="reveal">A space budget, ranked by regret</h2>
+    <p class="lede reveal" style="margin-top:14px">Apple's Photos finds duplicates and offers to merge them. It does not show
+      you why two pictures matched, does not let you pick which one survives, and never says how many
+      gigabytes you get. So you are handed a list and left holding the real question. DupeSpace starts
+      from the question: you set a target, and it builds the cheapest set of deletions that reaches it,
+      cheapest meaning least regretted.</p>
+
+    <ol class="ladder" id="ladder">
+      <li class="tier t0" data-gb="4.1" data-items="38">
+        <div class="tier-head">
+          <span class="tier-rank">TIER 0</span>
+          <h3>Identical copies</h3>
+          <span class="tier-cost">Loses nothing</span>
+        </div>
+        <p>Byte for byte the same file. Deleting these loses nothing at all.</p>
+        <div class="tier-meterrow">
+          <div class="tier-track"><div class="tier-bar" style="--w:66%"><div class="tier-taken"></div></div></div>
+          <div class="tier-size">4.1 GB · 38 items</div>
+        </div>
+      </li>
+      <li class="tier t1" data-gb="5.3" data-items="112">
+        <div class="tier-head">
+          <span class="tier-rank">TIER 1</span>
+          <h3>Lower-quality re-sends</h3>
+          <span class="tier-cost">Loses nothing</span>
+        </div>
+        <p>Smaller re-encodes of a photo you still have at full size. The 1280px copy that came back
+          from a chat, while the 4032px original stays.</p>
+        <div class="tier-meterrow">
+          <div class="tier-track"><div class="tier-bar" style="--w:85%"><div class="tier-taken"></div></div></div>
+          <div class="tier-size">5.3 GB · 112 items</div>
+        </div>
+      </li>
+      <li class="tier t2" data-gb="3.7" data-items="61">
+        <div class="tier-head">
+          <span class="tier-rank">TIER 2</span>
+          <h3>Burst leftovers</h3>
+          <span class="tier-cost">Very low</span>
+        </div>
+        <p>Other frames from one press of the shutter, with the sharpest frame staying. Worth a look first.</p>
+        <div class="tier-meterrow">
+          <div class="tier-track"><div class="tier-bar" style="--w:60%"><div class="tier-taken"></div></div></div>
+          <div class="tier-size">3.7 GB · 61 items</div>
+        </div>
+      </li>
+      <li class="tier t3" data-gb="6.2" data-items="74">
+        <div class="tier-head">
+          <span class="tier-rank">TIER 3</span>
+          <h3>Similar shots</h3>
+          <span class="tier-cost">Your call</span>
+        </div>
+        <p>Alike, but not the same photo. Four takes of one view. Nothing here is ever ticked for you.</p>
+        <div class="tier-meterrow">
+          <div class="tier-track"><div class="tier-bar" style="--w:100%"><div class="tier-taken"></div></div></div>
+          <div class="tier-size">6.2 GB · 74 items</div>
+        </div>
+      </li>
+    </ol>
+
+    <div class="grid-2 reveal" style="margin-top:26px;align-items:start">
+      <div class="card budget">
+        <p class="eyebrow">Try the question</p>
+        <div class="budget-head">
+          <span class="budget-need">I need</span>
+          <span class="budget-value" id="budget-value">12.0 GB</span>
+          <span class="budget-need">back</span>
+        </div>
+        <input type="range" id="budget" min="1" max="20" step="0.5" value="12"
+               aria-label="Space target in gigabytes" aria-valuetext="12.0 gigabytes">
+        <div class="ticks" aria-hidden="true"><span>1 GB</span><span>10 GB</span><span>20 GB</span></div>
+        <div class="plan">
+          <div id="plan-out" aria-live="polite">
+            <p class="plan-main">Plan: <span class="num">12.0 GB</span> across 173 items.</p>
+            <p class="plan-cost">The two zero-loss tiers give 9.4 GB. The rest comes from
+              <span class="plan-reach">burst leftovers</span>.</p>
+          </div>
+        </div>
+        <p class="small" style="margin-top:12px">Sample numbers, to show the shape of the answer. The app works
+          these out from your own library, and selects nothing until you say so.</p>
+      </div>
+
+      <figure>
+        <div class="phone">
+          <img src="screenshots/04-review.png" width="750" height="1334" loading="lazy"
+               alt="The Review screen. A Space budget card reads I need 2.02 GB back above a slider at full travel, a three-way segmented control showing No loss, plus bursts, plus similar, and the line 3 items, 2.02 GB — reaching as far as lower-quality re-sends. A red Delete 3 items button sits in the bottom bar next to the running total.">
+        </div>
+        <figcaption>The same slider in the app, over a real scan.</figcaption>
+      </figure>
+    </div>
+
+    <figure class="reveal" style="margin-top:36px">
+      <div class="phone">
+        <img src="screenshots/03-results.png" width="750" height="1334" loading="lazy"
+             alt="The results screen. A card reads 2.03 GB across 6 items you could remove with a Review and choose button, followed by tier cards: Identical copies 1.84 GB in 1 item, Lower-quality re-sends 180.4 MB in 2 items, Burst leftovers 12.3 MB in 3 items.">
+      </div>
+      <figcaption>Every screen leads with what it is worth.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <p class="eyebrow reveal">How it works</p>
+    <h2 class="reveal">Four passes, cheapest first</h2>
+    <p class="lede reveal" style="margin-top:14px">Expensive work is only ever done on what survived the cheap work.
+      Nothing leaves the device, and nothing is downloaded to be looked at.</p>
+
+    <ol class="steps stagger">
+      <li class="step">
+        <h3>Metadata eliminates almost everything</h3>
+        <p>Kind, dimensions and file size are compared first. Anything unique on those three can have no
+          duplicate and is out before a single byte is read.</p>
+      </li>
+      <li class="step">
+        <h3>Survivors are digested</h3>
+        <p>What is left is streamed through SHA-256. Equal digests mean equal files, and that equality is
+          transitive, so byte-identical copies are grouped with union-find.</p>
+      </li>
+      <li class="step">
+        <h3>Two fingerprints that must agree</h3>
+        <p>Images byte equality did not settle get a dHash and a DCT-based pHash. The two are sensitive to
+          different mistakes, so both have to agree before a pair counts as a match.</p>
+      </li>
+      <li class="step">
+        <h3>Videos are opened last</h3>
+        <p>Videos pair on duration — a transcode barely moves it — and only then get sampled frame by frame.
+          That is what catches the copy that came back from a chat.</p>
+      </li>
+    </ol>
+
+    <div class="grid-2 reveal" style="margin-top:34px;align-items:center">
+      <div class="card">
+        <h3>And then it remembers</h3>
+        <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">Everything expensive is cached against a
+          content version the photo library already hands over, so a second scan of an unchanged library re-reads
+          nothing. A scan can be held rather than cancelled, and slows itself down on a hot phone or in Low Power Mode.
+          Every scan and every deletion leaves a record: what went, what was kept in its place, what it was worth,
+          and how many days remain to undo it.</p>
+      </div>
+      <figure>
+        <div class="phone">
+          <img src="screenshots/02-scan.png" width="750" height="1334" loading="lazy"
+               alt="The Find duplicates screen. A card headed Scan 28 items explains that metadata is compared first so only the handful of items that could possibly match ever get read, that nothing is downloaded from iCloud and nothing is deleted without you saying so, above a Start scan button.">
+        </div>
+        <figcaption>The scan screen says what it is about to do.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="rules">
+  <div class="wrap">
+    <p class="eyebrow reveal">Fixed by tests, not by intention</p>
+    <h2 class="reveal">The four rules it will not break</h2>
+
+    <ol class="rules stagger">
+      <li class="rule">
+        <h3>1. Nothing is deleted on transitive evidence</h3>
+        <p>Digest equality is transitive, so byte-identical copies can be grouped with union-find. A distance
+          threshold is not: A~B and B~C says nothing about A~C. Similar photos are therefore clustered as stars
+          around the copy that survives, and every member was measured against that copy directly.</p>
+      </li>
+      <li class="rule">
+        <h3>2. A group never loses every copy</h3>
+        <p>Checked by <span class="mono">CleanupValidator</span>, which re-runs from scratch immediately before the
+          library is told to destroy anything — because by then the selection has passed through UI state.</p>
+      </li>
+      <li class="rule">
+        <h3>3. Favourites and album members are never pre-ticked</h3>
+        <p>Neither is anything above the two tiers where deletion provably costs nothing, nor a copy carrying edits
+          the survivor does not have. A digest covers the original resource; work done on top of it is not something
+          "identical" can promise away.</p>
+      </li>
+      <li class="rule">
+        <h3>4. Nothing is downloaded to be scanned</h3>
+        <p>Every read sets <span class="mono">isNetworkAccessAllowed = false</span>. An original that lives in iCloud
+          is reported as deliberately unread, rather than pulled down over someone's data plan.</p>
+      </li>
+    </ol>
+
+    <div class="grid-2 reveal" style="margin-top:30px;align-items:center">
+      <div class="card">
+        <h3>Where the rules live</h3>
+        <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">Every decision that can destroy a file
+          sits in <span class="mono">DupeCore</span>, a package with no PhotoKit, Vision or SwiftUI types in it, so all of
+          it runs under unit test without a simulator. Which copy survives is a rule you can read on screen — favourite or
+          album member, then edited, then highest resolution, then largest file, then oldest — and change whenever you
+          disagree.</p>
+      </div>
+      <figure>
+        <div class="phone">
+          <img src="screenshots/08-receipt.png" width="750" height="1334" loading="lazy"
+               alt="The History screen with a deletion receipt expanded. It reads 2.02 GB reclaimed across 3 items, a card saying the most recent deletion is recoverable for 30 more days in Photos, Recently Deleted, then the removed files listed one by one, each with the file it was kept instead of and which tier it came from.">
+        </div>
+        <figcaption>Every deletion leaves a receipt: what went, and what was kept in its place.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="outside">
+  <div class="wrap">
+    <p class="eyebrow reveal">Outside the app</p>
+    <h2 class="reveal">One state, on every surface</h2>
+
+    <div class="grid-2 reveal" style="margin-top:22px;align-items:start">
+      <div>
+        <div class="card" style="margin-bottom:18px">
+          <h3>The widget</h3>
+          <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">Free space, what the last scan found,
+            and how much has been reclaimed in total — in five families, down to the inline one. It reads a snapshot the app
+            leaves in a shared container rather than computing anything: a widget gets a few tens of milliseconds and no photo
+            library access at all. The write is a file, and atomic, so a widget reloading mid-write reads the previous
+            snapshot instead of half of the next one.</p>
+        </div>
+        <div class="card">
+          <h3>The Live Activity</h3>
+          <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">A scan of a full library takes minutes,
+            and nobody watches a progress bar for minutes, so a running scan appears on the Lock Screen and in the Dynamic
+            Island. Every surface renders one state, so a scan cannot be 40% done in one place and 60% in another, and nothing
+            is claimed found until the scan has actually decided. Updates are rationed against ActivityKit's budget, except
+            the ones a person would notice: a change of stage, a hold, and the end.</p>
+        </div>
+        <p class="small" style="margin-top:16px">Both are best-effort. No App Group, an iPad, or Live Activities switched
+          off means no widget and no live scan — and exactly the same scan.</p>
+      </div>
+      <figure>
+        <div class="phone">
+          <img src="screenshots/01b-live-surfaces.png" width="750" height="1334" loading="lazy"
+               alt="A Live surfaces sheet previewing each scan state twice, as a Dynamic Island pill and as a Lock Screen card. Running shows Scanning, Fingerprinting 1,204 of 5,000, 24% with a blue progress bar. Held shows Paused, held at 2,600 of 5,000 in amber. Finished shows Found space, 4.3 GB in 128 items, with a green-to-teal bar.">
+        </div>
+        <figcaption>Every scan state, on both surfaces, rendered from one source.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="limits">
+  <div class="wrap">
+    <p class="eyebrow reveal">The honest part</p>
+    <h2 class="reveal">What iOS does not allow</h2>
+    <p class="lede reveal" style="margin-top:14px">A storage app that overstates what it can see is worse than no storage app.
+      These are the limits, said plainly rather than buried.</p>
+
+    <ul class="limits stagger">
+      <li class="limit">
+        <h3>No app can see another app's storage</h3>
+        <p>There is no API for it. What WhatsApp, Mail or Instagram are holding is visible only in
+          Settings › General › iPhone Storage, and DupeSpace will never pretend otherwise. It works on the photo
+          library and on folders you hand it from Files.</p>
+      </li>
+      <li class="limit">
+        <h3>Free space is an estimate</h3>
+        <p><span class="mono">volumeAvailableCapacityForImportantUsage</span> counts storage the system would purge on
+          demand, so the number can read higher than what is truly free. It is labelled an estimate on screen.</p>
+      </li>
+      <li class="limit">
+        <h3>Deletions sit in Recently Deleted for 30 days</h3>
+        <p>Space does not come back the moment you tap delete. The confirmation separates what comes back now from what
+          comes back after you empty that album, and history keeps counting the days you have left to change your mind.</p>
+      </li>
+      <li class="limit">
+        <h3>Background scanning is not built</h3>
+        <p>A processing task that requires external power may never run, nothing about it can be verified without a device,
+          and the result would be sitting there waiting to be reviewed anyway. The fingerprint cache gives the thing people
+          actually wanted — a rescan that costs almost nothing — without any of that.</p>
+      </li>
+      <li class="limit">
+        <h3>It has never run against a real photo library</h3>
+        <p>The perceptual thresholds are calibrated against synthetic images. How the "similar" tier behaves on real
+          photographs is the one question only a device can answer, and it has not been asked yet.</p>
+      </li>
+      <li class="limit">
+        <h3>Some originals live in iCloud</h3>
+        <p>With Optimize Storage on, an asset's original may not be on the device. Those are reported as deliberately
+          unread and counted separately, because deleting them frees iCloud rather than the phone in your hand.</p>
+      </li>
+    </ul>
+
+    <div class="shots reveal" style="margin-top:36px">
+      <figure>
+        <div class="phone">
+          <img src="screenshots/05-confirm.png" width="750" height="1334" loading="lazy"
+               alt="The confirmation sheet over the Review screen. It reads 2.02 GB comes back to this device, then a section headed When you get it back with a line reading After emptying, 2.02 GB, above a red Delete 3 items button and a Cancel button.">
+        </div>
+        <figcaption>The confirmation splits space that comes back now from space that comes back later.</figcaption>
+      </figure>
+      <figure>
+        <div class="phone">
+          <img src="screenshots/06-deleted.png" width="750" height="1334" loading="lazy"
+               alt="The Review screen after deleting. A card reads 3 items removed, says the receipt is in History with what went and what was kept in its place, and that they are in Recently Deleted for 30 days and emptying that album in Photos is what gets the space back now. Below it the space budget slider has reset to zero selected.">
+        </div>
+        <figcaption>And afterwards it tells you the deletion is not final yet.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-grid">
+    <div class="foot-brand">
+      <img src="assets/icon.png" width="256" height="256" alt="">
+      <div>
+        <div style="font-weight:650">DupeSpace</div>
+        <div class="small">On-device duplicate finder and storage analyser for iOS.</div>
+      </div>
+    </div>
+    <div>
+      <a class="btn btn-ghost" href="https://github.com/gorkemgur/ExampleStackViewApp">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        See the code on GitHub
+      </a>
+      <p class="small" style="margin-top:12px">Not on the App Store. No account, no network, no analytics.</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- scroll reveal ---- */
+  var revealables = document.querySelectorAll(".reveal, .stagger, #ladder, #capacity");
+
+  function show(el) {
+    el.classList.add("in");
+    if (el.id === "ladder") lightLadder();
+  }
+
+  if (reduced || !("IntersectionObserver" in window)) {
+    Array.prototype.forEach.call(revealables, show);
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        show(entry.target);
+        io.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.15 });
+    Array.prototype.forEach.call(revealables, function (el) { io.observe(el); });
+  }
+
+  /* ---- the ladder lights up cheapest first ---- */
+  var tiers = Array.prototype.slice.call(document.querySelectorAll("#ladder .tier"));
+  var ladderLit = false;
+
+  function lightLadder() {
+    if (ladderLit) return;
+    ladderLit = true;
+    tiers.forEach(function (tier, i) {
+      if (reduced) { tier.classList.add("lit"); }
+      else { setTimeout(function () { tier.classList.add("lit"); }, i * 240); }
+    });
+  }
+
+  /* ---- the budget slider ---- */
+  var slider = document.getElementById("budget");
+  var valueOut = document.getElementById("budget-value");
+  var planOut = document.getElementById("plan-out");
+
+  var TIERS = tiers.map(function (el, i) {
+    return {
+      el: el,
+      fill: el.querySelector(".tier-taken"),
+      name: el.querySelector("h3").textContent,
+      gb: parseFloat(el.getAttribute("data-gb")),
+      items: parseInt(el.getAttribute("data-items"), 10),
+      index: i
+    };
+  });
+  var TOTAL = TIERS.reduce(function (sum, t) { return sum + t.gb; }, 0);
+  var LOSSLESS = TIERS[0].gb + TIERS[1].gb;
+
+  var COST = [
+    "Nothing is lost. Every file in this plan is byte-for-byte identical to one that stays.",
+    "Nothing is lost. The rest are smaller re-encodes of photos you still have at full size.",
+    "The two zero-loss tiers give " + LOSSLESS.toFixed(1) + " GB. The rest comes from bursts — other frames of one shutter press, with the sharpest frame staying.",
+    "The first three tiers give " + (LOSSLESS + TIERS[2].gb).toFixed(1) + " GB. Past that it is similar shots, and nothing there is ever ticked for you."
+  ];
+
+  function gb(n) { return n.toFixed(1) + " GB"; }
+
+  function render() {
+    var target = parseFloat(slider.value);
+    var remaining = target;
+    var items = 0;
+    var reached = null;
+
+    TIERS.forEach(function (tier) {
+      var take = Math.max(0, Math.min(remaining, tier.gb));
+      remaining -= take;
+      if (take > 0) {
+        items += Math.round(tier.items * (take / tier.gb));
+        reached = tier;
+      }
+      tier.fill.style.width = (take / tier.gb * 100) + "%";
+      tier.el.style.opacity = "";
+    });
+
+    var got = Math.min(target, TOTAL);
+    valueOut.textContent = gb(target);
+    slider.setAttribute("aria-valuetext", target.toFixed(1) + " gigabytes");
+
+    var main, cost;
+    if (target > TOTAL) {
+      main = "All four tiers together come to " + gb(TOTAL) + " across " + items + " items.";
+      cost = "A " + gb(target) + " target is more than this library has to give. The app would say so rather than pad the list.";
+    } else {
+      main = "Plan: " + gb(got) + " across " + items + " items.";
+      cost = COST[reached ? reached.index : 0];
+      if (reached && reached.index >= 2) {
+        cost = cost.replace(reached.name.toLowerCase(), reached.name.toLowerCase());
+      }
+    }
+
+    planOut.innerHTML = "";
+    var p1 = document.createElement("p");
+    p1.className = "plan-main";
+    p1.textContent = main;
+    var p2 = document.createElement("p");
+    p2.className = "plan-cost";
+    p2.textContent = cost;
+    planOut.appendChild(p1);
+    planOut.appendChild(p2);
+  }
+
+  if (slider) {
+    slider.addEventListener("input", render);
+    render();
+  }
+
+  /* ---- gradient drift behind the hero ---- */
+  var glow = document.querySelector(".glow");
+  if (glow && !reduced) {
+    var ticking = false;
+    var onScroll = function () {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(function () {
+        var y = window.pageYOffset || document.documentElement.scrollTop;
+        glow.style.setProperty("--sy", Math.min(y * 0.25, 220));
+        ticking = false;
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+  }
+})();
+</script>
+</body>
+</html>
