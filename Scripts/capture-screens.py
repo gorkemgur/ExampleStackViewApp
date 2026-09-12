@@ -132,6 +132,54 @@ def shot(name):
     return ok
 
 
+def dump_tree(reason):
+    """Write the accessibility tree out when the walk cannot find something.
+
+    The walk has failed to reach the same three screens for several runs, and the report said
+    only "no entry point found" — which names the symptom and nothing else. A missing control
+    is either absent, renamed, or present under a shape the lookup does not match, and those
+    need different fixes. The tree is the evidence; it travels with the artifacts.
+    """
+    tree = describe()
+    path = os.path.join(OUT_DIR, f"tree-{reason}.json")
+    try:
+        with open(path, "w") as handle:
+            json.dump(tree, handle, indent=1)
+    except OSError:
+        pass
+
+    print(f"--- tree at {reason}: {len(tree)} elements ---")
+    for element in tree:
+        kind = element.get("type")
+        if kind not in ("Button", "Link", "Image", "Other"):
+            continue
+        label = element.get("AXLabel")
+        identifier = element.get("AXUniqueId")
+        if not label and not identifier:
+            continue
+        print(f"    {kind}: id={identifier!r} label={label!r}")
+    print(f"--- end tree at {reason} ---")
+
+
+def back_chevron(tree):
+    """The navigation bar's back button, found by shape rather than by its words.
+
+    Its label is the *previous* screen's title, so matching on a list of titles breaks the
+    moment one is renamed — and on iOS 26 a bar button may not carry the identifier at all.
+    What does not change is where it sits: leftmost, in the top 120 points.
+    """
+    candidates = [
+        element
+        for element in tree
+        if element.get("type") == "Button"
+        and (element.get("frame") or {}).get("y", 999) < 120
+        and (element.get("frame") or {}).get("x", 999) < 80
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda element: (element.get("frame") or {}).get("x", 999))
+
+
 def wait_for(identifier, timeout=150):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -254,6 +302,7 @@ def capture_live_surfaces():
     entry = find(describe(), "root.livesurfaces")
     if entry is None:
         print("no live-surfaces entry on the overview")
+        dump_tree("overview-no-livesurfaces")
         return 0
 
     tap(entry, settle=2.0)
@@ -290,10 +339,20 @@ def pop_to_overview(limit=4):
             ),
             None,
         )
+        # Falls back to position. The label is the previous screen's title, which is a moving
+        # target, and this walk has been failing to get back to the overview for several runs
+        # on exactly that lookup.
         if back is None:
+            back = back_chevron(tree)
+        if back is None:
+            dump_tree("stuck-going-back")
             return False
         tap(back, settle=1.5)
-    return find(describe(), "history.open") is not None
+
+    if find(describe(), "history.open") is not None:
+        return True
+    dump_tree("overview-no-history")
+    return False
 
 
 def capture_history():

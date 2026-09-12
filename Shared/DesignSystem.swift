@@ -456,8 +456,12 @@ struct ReachPicker<Value: Hashable>: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                             .frame(maxWidth: .infinity)
-                            // The whole column is the target, not just the glyphs in it.
-                            .frame(minHeight: 34)
+                            // The whole column is the target, not just the glyphs in it, and
+                            // it is a full 44pt tall. The simulator audit caught this at 34
+                            // on the first run of this control — a stock segmented picker is
+                            // 32 and gets away with it because the system draws it; a
+                            // hand-built one has to earn the height itself.
+                            .frame(minHeight: 44)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
