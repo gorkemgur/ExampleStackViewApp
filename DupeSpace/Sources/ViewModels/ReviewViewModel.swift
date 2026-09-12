@@ -180,6 +180,7 @@ final class ReviewViewModel: ObservableObject {
         if let cachedKindSections { return cachedKindSections }
 
         let value = availableKinds
+            .filter { kindFilter == nil || kindFilter == $0 }
             .map { kind in
                 KindSection(
                     kind: kind,

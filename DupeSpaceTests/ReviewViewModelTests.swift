@@ -387,10 +387,11 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertTrue(model.availableKinds.contains(.video), "the fixture has video duplicates")
 
         model.kindFilter = .video
-        let visible = model.visibleSections.flatMap(\.groups)
+        let visible = model.kindSections.flatMap { $0.sections.flatMap(\.groups) }
 
         XCTAssertFalse(visible.isEmpty)
         XCTAssertTrue(visible.allSatisfy { $0.keeper.kind == .video })
+        XCTAssertEqual(model.kindSections.map(\.kind), [.video], "only the filtered kind has a section")
         XCTAssertEqual(model.sections.flatMap(\.groups).count, everything, "the scan itself is untouched")
     }
 
@@ -400,6 +401,44 @@ final class ReviewViewModelTests: XCTestCase {
         let found = Set(model.sections.flatMap { $0.groups.map { $0.keeper.kind } })
 
         XCTAssertEqual(Set(model.availableKinds), found)
+    }
+
+    /// Kind is the outer level of the list and cost the inner one, and every group has to land
+    /// in exactly one place in that structure.
+    func testEveryGroupAppearsUnderExactlyOneKindAndOneTier() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+
+        let placed = model.kindSections.flatMap { kindSection in
+            kindSection.sections.flatMap { section in
+                section.groups.map { "\(kindSection.kind.rawValue)|\(section.tier.rawValue)|\($0.id)" }
+            }
+        }
+        XCTAssertEqual(Set(placed).count, placed.count, "a group is listed twice")
+        XCTAssertEqual(placed.count, model.sections.flatMap(\.groups).count, "a group went missing")
+
+        for kindSection in model.kindSections {
+            for section in kindSection.sections {
+                XCTAssertTrue(
+                    section.groups.allSatisfy { $0.keeper.kind == kindSection.kind },
+                    "a \(kindSection.kind) section holds something else"
+                )
+            }
+        }
+    }
+
+    /// Filter to a kind, delete all of it, and the filter used to survive with no control left
+    /// on screen to clear it — an empty list over everything else, still hidden.
+    func testAFilterWhoseKindIsGoneClearsItself() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard let kind = model.availableKinds.first else { return XCTFail("fixture has no kinds") }
+
+        model.kindFilter = kind
+        model.setSelected(true, in: model.visibleSections.flatMap(\.groups)[0])
+        await model.delete()
+
+        if !model.availableKinds.contains(kind) {
+            XCTAssertNil(model.kindFilter, "a filter with nothing behind it has to let go")
+        }
     }
 
     func testTheTallyForEverythingIsTheSumOfItsParts() async {
