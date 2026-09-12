@@ -276,15 +276,19 @@ struct MeterTrack: View {
 
     var body: some View {
         GeometryReader { proxy in
-            HStack(spacing: 2) {
+            // One shape, not a row of rounded slugs with gaps between them. This measures a
+            // single disk, and a single quantity drawn as separate pieces reads as three
+            // unrelated things. The colour change is the boundary; it needs no gap to be seen.
+            HStack(spacing: 0) {
                 ForEach(segments) { segment in
-                    RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                    Rectangle()
                         .fill(segment.color.opacity(segment.isMuted ? 0.22 : 1))
                         .frame(width: width(for: segment.value, in: proxy.size.width))
                 }
-                RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                Rectangle()
                     .fill(DS.well)
             }
+            .clipShape(Capsule(style: .continuous))
         }
         .frame(height: height)
         .animation(Motion.content, value: segments)
@@ -295,6 +299,6 @@ struct MeterTrack: View {
         let fraction = min(value / total, 1)
         // A hairline for anything real but tiny: "you have 40 MB of duplicates" must not
         // render as nothing at all.
-        return max(available * fraction - 2, 3)
+        return max(available * fraction, 3)
     }
 }

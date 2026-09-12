@@ -3,9 +3,8 @@ import SwiftUI
 /// A proportional bar. Segments are drawn in order and whatever is left over reads as free
 /// space, so the bar always fills its track even when the segments do not add up to the total.
 ///
-/// Drawn as separated rounded slugs rather than one continuous capsule: on a 343 GB disk the
-/// part this app can act on is a sliver, and a sliver inside a single capsule reads as a
-/// rendering seam rather than as a measurement.
+/// Drawn as one continuous capsule. It is one disk, and three rounded slugs with gaps between
+/// them read as three unrelated measurements rather than as the parts of a whole.
 struct CapacityBar: View {
 
     struct Segment: Identifiable, Equatable {

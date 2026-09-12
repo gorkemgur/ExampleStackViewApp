@@ -29,13 +29,22 @@ struct StorageCardView: View {
                     .foregroundStyle(.secondary)
             }
 
-            CapacityBar(segments: segments, total: snapshot.totalCapacity, height: 12)
-                .accessibilityIdentifier("storage.bar")
+            CapacityBar(
+                segments: parts.map { CapacityBar.Segment(id: $0.id, bytes: $0.bytes, color: $0.color) },
+                total: snapshot.totalCapacity,
+                height: 12
+            )
+            .accessibilityIdentifier("storage.bar")
 
             HStack(alignment: .top, spacing: 10) {
-                legend(color: DS.deep, title: "Photos & videos", bytes: libraryBytes, isActionable: true)
-                legend(color: DS.neutral, title: "Everything else", bytes: otherBytes)
-                legend(color: DS.well, title: "Free", bytes: snapshot.availableCapacity)
+                ForEach(parts) { part in
+                    legend(
+                        color: part.color,
+                        title: part.title,
+                        bytes: part.bytes,
+                        isActionable: part.isActionable
+                    )
+                }
             }
 
             Text("Free space is an estimate — iOS counts storage it can purge on demand as available.")
@@ -51,11 +60,33 @@ struct StorageCardView: View {
         max(snapshot.usedCapacity - libraryBytes, 0)
     }
 
-    private var segments: [CapacityBar.Segment] {
+    private struct Part: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let bytes: Int64
+        let color: Color
+        var isActionable: Bool = false
+    }
+
+    /// The three parts of the disk, largest first.
+    ///
+    /// Sorted rather than fixed, because the bar is a comparison: reading it should tell you
+    /// which of the three is biggest without doing arithmetic on the figures underneath. The
+    /// legend is built from this same list, so the order under the bar can never disagree with
+    /// the order in it.
+    private var parts: [Part] {
         [
-            CapacityBar.Segment(id: "library", bytes: min(libraryBytes, snapshot.usedCapacity), color: DS.deep),
-            CapacityBar.Segment(id: "other", bytes: otherBytes, color: DS.neutral)
+            Part(
+                id: "library",
+                title: "Photos & videos",
+                bytes: min(libraryBytes, snapshot.usedCapacity),
+                color: DS.deep,
+                isActionable: true
+            ),
+            Part(id: "other", title: "Everything else", bytes: otherBytes, color: DS.neutral),
+            Part(id: "free", title: "Free", bytes: snapshot.availableCapacity, color: DS.well)
         ]
+        .sorted { $0.bytes > $1.bytes }
     }
 
     /// Each legend repeats its slug from the bar above rather than using a dot, so the eye can
