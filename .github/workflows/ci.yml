@@ -286,6 +286,76 @@ jobs:
       - name: Check the page
         run: python3 Scripts/check-site.py docs/index.html
 
+  real:
+    name: A real Photos library
+    runs-on: macos-15
+    # Its own runner and its own simulator. It installs media into the device's Photos library
+    # and then deletes some of it, which is not a state any other job should inherit.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+
+      # The recipe the idb job already proved. `brew trust` because Homebrew refuses formulae
+      # from third-party taps without it, and pipx because its shims land somewhere the
+      # runner's PATH does not look.
+      - name: Install XcodeGen and idb
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          brew tap facebook/fb
+          brew trust facebook/fb
+          brew install idb-companion
+          pipx install fb-idb
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/idb" --help > /dev/null
+
+      - name: Build for simulator
+        run: |
+          set -o pipefail
+          xcodegen generate
+          xcodebuild build \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -configuration Debug \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tail -5
+
+      # Sixteen photographs and eight clips, with four of the photographs and three of the
+      # clips built as copies of the others. The answer is known before the scan runs.
+      - name: Build a library with known duplicates in it
+        run: |
+          swift Scripts/make-library.swift artifacts/library
+          cat artifacts/library/EXPECTED.txt
+
+      - name: Boot the simulator and install
+        id: simulator
+        run: |
+          set -euo pipefail
+          UDID=$(python3 Scripts/pick-simulator.py)
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/DupeSpace.app
+
+      # The one job in this workflow where nothing is a stub: the real PhotoKit library, the
+      # real analyzer reading real bytes, and the real deleter answering the system's own
+      # confirmation. `PhotoKitDeleter` had never been executed before this job existed.
+      - name: Scan and delete for real
+        run: python3 Scripts/real-library-check.py "${{ steps.simulator.outputs.udid }}" artifacts/library artifacts/real
+
+      - name: Upload what it saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-library
+          path: artifacts/real
+          retention-days: 7
+
   idb:
     name: Simulator automation (idb)
     runs-on: macos-15
