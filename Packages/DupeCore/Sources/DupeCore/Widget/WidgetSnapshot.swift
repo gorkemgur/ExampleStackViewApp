@@ -78,7 +78,8 @@ public struct WidgetSnapshotStore: Sendable {
 
     public static let defaultFileName = "widget-snapshot.json"
 
-    private let fileURL: URL
+    /// Where the snapshot is kept. Exposed so a caller can see which container it landed in.
+    public let fileURL: URL
 
     public init(fileURL: URL) {
         self.fileURL = fileURL

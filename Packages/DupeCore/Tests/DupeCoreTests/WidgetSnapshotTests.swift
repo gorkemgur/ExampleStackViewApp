@@ -106,8 +106,24 @@ final class WidgetSnapshotStoreTests: XCTestCase {
         XCTAssertEqual(store.read()?.availableCapacity, 20)
     }
 
-    func testAnUnavailableAppGroupIsNotAStore() {
-        XCTAssertNil(WidgetSnapshotStore(appGroupID: "group.this.does.not.exist.anywhere"))
+    /// Whether a group container resolves at all is the platform's answer, not ours — on macOS
+    /// it hands back a path for any identifier, on iOS only for an entitled one. What is ours is
+    /// that a store, when there is one, points at a file inside that container and not elsewhere.
+    func testAStoreBuiltFromAnAppGroupLivesInsideThatGroupsContainer() throws {
+        let group = "group.this.does.not.exist.anywhere"
+        guard
+            let container = FileManager.default
+                .containerURL(forSecurityApplicationGroupIdentifier: group)
+        else {
+            throw XCTSkip("No group container on this platform, which the store reports as nil.")
+        }
+
+        let store = try XCTUnwrap(WidgetSnapshotStore(appGroupID: group, fileName: "s.json"))
+
+        XCTAssertEqual(
+            store.fileURL.standardizedFileURL,
+            container.appendingPathComponent("s.json").standardizedFileURL
+        )
     }
 }
 
