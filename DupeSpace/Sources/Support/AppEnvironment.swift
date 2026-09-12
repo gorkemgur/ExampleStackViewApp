@@ -13,6 +13,18 @@ enum AppEnvironment {
         ProcessInfo.processInfo.arguments.contains(uiTestingFlag)
     }
 
+    /// The same fixture library with nothing in it that matches anything.
+    ///
+    /// A tidy library is the state this app is least often looked at in and the one a new user
+    /// is most likely to be in. Passed alongside `-ui-testing`, not instead of it: the library
+    /// and the storage figures stay exactly as they are, and only the analyzer changes, so
+    /// every screen is the one people actually see rather than a blanked-out shell.
+    static let cleanLibraryFlag = "-clean-library"
+
+    static var isCleanLibrary: Bool {
+        ProcessInfo.processInfo.arguments.contains(cleanLibraryFlag)
+    }
+
     /// One registry, shared: the library that reads granted folders and the screen that
     /// manages them have to agree on what is granted.
     static let folderRegistry: any FolderRegistering = isUITesting
@@ -38,7 +50,7 @@ enum AppEnvironment {
 
     static func makeAnalyzer() -> any AssetAnalyzing {
         let base: any AssetAnalyzing = isUITesting
-            ? StubAssetAnalyzer.uiTestFixture()
+            ? (isCleanLibrary ? StubAssetAnalyzer.cleanFixture() : StubAssetAnalyzer.uiTestFixture())
             : CompositeAssetAnalyzer(
                 photos: PhotoKitAssetAnalyzer(),
                 files: FileAssetAnalyzer(registry: folderRegistry)

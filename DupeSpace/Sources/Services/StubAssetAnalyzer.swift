@@ -96,6 +96,47 @@ final class StubAssetAnalyzer: AssetAnalyzing {
         )
     }
 
+    /// The same library with nothing in it that matches anything.
+    ///
+    /// A tidy library is the state this app is least often looked at in, and it is the one a
+    /// first-time user is most likely to be in: the scan does all of its real work — buckets
+    /// on metadata, opens every photograph, samples the two videos whose lengths agree — and
+    /// then honestly finds nothing. The storage figures on the overview stay real, so the
+    /// screens are the ones people see rather than a blanked-out shell.
+    ///
+    /// Every value is derived from the item's own id, so nothing collides and the fixture is
+    /// the same on every run.
+    static func cleanFixture() -> StubAssetAnalyzer {
+        var digests: [String: ContentDigestResult] = [:]
+        var hashes: [String: PerceptualHashes] = [:]
+        var signatures: [String: VideoSignature] = [:]
+
+        for item in StubMediaLibrary.sampleItems() {
+            let seed = scramble(UInt64(bitPattern: Int64(item.id.hashValue)))
+            digests[item.id] = .digest(
+                ContentDigest(bytes: (0..<32).map { UInt8(truncatingIfNeeded: seed &>> UInt64($0 % 8 * 8) &+ UInt64($0)) })
+            )
+            hashes[item.id] = PerceptualHashes(dHash: seed, pHash: scramble(seed))
+            if item.kind == .video {
+                signatures[item.id] = VideoSignature(
+                    frameHashes: (0..<10).map { scramble(seed &+ UInt64($0)) }
+                )
+            }
+        }
+
+        return StubAssetAnalyzer(digests: digests, hashes: hashes, signatures: signatures)
+    }
+
+    /// SplitMix64's finalising mix. `hashValue` is seeded per process, so two ids can land
+    /// close together; this spreads them far enough apart that no pair is ever within a
+    /// perceptual distance of each other.
+    private static func scramble(_ value: UInt64) -> UInt64 {
+        var z = value &+ 0x9E37_79B9_7F4A_7C15
+        z = (z ^ (z &>> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z &>> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z &>> 31)
+    }
+
     private static func flipping(_ value: UInt64, bits: Int) -> UInt64 {
         var result = value
         for bit in 0..<bits { result ^= (UInt64(1) << UInt64(bit)) }
