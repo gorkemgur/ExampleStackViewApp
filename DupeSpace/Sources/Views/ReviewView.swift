@@ -136,12 +136,22 @@ struct ReviewView: View {
                 }
             }
 
-            Slider(
+            // A fader with the ladder drawn into its track, so the question "how far down does
+            // this target make me go" is answered before the drag rather than after it.
+            TargetSlider(
                 value: $model.budgetBytes,
-                in: 0...Double(max(model.maxReclaimableBytes, 1))
+                range: 0...Double(max(model.maxReclaimableBytes, 1)),
+                rungs: RegretTier.allCases.compactMap { tier in
+                    let bytes = rungBytes(tier)
+                    guard bytes > 0 else { return nil }
+                    return TargetSlider.Rung(
+                        id: "rung.\(tier.rawValue)",
+                        bytes: bytes,
+                        color: DS.tierVivid(tier)
+                    )
+                },
+                identifier: "budget.slider"
             )
-            .tint(DS.brandBottom)
-            .accessibilityIdentifier("budget.slider")
 
             // One bar, not three.
             //
@@ -384,10 +394,6 @@ struct ReviewView: View {
     /// actually destroys something.
     private var reclaimBar: some View {
         VStack(spacing: 0) {
-            Rectangle()
-                .fill(DS.hairline)
-                .frame(height: 1)
-
             MeterTrack(
                 segments: [
                     MeterTrack.Segment(
@@ -400,8 +406,8 @@ struct ReviewView: View {
                 height: 4
             )
             .accessibilityHidden(true)
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
+            .padding(.horizontal, 18)
+            .padding(.top, 16)
 
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -451,13 +457,20 @@ struct ReviewView: View {
                 .disabled(!model.canDelete)
                 .accessibilityIdentifier("review.delete")
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 16)
         }
-        // The bar is the bottom of the screen now that the tab bar is gone, so its material has
-        // to run under the home indicator rather than stopping short of it.
-        .background(.regularMaterial, ignoresSafeAreaEdges: .bottom)
+        // A dock that floats, not a strip welded to the bottom edge.
+        //
+        // It was an edge-to-edge `.regularMaterial` band with a hairline across the top — the
+        // shape every iOS app has had at the bottom of a screen since 2013, and the thing this
+        // one is most often mistaken for. Inset and rounded, it reads as a control panel
+        // resting on the list rather than as chrome the list ends at, and the content scrolls
+        // visibly underneath it.
+        .dsDock()
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     /// The dearest rung the selection reaches into. Drawn on the meter and nowhere else: it is

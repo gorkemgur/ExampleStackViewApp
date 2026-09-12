@@ -566,3 +566,142 @@ struct ReachPicker<Value: Hashable>: View {
         return option.color
     }
 }
+
+/// The target control: a fader, not a stock slider.
+///
+/// `Slider` is the single most recognisable iOS control there is — a hairline track and a
+/// white circle — and on a dark instrument slab it reads as a system default dropped into a
+/// designed screen, which is most of what "this looks like every other app" means. It also
+/// says nothing: the one question this screen asks is *how far down the ladder does this
+/// target make me go*, and a plain track cannot answer it.
+///
+/// So the track carries the ladder. Each rung is drawn behind the fill at its real width, in
+/// its own colour at low opacity, so before you drag you can already see where "costs nothing"
+/// runs out and the judgement calls begin. The fill is the brand; the grip is a fader cap.
+/// Crossing a rung boundary is a selection haptic, because that is the moment the answer to
+/// the question changes.
+///
+/// `accessibilityRepresentation` keeps it a real slider to VoiceOver and to XCUITest, so
+/// `adjust(toNormalizedSliderPosition:)` still drives it.
+struct TargetSlider: View {
+
+    /// One rung of the ladder, in the order the plan reaches them.
+    struct Rung: Identifiable {
+        let id: String
+        let bytes: Double
+        let color: Color
+    }
+
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    /// Drawn behind the fill. Empty draws a plain track.
+    var rungs: [Rung] = []
+    var identifier: String
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let trackHeight: CGFloat = 16
+    private let gripWidth: CGFloat = 7
+    private let gripHeight: CGFloat = 30
+
+    private var span: Double { max(range.upperBound - range.lowerBound, 1) }
+
+    private var fraction: Double {
+        min(max((value - range.lowerBound) / span, 0), 1)
+    }
+
+    /// Which rung the current target reaches into. Drives the haptic.
+    private var reachedRung: String {
+        var consumed = 0.0
+        let target = value - range.lowerBound
+        for rung in rungs {
+            consumed += rung.bytes
+            if target <= consumed { return rung.id }
+        }
+        return rungs.last?.id ?? ""
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+
+            ZStack(alignment: .leading) {
+                ladder
+                    .frame(height: trackHeight)
+                    .clipShape(Capsule(style: .continuous))
+
+                Capsule(style: .continuous)
+                    .fill(DS.brandRow)
+                    .frame(width: max(width * fraction, trackHeight), height: trackHeight)
+
+                RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                    .fill(.white)
+                    .frame(width: gripWidth, height: gripHeight)
+                    .shadow(color: .black.opacity(0.45), radius: 5, y: 2)
+                    .offset(x: max(min(width * fraction - gripWidth / 2, width - gripWidth), 0))
+            }
+            .frame(height: gripHeight)
+            .contentShape(Rectangle())
+            // Anywhere on the track, not only on the grip. A 7pt cap is a hard thing to
+            // catch, and there is no reason to make someone catch it.
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        let position = min(max(drag.location.x / max(width, 1), 0), 1)
+                        value = range.lowerBound + position * span
+                    }
+            )
+            .animation(reduceMotion ? nil : Motion.readout, value: fraction)
+        }
+        .frame(height: gripHeight)
+        .sensoryFeedback(.selection, trigger: reachedRung)
+        .accessibilityRepresentation {
+            Slider(value: $value, in: range)
+                .accessibilityIdentifier(identifier)
+        }
+    }
+
+    /// The ladder, at rest, behind the fill.
+    private var ladder: some View {
+        GeometryReader { proxy in
+            let total = max(rungs.reduce(0) { $0 + max($1.bytes, 0) }, 1)
+            HStack(spacing: 0) {
+                ForEach(rungs) { rung in
+                    Rectangle()
+                        .fill(rung.color.opacity(0.30))
+                        .frame(width: max(proxy.size.width * (max(rung.bytes, 0) / total), 2))
+                }
+                Rectangle().fill(Color.white.opacity(0.10))
+            }
+        }
+    }
+}
+
+extension View {
+
+    /// A floating dock: the bar that carries a reading and the action on it.
+    ///
+    /// Glass where the system can draw it, the app's own panel where it cannot. iOS 26 gives
+    /// `glassEffect` a shape and lets the content behind it bend the light; on iOS 17 and 18
+    /// the nearest honest thing is the same rounded panel the rest of the app is made of, over
+    /// a material, so the two look like the same object rather than like two designs.
+    @ViewBuilder
+    func dsDock() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(
+                .regular,
+                in: RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
+            )
+        } else {
+            self
+                .background(
+                    RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
+                        .fill(.regularMaterial)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
+                        .strokeBorder(DS.hairline, lineWidth: 1)
+                )
+        }
+    }
+}

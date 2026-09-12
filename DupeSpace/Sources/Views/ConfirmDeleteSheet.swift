@@ -85,8 +85,12 @@ struct ConfirmDeleteSheet: View {
         }
         .buttonStyle(.key(DS.destructive, enabled: model.canDelete))
         .disabled(!model.canDelete)
-        .padding(16)
-        .background(.regularMaterial, ignoresSafeAreaEdges: .bottom)
+        .padding(14)
+        // The same floating dock as the review screen's, so the two bottoms of the two screens
+        // in this flow are the same object rather than two edge-to-edge material strips.
+        .dsDock()
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
         .sensoryFeedback(.impact(weight: .heavy), trigger: model.isDeleting) { _, started in started }
         .accessibilityIdentifier("confirm.delete")
     }
