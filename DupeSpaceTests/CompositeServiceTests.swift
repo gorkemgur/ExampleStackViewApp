@@ -11,25 +11,22 @@ private struct RecordingLibrary: MediaLibrary {
     func loadInventory() async throws -> [MediaItem] { items }
 }
 
-private final class RecordingAnalyzer: AssetAnalyzing, @unchecked Sendable {
-    let name: String
-    private let lock = NSLock()
-    private var _seen: [String] = []
+/// An actor rather than a lock: these methods run in an async context, where taking a lock is
+/// a warning today and an error under the Swift 6 language mode.
+private actor RecordingAnalyzer: AssetAnalyzing {
+
+    private let name: String
+    private(set) var seen: [String] = []
 
     init(name: String) { self.name = name }
 
-    var seen: [String] {
-        lock.lock(); defer { lock.unlock() }
-        return _seen
-    }
-
     func contentDigest(for item: MediaItem) async -> ContentDigestResult {
-        lock.lock(); _seen.append(item.id); lock.unlock()
+        seen.append(item.id)
         return .digest(ContentDigest(bytes: Array(name.utf8)))
     }
 
     func perceptualHashes(for item: MediaItem) async -> PerceptualHashes? {
-        lock.lock(); _seen.append(item.id); lock.unlock()
+        seen.append(item.id)
         return nil
     }
 }
@@ -69,7 +66,8 @@ final class CompositeMediaLibraryTests: XCTestCase {
             photos: RecordingLibrary(access: .limited, items: [photo("p1")]),
             files: RecordingLibrary(access: .authorized, items: [])
         )
-        XCTAssertTrue(try await library.loadInventory().isEmpty)
+        let items = try await library.loadInventory()
+        XCTAssertTrue(items.isEmpty)
     }
 
     func testAccessReportsThePhotoLibraryState() {
@@ -95,8 +93,10 @@ final class CompositeAnalyzerTests: XCTestCase {
             for: MediaItem(id: "f1", source: .fileFolder, kind: .document)
         )
 
-        XCTAssertEqual(photos.seen, ["p1"])
-        XCTAssertEqual(files.seen, ["f1"])
+        let photosSeen = await photos.seen
+        let filesSeen = await files.seen
+        XCTAssertEqual(photosSeen, ["p1"])
+        XCTAssertEqual(filesSeen, ["f1"])
     }
 }
 

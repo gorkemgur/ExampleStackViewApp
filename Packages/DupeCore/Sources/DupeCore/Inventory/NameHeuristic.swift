@@ -27,9 +27,17 @@ public enum NameHeuristic {
     /// cameras name files that way, and reducing "IMG-1234" and "IMG-5678" to the same thing
     /// would cluster unrelated photos.
     public static func canonicalName(_ name: String) -> String {
-        let url = URL(fileURLWithPath: name)
-        let ext = url.pathExtension.lowercased()
-        var stem = url.deletingPathExtension().lastPathComponent
+        // Parsed as text, not through URL: `URL(fileURLWithPath: "")` resolves to the working
+        // directory, so an empty name would come back as whatever folder the process is in.
+        guard !name.isEmpty else { return "" }
+
+        let fileName = name.split(separator: "/").last.map(String.init) ?? name
+        var stem = fileName
+        var ext = ""
+        if let dot = fileName.lastIndex(of: "."), dot != fileName.startIndex {
+            stem = String(fileName[fileName.startIndex..<dot])
+            ext = String(fileName[fileName.index(after: dot)...]).lowercased()
+        }
 
         var previous: String
         repeat {
@@ -47,7 +55,7 @@ public enum NameHeuristic {
 
     /// True when the name carries one of those decorations.
     public static func looksLikeCopy(_ name: String) -> Bool {
-        let plain = URL(fileURLWithPath: name).lastPathComponent.lowercased()
+        let plain = (name.split(separator: "/").last.map(String.init) ?? name).lowercased()
         return canonicalName(plain) != plain
     }
 
