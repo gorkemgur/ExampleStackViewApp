@@ -168,6 +168,7 @@ final class FileHistoryStoreTests: XCTestCase {
         await store.save(first)
         await store.save(HistoryLog())
 
-        XCTAssertTrue(await store.load().isEmpty)
+        let reloaded = await store.load()
+        XCTAssertTrue(reloaded.isEmpty)
     }
 }
