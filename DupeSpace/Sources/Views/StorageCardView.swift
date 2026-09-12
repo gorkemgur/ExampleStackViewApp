@@ -24,7 +24,10 @@ struct StorageCardView: View {
             // The disk is still here, in the line under the hero and drawn across the bar. It
             // is the context; it was never the subject.
             VStack(alignment: .leading, spacing: DS.Space.tight) {
-                Eyebrow(heroTitle, tint: DS.deep)
+                // The slug is the key for the bar below: the library is a sliver of a
+                // 343 GB disk, and dropping its legend column when it became the headline
+                // left that sliver as an unexplained colour.
+                Eyebrow(heroTitle, tint: DS.deep, slug: knowsLibrary)
 
                 Readout.bytes(heroBytes, tint: DS.deep)
                     .lineLimit(1)

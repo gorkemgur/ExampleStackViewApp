@@ -108,6 +108,25 @@ enum DS {
         tier.isLossless ? "Costs nothing" : "Your call"
     }
 
+    /// The colour those two words are set in.
+    ///
+    /// Not the tier's own colour, which put the identical words "COSTS NOTHING" on screen
+    /// twice in two different hues, one teal and one green, directly under each other — a
+    /// reader has to stop and work out whether the colour means something the words do not.
+    /// There are two states here, so there are two colours: quiet for the rungs that cost
+    /// nothing, the ladder's warning amber for the ones that are a judgement call. The rail
+    /// beside the row still says which rung it is.
+    static func costTint(_ tier: RegretTier, onSlab: Bool = false) -> Color {
+        guard !tier.isLossless else {
+            return onSlab ? onSlabMuted : .secondary
+        }
+        return onSlab ? tierVivid(.burstLeftover) : tier(.burstLeftover)
+    }
+
+    /// Secondary copy on the slab. `Color.secondary` resolves against the page, not against a
+    /// navy block that ignores the appearance.
+    static let onSlabMuted = Color(dsRGB: 0x8FA3B8)
+
     // MARK: - Metrics
 
     /// Every corner in the app is one of these. There were thirteen distinct literals across
@@ -198,21 +217,37 @@ struct Eyebrow: View {
 
     private let text: String
     private let tint: Color
+    private let carriesSlug: Bool
 
-    init(_ text: String, tint: Color = .secondary) {
+    /// - Parameter slug: draws the tint as a short bar before the words.
+    ///
+    /// For an eyebrow that names a segment of a bar elsewhere on the screen. The overview's
+    /// headline is the library's own figure and the library is a sliver of the disk gauge
+    /// below it; without a slug that sliver was a colour on a bar with nothing anywhere
+    /// saying what it was.
+    init(_ text: String, tint: Color = .secondary, slug: Bool = false) {
         self.text = text
         self.tint = tint
+        self.carriesSlug = slug
     }
 
     var body: some View {
-        Text(text)
-            .font(.caption2.weight(.bold))
-            .textCase(.uppercase)
-            .kerning(0.9)
-            .foregroundStyle(tint)
-            .lineLimit(2)
-            .minimumScaleFactor(0.8)
-            .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 6) {
+            if carriesSlug {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(tint)
+                    .frame(width: 14, height: 3)
+            }
+            Text(text)
+                .font(.caption2.weight(.bold))
+                .textCase(.uppercase)
+                .kerning(0.9)
+                .foregroundStyle(tint)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -422,6 +457,14 @@ struct ReachPicker<Value: Hashable>: View {
         let title: String
         /// The colour this step fills the track with once it is reached.
         let color: Color
+        /// How much of the track this step is worth.
+        ///
+        /// Equal by default, which is right for a plain ordinal choice. Given real quantities
+        /// it turns the control into the reading as well: the budget slab used to carry a
+        /// *separate* ramp showing what each rung of the ladder was worth, directly above a
+        /// separate control for how far to reach into it — two bars, two points apart, saying
+        /// halves of one thing. One bar now. Its width is the ladder, its fill is the reach.
+        var weight: Double = 1
 
         var id: Value { value }
     }
@@ -474,11 +517,26 @@ struct ReachPicker<Value: Hashable>: View {
         .accessibilityIdentifier(identifier)
     }
 
+    private var totalWeight: Double {
+        let total = options.reduce(0) { $0 + max($1.weight, 0) }
+        return total > 0 ? total : Double(options.count)
+    }
+
+    private func width(for option: Option, in available: CGFloat) -> CGFloat {
+        let share = max(option.weight, 0) / totalWeight
+        // A hairline for a rung that is worth something but very little: a step you can still
+        // reach has to be visible on the track that says how far you have reached.
+        return max(available * share, 3)
+    }
+
     private var track: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
-                Rectangle()
-                    .fill(index <= selectedIndex ? option.color : (onSlab ? Color.white.opacity(0.10) : DS.well))
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                    Rectangle()
+                        .fill(index <= selectedIndex ? option.color : unreached)
+                        .frame(width: width(for: option, in: proxy.size.width))
+                }
             }
         }
         .frame(height: 10)
@@ -489,6 +547,13 @@ struct ReachPicker<Value: Hashable>: View {
         )
         .animation(reduceMotion ? nil : Motion.control, value: selectedIndex)
         .accessibilityHidden(true)
+    }
+
+    /// Space the current setting will not reach. Neutral rather than a faded version of the
+    /// rung's own colour, for the same reason `MeterTrack` mutes to neutral: amber at low
+    /// opacity over the slab is an olive-brown in no palette here.
+    private var unreached: Color {
+        onSlab ? Color.white.opacity(0.10) : DS.well
     }
 
     private func labelColor(at index: Int, option: Option) -> Color {

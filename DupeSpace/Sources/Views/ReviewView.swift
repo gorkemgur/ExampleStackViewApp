@@ -143,22 +143,15 @@ struct ReviewView: View {
             .tint(DS.brandBottom)
             .accessibilityIdentifier("budget.slider")
 
-            reachRamp
-
-            // The depth is a position on the ladder, so it is drawn as one: the track fills in
-            // the ladder's own colours up to the rung the plan is allowed to reach. Two bars on
-            // this slab used to say the same thing in two shapes — a reach ramp and a stock
-            // segmented control — and one of them was grey on grey.
-            ReachPicker<RegretTier>(
-                selection: $model.budgetDepth,
-                options: [
-                    ReachPicker<RegretTier>.Option(value: .inferiorCopy, title: "No loss", color: DS.tierVivid(.inferiorCopy)),
-                    ReachPicker<RegretTier>.Option(value: .burstLeftover, title: "+ bursts", color: DS.tierVivid(.burstLeftover)),
-                    ReachPicker<RegretTier>.Option(value: .similar, title: "+ similar", color: DS.tierVivid(.similar))
-                ],
-                identifier: "budget.depth",
-                onSlab: true
-            )
+            // One bar, not three.
+            //
+            // The slab used to stack a slider, a ramp showing what each rung of the ladder was
+            // worth, and a separate control for how far to reach into it — three horizontal
+            // bars within forty points of each other, two of them nearly identical and saying
+            // halves of the same thing. The depth control now *is* the ramp: each step is as
+            // wide as that rung is worth, filled up to the rung the plan may reach, grey
+            // beyond it. Width is the ladder, fill is the reach, and tapping a label moves it.
+            depthPicker
 
             Text(planSummary)
                 .font(.caption)
@@ -181,26 +174,40 @@ struct ReviewView: View {
         .dsSlab()
     }
 
-    /// What each rung of the ladder is worth, and how far the current setting is allowed to
-    /// reach into it. Muted segments are real space the plan will not touch at this depth.
-    private var reachRamp: some View {
-        let rungs = model.sections.map { (tier: $0.tier, bytes: Double($0.bytes)) }
-        let total = max(rungs.reduce(0) { $0 + $1.bytes }, 1)
-
-        return MeterTrack(
-            segments: rungs.map { rung in
-                MeterTrack.Segment(
-                    id: "reach.\(rung.tier.rawValue)",
-                    value: rung.bytes,
-                    color: DS.tierVivid(rung.tier),
-                    isMuted: rung.tier > model.budgetDepth
+    /// How far down the ladder the plan may reach, drawn as the ladder itself.
+    private var depthPicker: some View {
+        ReachPicker<RegretTier>(
+            selection: $model.budgetDepth,
+            options: [
+                // "No loss" is both lossless rungs at once, so it carries both their weights.
+                // There is no separate control for identical copies because there is no
+                // decision to make about them.
+                ReachPicker<RegretTier>.Option(
+                    value: .inferiorCopy,
+                    title: "No loss",
+                    color: DS.tierVivid(.inferiorCopy),
+                    weight: rungBytes(.identical) + rungBytes(.inferiorCopy)
+                ),
+                ReachPicker<RegretTier>.Option(
+                    value: .burstLeftover,
+                    title: "+ bursts",
+                    color: DS.tierVivid(.burstLeftover),
+                    weight: rungBytes(.burstLeftover)
+                ),
+                ReachPicker<RegretTier>.Option(
+                    value: .similar,
+                    title: "+ similar",
+                    color: DS.tierVivid(.similar),
+                    weight: rungBytes(.similar)
                 )
-            },
-            total: total,
-            height: 7
+            ],
+            identifier: "budget.depth",
+            onSlab: true
         )
-        .animation(Motion.control, value: model.budgetDepth)
-        .accessibilityHidden(true)
+    }
+
+    private func rungBytes(_ tier: RegretTier) -> Double {
+        Double(model.sections.first { $0.tier == tier }?.bytes ?? 0)
     }
 
     private var planSummary: String {
@@ -279,7 +286,7 @@ struct ReviewView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("review.section.\(section.tier.rawValue)")
 
-                    Eyebrow(DS.cost(section.tier), tint: tint)
+                    Eyebrow(DS.cost(section.tier), tint: DS.costTint(section.tier))
                 }
 
                 Spacer(minLength: 8)
