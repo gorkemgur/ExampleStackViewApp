@@ -19,7 +19,6 @@ apart, the number of distinct ones is also a usable estimate of how long the mov
 Everything is tolerant. A screen that cannot be reached is reported and skipped, so a partial
 run still reports what it did reach.
 """
-import hashlib
 import json
 import os
 import shutil
@@ -98,17 +97,6 @@ def shot(path):
     return os.path.exists(path) and os.path.getsize(path) > 0
 
 
-def frame_hash():
-    """One frame of the display, as a digest. Identical frames hash identically."""
-    path = os.path.join(OUT_DIR, "_frame.png")
-    if not shot(path):
-        return None
-    with open(path, "rb") as handle:
-        digest = hashlib.md5(handle.read()).hexdigest()
-    os.remove(path)
-    return digest
-
-
 def screen_width(tree):
     width = 0
     for element in tree:
@@ -175,45 +163,47 @@ def audit_layout(screen, tree):
 
 
 def frames_from(video):
-    """Digest every frame of a recording, in order.
+    """Read a recording as one brightness grid per frame, in order.
 
     AVFoundation rather than ffmpeg: the runner has no ffmpeg, and every machine that can build
-    this app already has the framework that reads video frames. Returns None if neither is
-    available, which is reported as "not measured" rather than as "nothing moved".
+    this app already has the framework that reads video frames. Returns None when it cannot be
+    read, which is reported as "not measured" rather than as "nothing moved".
     """
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frame-digests.swift")
-    if os.path.exists(script) and shutil.which("swift") is not None:
-        result = run(["swift", script, video], timeout=300)
-        if result.returncode == 0 and result.stdout.strip():
-            return [line.split()[1] for line in result.stdout.strip().splitlines() if " " in line]
+    if not (os.path.exists(script) and shutil.which("swift") is not None):
+        return None
+
+    result = run(["swift", script, video], timeout=300)
+    if result.returncode != 0 or not result.stdout.strip():
         print("frame-digests failed:", (result.stderr or "").strip()[:400])
-
-    if shutil.which("ffmpeg") is None:
         return None
 
-    directory = os.path.join(OUT_DIR, "_frames")
-    os.makedirs(directory, exist_ok=True)
-    result = run([
-        "ffmpeg", "-y", "-loglevel", "error",
-        "-i", video,
-        "-vf", "fps=30,scale=iw/4:-1",
-        os.path.join(directory, "f%04d.png")
-    ], timeout=180)
-    if result.returncode != 0:
-        shutil.rmtree(directory, ignore_errors=True)
-        return None
+    frames = []
+    for line in result.stdout.strip().splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        cells = parts[1]
+        frames.append([int(cells[i:i + 2], 16) for i in range(0, len(cells), 2)])
+    return frames or None
 
-    digests = []
-    for name in sorted(os.listdir(directory)):
-        if name.endswith(".png"):
-            with open(os.path.join(directory, name), "rb") as handle:
-                digests.append(hashlib.md5(handle.read()).hexdigest())
-    shutil.rmtree(directory, ignore_errors=True)
-    return digests
+
+def difference(before, after):
+    """Mean absolute difference between two frames, in brightness levels out of 255."""
+    if not before or len(before) != len(after):
+        return 0.0
+    return sum(abs(a - b) for a, b in zip(before, after)) / len(before)
+
+
+# H.264 decodes a still screen slightly differently from frame to frame. Averaged over a
+# sixteenth of the screen that noise lands well under one brightness level, while anything the
+# eye would call movement is far above it. Without this floor every recording of a static
+# screen reads as an animation.
+NOISE_FLOOR = 1.5
 
 
 def sample(label, action, seconds=2.5):
-    """Record the screen across `action`, then count the frames that differ.
+    """Record the screen across `action`, then measure how much of it moved.
 
     The action is performed while the recorder is running, which is the only way to catch a
     transition that is over in a third of a second.
@@ -239,33 +229,37 @@ def sample(label, action, seconds=2.5):
     except subprocess.TimeoutExpired:
         recorder.kill()
 
-    digests = frames_from(video)
+    frames = frames_from(video)
     if os.path.exists(video):
         os.remove(video)
 
-    if digests is None:
+    if frames is None:
         notes.append(f"animation: {label} — not measured (no frame reader on this machine)")
         return
-    if len(digests) < 4:
-        notes.append(f"animation: {label} — only {len(digests)} frames recorded, inconclusive")
+    if len(frames) < 4:
+        notes.append(f"animation: {label} — only {len(frames)} frames recorded, inconclusive")
         return
 
     # Frames per second, measured from the clip rather than assumed: the recorder gives what
     # the simulator can produce, which on a loaded runner is not 30.
-    fps = len(digests) / max(seconds + 1.5, 0.001)
+    fps = len(frames) / max(seconds + 1.5, 0.001)
 
-    changes = sum(1 for index in range(1, len(digests)) if digests[index] != digests[index - 1])
-    # A transition is over once the frames stop differing; the tail is the settled screen.
+    deltas = [difference(frames[i - 1], frames[i]) for i in range(1, len(frames))]
+    moving = [delta > NOISE_FLOOR for delta in deltas]
+    changes = sum(moving)
+    peak = max(deltas) if deltas else 0.0
+
+    # A transition is over once the frames stop moving; the tail is the settled screen.
     last_change = 0
-    for index in range(1, len(digests)):
-        if digests[index] != digests[index - 1]:
+    for index, is_moving in enumerate(moving, start=1):
+        if is_moving:
             last_change = index
     moving_for = last_change / max(fps, 1.0)
 
     verdict = "animated" if changes >= 3 else ("one step only" if changes >= 1 else "static")
     notes.append(
-        f"animation: {label} — {len(digests)} frames at ~{fps:.0f}fps, {changes} differing, "
-        f"movement ends at {moving_for:.2f}s [{verdict}]"
+        f"animation: {label} — {len(frames)} frames at ~{fps:.0f}fps, {changes} moving "
+        f"(peak {peak:.1f} levels), last movement at {moving_for:.2f}s [{verdict}]"
     )
     if changes == 0:
         findings.append(f"animation: {label} never changed the screen at all")

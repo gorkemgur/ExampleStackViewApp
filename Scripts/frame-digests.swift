@@ -1,14 +1,15 @@
 #!/usr/bin/env swift
 //
-// Prints one line per video frame: its timestamp and a digest of its pixels.
+// Prints one line per video frame: its timestamp, then a 16x16 grid of average brightness.
 //
 // This exists because the CI runner has no ffmpeg and installing it to answer one question
 // costs more than the question is worth. Every machine that can build this app has
 // AVFoundation, which reads the frames directly.
 //
-// The digest samples the buffer rather than hashing every byte: two frames of a moving
-// animation differ in thousands of places, so a sparse sample separates them just as well as a
-// full one and costs a fraction as much.
+// A grid rather than a hash, because a hash cannot tell motion from noise. The recording is
+// H.264: two decodes of an identical screen differ by a pixel value here and there, so every
+// frame hashes differently and a still screen would be reported as animating. Averaged over a
+// sixteenth of the screen that noise disappears, while anything that actually moves does not.
 
 import AVFoundation
 import Foundation
@@ -41,29 +42,50 @@ let output = AVAssetReaderTrackOutput(
 reader.add(output)
 reader.startReading()
 
-/// FNV-1a over a sparse sample of the frame.
-func digest(of buffer: CVPixelBuffer) -> UInt64 {
+let GRID = 16
+
+/// Average brightness per cell of a 16x16 grid over the frame.
+func signature(of buffer: CVPixelBuffer) -> [Int] {
     CVPixelBufferLockBaseAddress(buffer, .readOnly)
     defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
 
-    guard let base = CVPixelBufferGetBaseAddress(buffer) else { return 0 }
-    let size = CVPixelBufferGetBytesPerRow(buffer) * CVPixelBufferGetHeight(buffer)
+    guard let base = CVPixelBufferGetBaseAddress(buffer) else { return [] }
+    let width = CVPixelBufferGetWidth(buffer)
+    let height = CVPixelBufferGetHeight(buffer)
+    let stride = CVPixelBufferGetBytesPerRow(buffer)
     let bytes = base.assumingMemoryBound(to: UInt8.self)
 
-    var hash: UInt64 = 0xcbf2_9ce4_8422_2325
-    var index = 0
-    // A prime stride so the sample never lines up with the row width and reads one column.
-    while index < size {
-        hash = (hash ^ UInt64(bytes[index])) &* 0x1000_0000_01b3
-        index += 997
+    var totals = [Int](repeating: 0, count: GRID * GRID)
+    var counts = [Int](repeating: 0, count: GRID * GRID)
+
+    // Every fourth pixel in both directions: enough samples per cell for the average to be
+    // stable, a sixteenth of the work.
+    var y = 0
+    while y < height {
+        let cellY = min(y * GRID / height, GRID - 1)
+        var x = 0
+        while x < width {
+            let offset = y * stride + x * 4
+            // BGRA, weighted the way the eye weights them.
+            let blue = Int(bytes[offset])
+            let green = Int(bytes[offset + 1])
+            let red = Int(bytes[offset + 2])
+            let cell = cellY * GRID + min(x * GRID / width, GRID - 1)
+            totals[cell] += (red * 299 + green * 587 + blue * 114) / 1000
+            counts[cell] += 1
+            x += 4
+        }
+        y += 4
     }
-    return hash
+
+    return (0..<(GRID * GRID)).map { counts[$0] > 0 ? totals[$0] / counts[$0] : 0 }
 }
 
 while reader.status == .reading, let sample = output.copyNextSampleBuffer() {
     guard let buffer = CMSampleBufferGetImageBuffer(sample) else { continue }
     let seconds = CMSampleBufferGetPresentationTimeStamp(sample).seconds
-    print(String(format: "%.4f %016llx", seconds, digest(of: buffer)))
+    let cells = signature(of: buffer).map { String(format: "%02x", min(max($0, 0), 255)) }
+    print(String(format: "%.4f ", seconds) + cells.joined())
 }
 
 if reader.status == .failed {
