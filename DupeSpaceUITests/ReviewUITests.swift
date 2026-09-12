@@ -122,4 +122,63 @@ final class ReviewUITests: XCTestCase {
             "the deletion result was never reported"
         )
     }
+
+    /// The chips the simulator audit caught at 32 and 34 points tall.
+    ///
+    /// The pills stay that size on purpose — a sort control that is as loud as the delete key
+    /// is a worse screen — so the hit area grows outside the pill instead, and this is the
+    /// test that says so, because nothing about the pill's appearance would change if the
+    /// invisible half were dropped again.
+    func testTheListControlsAreBigEnoughToHit() {
+        openReview()
+
+        let minimum: CGFloat = 44
+
+        for order in ["biggest", "oldest", "newest"] {
+            let chip = app.buttons["review.order.\(order)"]
+            XCTAssertTrue(chip.waitForExistence(timeout: 20), "no sort chip for \(order)")
+            XCTAssertGreaterThanOrEqual(
+                chip.frame.height, minimum,
+                "the \(order) chip is \(chip.frame.height)pt tall, under the 44pt target"
+            )
+        }
+
+        // The fixture holds photos and videos, so all three of these are on the row. Asserted
+        // only when present, because the row hides itself when there is nothing to filter.
+        for slug in ["all", "image", "video"] {
+            let chip = app.buttons["review.kind.\(slug)"]
+            guard chip.exists else { continue }
+            XCTAssertGreaterThanOrEqual(
+                chip.frame.height, minimum,
+                "the \(slug) chip is \(chip.frame.height)pt tall, under the 44pt target"
+            )
+        }
+
+        XCTAssertTrue(
+            app.buttons["review.kind.all"].exists,
+            "the fixture has two kinds, so the kind row must be on screen"
+        )
+    }
+
+    /// Sorting may change where to start looking. It may never change what is on offer.
+    ///
+    /// The same invariant DupeCore holds in `ReviewBuilderTests`, asserted here at the only
+    /// place it can actually be broken by a view: the total and the count are what the plan
+    /// would delete, and reordering the list must leave both exactly where they were.
+    func testChangingTheOrderDoesNotChangeWhatIsOffered() {
+        openReview()
+
+        let total = app.staticTexts["review.total"]
+        let count = app.staticTexts["review.count"]
+        let before = (total.label, count.label)
+
+        for order in ["oldest", "newest", "biggest"] {
+            let chip = app.buttons["review.order.\(order)"]
+            XCTAssertTrue(chip.waitForExistence(timeout: 20))
+            chip.tap()
+
+            XCTAssertEqual(total.label, before.0, "sorting by \(order) changed the total on offer")
+            XCTAssertEqual(count.label, before.1, "sorting by \(order) changed the number selected")
+        }
+    }
 }

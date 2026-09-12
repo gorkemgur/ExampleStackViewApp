@@ -113,4 +113,34 @@ final class LaunchUITests: XCTestCase {
         XCTAssertTrue(largest.exists, "the biggest-items card was never reachable by scrolling")
         XCTAssertTrue(limits.exists, "the honesty card must never be conditional")
     }
+
+    /// The one picture anyone gets of the Live Activity.
+    ///
+    /// No simulator will show a Live Activity, so the app renders the same Lock Screen and
+    /// Dynamic Island views on a screen of its own under `-ui-testing`, and the site's
+    /// screenshot of them comes from a script that walks the app with idb. That script kept
+    /// failing to open this sheet — idb reports elements a scroll view has scrolled past the
+    /// bottom of the glass, so it tapped a coordinate the screen did not have. XCUITest does
+    /// not have that hole, which makes this the right place to hold the door open.
+    func testTheLiveSurfacesPreviewOpens() {
+        XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))
+
+        let entry = app.buttons["root.livesurfaces"]
+        for _ in 0..<10 where !entry.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(entry.exists, "the live surfaces entry was never reachable by scrolling")
+
+        entry.tap()
+        XCTAssertTrue(
+            app.buttons["livepreview.close"].waitForExistence(timeout: 20),
+            "tapping the entry did not present the preview"
+        )
+
+        app.buttons["livepreview.close"].tap()
+        XCTAssertTrue(
+            app.buttons["livepreview.close"].waitForNonExistence(timeout: 10),
+            "the preview would not close"
+        )
+    }
 }

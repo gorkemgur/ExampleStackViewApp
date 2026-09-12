@@ -299,7 +299,9 @@ struct ReviewView: View {
     /// offered, only where to start looking, which is why it is quieter and sits underneath.
     @ViewBuilder
     private var listControls: some View {
-        VStack(alignment: .leading, spacing: DS.Space.s) {
+        // No spacing: each row is now 44pt tall around a pill of 32 or 34, so the slack
+        // between them is already there.
+        VStack(alignment: .leading, spacing: 0) {
             if model.availableKinds.count > 1 || model.kindFilter != nil {
                 kindFilter
             }
@@ -334,7 +336,12 @@ struct ReviewView: View {
                             Capsule(style: .continuous)
                                 .fill(selected ? DS.deep.opacity(0.12) : Color.clear)
                         )
-                        .contentShape(Capsule(style: .continuous))
+                        // The pill is 32pt because a sort control should not shout. The
+                        // finger is 44pt because the audit is right that 32 is too small to
+                        // hit — so the hit area grows outside the pill rather than the pill
+                        // growing to meet it.
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
@@ -420,7 +427,9 @@ struct ReviewView: View {
                 Capsule(style: .continuous)
                     .strokeBorder(selected ? DS.deep.opacity(0.45) : DS.hairline, lineWidth: 1)
             )
-            .contentShape(Capsule(style: .continuous))
+            // Pill 34pt, hit area 44pt — see `orderPicker`.
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(KindCopy.title(for: kind)), \(Counting.items(tally.items))")

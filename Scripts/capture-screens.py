@@ -206,11 +206,37 @@ def scroll_to_top(swipes=10):
         swipe_down()
 
 
+def is_on_glass(element, size):
+    """Is this element's centre actually on the screen, rather than merely in the tree?
+
+    idb reports every element of a scroll view, including the ones scrolled past the bottom
+    of the glass, with the frame they *would* have. `find` hands one of those back quite
+    happily and `tap` then taps a coordinate the screen does not have, which the simulator
+    discards in silence.
+
+    That is exactly how the live surfaces sheet came to be "never appeared" on a run where
+    the entry was found on the very first look, without a single swipe: the entry is the last
+    thing on a long overview, so it was a thousand points below the glass when it was tapped.
+    """
+    if size is None:
+        return True
+    _, height = size
+    frame = element.get("frame") or {}
+    middle = frame.get("y", 0) + frame.get("height", 0) / 2
+    # The navigation bar covers the top of the glass and the home indicator the very bottom;
+    # a tap landing in either is not a tap on the control.
+    return 100 <= middle <= height - 40
+
+
 def scroll_to(identifier, attempts=8):
-    """Find an element, scrolling down until it comes into view."""
+    """Find an element, scrolling down until it comes into view.
+
+    Into view, not merely into the tree — see `is_on_glass`.
+    """
     for _ in range(attempts):
-        element = find(describe(), identifier)
-        if element is not None:
+        tree = describe()
+        element = find(tree, identifier)
+        if element is not None and is_on_glass(element, screen_size(tree)):
             return element
         swipe_up()
     print(f"not reachable by scrolling: {identifier}")

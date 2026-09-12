@@ -105,6 +105,71 @@ def screen_width(tree):
     return width
 
 
+def screen_height(tree):
+    """The visible screen in points.
+
+    The tree cannot say: the tallest element of a scroll view extends well past the bottom of
+    the glass. So it comes from a screenshot's pixel height and the scale the honest width
+    implies.
+    """
+    width = screen_width(tree)
+    if width <= 0:
+        return None
+    probe = os.path.join(OUT_DIR, "_probe.png")
+    if not shot(probe):
+        return None
+    try:
+        with open(probe, "rb") as handle:
+            header = handle.read(24)
+    except OSError:
+        return None
+    finally:
+        os.remove(probe)
+    if len(header) < 24 or header[12:16] != b"IHDR":
+        return None
+    pixel_width = int.from_bytes(header[16:20], "big")
+    pixel_height = int.from_bytes(header[20:24], "big")
+    scale = pixel_width / width
+    return pixel_height / scale if scale > 0 else None
+
+
+def is_on_glass(element, height):
+    """Is this element's centre actually on the screen, rather than merely in the tree?
+
+    idb reports the elements a scroll view has scrolled past the bottom of the glass with the
+    frame they *would* have, `find` hands one of those back quite happily, and `tap` then taps
+    a coordinate the screen does not have — which the simulator discards in silence. That is
+    why this report said the live surfaces sheet "never changed the screen at all": it was not
+    a missing animation, it was a tap a thousand points below the glass.
+    """
+    if height is None:
+        return True
+    frame = element.get("frame") or {}
+    middle = frame.get("y", 0) + frame.get("height", 0) / 2
+    return 100 <= middle <= height - 40
+
+
+def swipe(from_y, to_y):
+    run(["idb", "ui", "swipe", "--udid", UDID, "200", str(from_y), "200", str(to_y)])
+    time.sleep(1.0)
+
+
+def scroll_to(identifier, attempts=8):
+    """Find an element and bring it onto the glass, so that tapping it means something."""
+    for _ in range(attempts):
+        tree = describe()
+        element = find(tree, identifier)
+        if element is not None and is_on_glass(element, screen_height(tree)):
+            return element
+        swipe(620, 280)
+    return None
+
+
+def scroll_to_top(swipes=10):
+    for _ in range(swipes):
+        swipe(280, 620)
+
+
 def describe_element(element):
     label = element.get("AXLabel") or element.get("AXUniqueId") or "(unlabelled)"
     if len(label) > 48:
@@ -201,6 +266,11 @@ def difference(before, after):
 # screen reads as an animation.
 NOISE_FLOOR = 1.5
 
+# A navigation push lasts roughly a third of a second. Below this many frames a second the
+# recording holds one or two samples of it, which is not enough to tell a transition from a
+# cut — and a report that cannot tell should say so rather than pick one.
+RESOLVABLE_FPS = 15.0
+
 
 def sample(label, action, seconds=2.5):
     """Record the screen across `action`, then measure how much of it moved.
@@ -263,6 +333,15 @@ def sample(label, action, seconds=2.5):
     )
     if changes == 0:
         findings.append(f"animation: {label} never changed the screen at all")
+    elif changes < 3 and fps < RESOLVABLE_FPS:
+        # Not a finding, because the clip could not have shown one either way. A push lasts
+        # about a third of a second; below fifteen frames a second that is one or two samples,
+        # so "one step only" is a statement about the recorder on a loaded runner and not about
+        # the app. Saying "cut" here would be the report inventing a defect.
+        notes.append(
+            f"animation: {label} — at ~{fps:.0f}fps the clip cannot resolve a transition, "
+            "so the step count says nothing"
+        )
     elif changes < 3:
         findings.append(
             f"animation: {label} went from one screen to the next in {changes} frame(s) — "
@@ -321,7 +400,8 @@ def main():
     overview = describe()
     audit_layout("overview", overview)
 
-    live = find(overview, "root.livesurfaces")
+    # Scrolled to rather than looked for in place: the entry is the last thing on the overview.
+    live = scroll_to("root.livesurfaces")
     if live is not None:
         sample("live surfaces sheet presenting", lambda: tap(live, settle=0), seconds=2.0)
         time.sleep(1.5)
@@ -332,6 +412,10 @@ def main():
             tap(close, settle=1.5)
     else:
         notes.append("live surfaces: no entry point found, skipped")
+
+    # Everything after this looks for its control by scrolling *down*, and the overview is now
+    # at the bottom.
+    scroll_to_top()
 
     entry = find(describe(), "root.scan")
     for _ in range(8):
