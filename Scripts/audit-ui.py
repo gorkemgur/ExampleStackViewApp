@@ -174,11 +174,24 @@ def audit_layout(screen, tree):
     notes.append(f"{screen}: {seen} named elements checked against a {width:.0f}pt screen")
 
 
-def frames_from(video, directory):
-    """Cut a recording into PNGs. Returns their digests in order, or None without ffmpeg."""
+def frames_from(video):
+    """Digest every frame of a recording, in order.
+
+    AVFoundation rather than ffmpeg: the runner has no ffmpeg, and every machine that can build
+    this app already has the framework that reads video frames. Returns None if neither is
+    available, which is reported as "not measured" rather than as "nothing moved".
+    """
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frame-digests.swift")
+    if os.path.exists(script) and shutil.which("swift") is not None:
+        result = run(["swift", script, video], timeout=300)
+        if result.returncode == 0 and result.stdout.strip():
+            return [line.split()[1] for line in result.stdout.strip().splitlines() if " " in line]
+        print("frame-digests failed:", (result.stderr or "").strip()[:400])
+
     if shutil.which("ffmpeg") is None:
         return None
 
+    directory = os.path.join(OUT_DIR, "_frames")
     os.makedirs(directory, exist_ok=True)
     result = run([
         "ffmpeg", "-y", "-loglevel", "error",
@@ -187,14 +200,14 @@ def frames_from(video, directory):
         os.path.join(directory, "f%04d.png")
     ], timeout=180)
     if result.returncode != 0:
+        shutil.rmtree(directory, ignore_errors=True)
         return None
 
     digests = []
     for name in sorted(os.listdir(directory)):
-        if not name.endswith(".png"):
-            continue
-        with open(os.path.join(directory, name), "rb") as handle:
-            digests.append(hashlib.md5(handle.read()).hexdigest())
+        if name.endswith(".png"):
+            with open(os.path.join(directory, name), "rb") as handle:
+                digests.append(hashlib.md5(handle.read()).hexdigest())
     shutil.rmtree(directory, ignore_errors=True)
     return digests
 
@@ -226,16 +239,20 @@ def sample(label, action, seconds=2.5):
     except subprocess.TimeoutExpired:
         recorder.kill()
 
-    digests = frames_from(video, os.path.join(OUT_DIR, "_frames"))
+    digests = frames_from(video)
     if os.path.exists(video):
         os.remove(video)
 
     if digests is None:
-        notes.append(f"animation: {label} — not measured (no ffmpeg on this machine)")
+        notes.append(f"animation: {label} — not measured (no frame reader on this machine)")
         return
     if len(digests) < 4:
         notes.append(f"animation: {label} — only {len(digests)} frames recorded, inconclusive")
         return
+
+    # Frames per second, measured from the clip rather than assumed: the recorder gives what
+    # the simulator can produce, which on a loaded runner is not 30.
+    fps = len(digests) / max(seconds + 1.5, 0.001)
 
     changes = sum(1 for index in range(1, len(digests)) if digests[index] != digests[index - 1])
     # A transition is over once the frames stop differing; the tail is the settled screen.
@@ -243,11 +260,11 @@ def sample(label, action, seconds=2.5):
     for index in range(1, len(digests)):
         if digests[index] != digests[index - 1]:
             last_change = index
-    moving_for = last_change / 30.0
+    moving_for = last_change / max(fps, 1.0)
 
     verdict = "animated" if changes >= 3 else ("one step only" if changes >= 1 else "static")
     notes.append(
-        f"animation: {label} — {len(digests)} frames at 30fps, {changes} differing, "
+        f"animation: {label} — {len(digests)} frames at ~{fps:.0f}fps, {changes} differing, "
         f"movement ends at {moving_for:.2f}s [{verdict}]"
     )
     if changes == 0:
@@ -276,8 +293,9 @@ def relaunch(text_size=None):
 
 def write_report():
     lines = ["# UI audit", ""]
-    lines.append("Layout is measured from the accessibility tree; animation from a burst of")
-    lines.append("screenshots. See `Scripts/audit-ui.py` for what each number can and cannot say.")
+    lines.append("Layout is measured from the accessibility tree; animation from a screen")
+    lines.append("recording taken across each transition and read frame by frame. See")
+    lines.append("`Scripts/audit-ui.py` for what each number can and cannot say.")
     lines.append("")
 
     lines.append(f"## Findings ({len(findings)})")
@@ -404,10 +422,17 @@ def audit_large_text():
         notes.append("large text: the scan entry was not reachable, so only the overview was audited")
         return
 
-    tap(entry, settle=2.5)
+    tap(entry, settle=3.0)
     tree = describe()
+    for _ in range(4):
+        if find(tree, "scan.start") is not None:
+            break
+        run(["idb", "ui", "swipe", "--udid", UDID, "200", "620", "200", "280"])
+        time.sleep(1)
+        tree = describe()
+
     if find(tree, "scan.start") is None:
-        notes.append("large text: the tap on the scan entry did not land, overview audited twice")
+        notes.append("large text: the scan screen was never reached, only the overview audited")
         return
     audit_layout("scan at accessibility text size", tree)
     shot(os.path.join(OUT_DIR, "large-text-scan.png"))
