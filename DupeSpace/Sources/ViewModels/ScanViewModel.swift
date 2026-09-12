@@ -55,6 +55,7 @@ final class ScanViewModel: ObservableObject {
             do {
                 let scan = try await pipeline.run(items: items, progress: onProgress)
                 self.result = scan
+                WidgetPublisher.publish(scan: scan)
                 self.history?.record(
                     scan: HistoryBuilder.scanRecord(
                         result: scan,

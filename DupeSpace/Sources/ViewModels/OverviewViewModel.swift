@@ -136,6 +136,7 @@ final class OverviewViewModel: ObservableObject {
                 items = loaded
                 breakdown = InventoryAnalyzer.breakdown(for: loaded)
                 state = .loaded
+                WidgetPublisher.publish(storage: storage, libraryBytes: onDeviceLibraryBytes)
             } catch {
                 state = .failed(error.localizedDescription)
             }

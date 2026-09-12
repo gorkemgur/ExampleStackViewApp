@@ -22,9 +22,16 @@ targets:
     platform: iOS
     sources:
       - path: DupeSpace/Sources
+      - path: Shared
     dependencies:
       - package: DupeCore
         product: DupeCore
+      - target: DupeSpaceWidgets
+    entitlements:
+      path: DupeSpace/DupeSpace.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.gorkemgur.dupespace
     info:
       path: DupeSpace/Info.plist
       properties:
@@ -44,6 +51,33 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
+
+  DupeSpaceWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: DupeSpaceWidgets
+      - path: Shared
+    dependencies:
+      - package: DupeCore
+        product: DupeCore
+    info:
+      path: DupeSpaceWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: DupeSpace
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: DupeSpaceWidgets/DupeSpaceWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.gorkemgur.dupespace
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gorkemgur.dupespace.widgets
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        SKIP_INSTALL: YES
 
   DupeSpaceTests:
     type: bundle.unit-test
@@ -72,6 +106,7 @@ schemes:
     build:
       targets:
         DupeSpace: all
+        DupeSpaceWidgets: all
         DupeSpaceTests: [test]
         DupeSpaceUITests: [test]
     run:

@@ -95,3 +95,6 @@ DupeSpace.xcodeproj/
 build/
 *.xcresult
 DupeSpace/Info.plist
+DupeSpaceWidgets/Info.plist
+DupeSpace/DupeSpace.entitlements
+DupeSpaceWidgets/DupeSpaceWidgets.entitlements

@@ -45,6 +45,7 @@ final class HistoryViewModel: ObservableObject, HistoryRecording {
     func record(deletion: DeletionRecord) {
         log.record(deletion)
         persist()
+        WidgetPublisher.publish(lifetimeReclaimedBytes: log.totalReclaimedBytes)
     }
 
     func clear() {
