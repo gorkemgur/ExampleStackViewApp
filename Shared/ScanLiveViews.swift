@@ -34,7 +34,7 @@ struct ScanLockScreenView: View {
 
                 Spacer(minLength: 8)
 
-                Text(state.compactValue)
+                Text(state.displayValue)
                     .font(.system(.title2, design: .rounded, weight: .semibold))
                     .contentTransition(.numericText())
                     .monospacedDigit()
@@ -56,7 +56,7 @@ struct ScanLockScreenView: View {
                         .fixedSize()
                 }
 
-                if state.foundSomething {
+                if state.isRunning && state.foundSomething {
                     RunningTotal(state: state)
                 } else if state.isRunning {
                     Text("Totals when it finishes")

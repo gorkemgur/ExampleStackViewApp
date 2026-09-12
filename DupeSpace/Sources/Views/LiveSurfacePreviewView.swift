@@ -13,7 +13,9 @@ struct LiveSurfacePreviewView: View {
 
     let onClose: () -> Void
 
-    private let started = Date(timeIntervalSince1970: 1_750_000_000)
+    /// A scan that started a minute and a half ago. A fixed date in the past made the running
+    /// timer read "10885:58:46", which is the fixture being wrong rather than the view.
+    private let started = Date().addingTimeInterval(-95)
 
     private var states: [(String, LiveScanState)] {
         [

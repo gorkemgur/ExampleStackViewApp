@@ -26,8 +26,8 @@ struct StorageCardView: View {
             CapacityBar(segments: segments, total: snapshot.totalCapacity, height: 18)
                 .accessibilityIdentifier("storage.bar")
 
-            HStack(spacing: 18) {
-                legend(color: .accentColor, title: "Photos & videos", bytes: libraryBytes)
+            HStack(alignment: .top, spacing: 18) {
+                legend(color: .accentColor, title: "Photos & videos", bytes: libraryBytes, isActionable: true)
                 legend(color: Color(uiColor: .systemGray3), title: "Everything else", bytes: otherBytes)
                 legend(color: Color(uiColor: .systemGray5), title: "Free", bytes: snapshot.availableCapacity)
             }
@@ -51,7 +51,12 @@ struct StorageCardView: View {
     }
 
     @ViewBuilder
-    private func legend(color: Color, title: String, bytes: Int64) -> some View {
+    private func legend(
+        color: Color,
+        title: String,
+        bytes: Int64,
+        isActionable: Bool = false
+    ) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
                 Circle()
@@ -63,8 +68,11 @@ struct StorageCardView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
+            // The library figure is the only one this app can do anything about, and on a
+            // 343 GB disk it is a sliver of the bar. It gets the weight and the colour.
             Text(ByteFormatting.string(bytes))
-                .font(.footnote.weight(.medium))
+                .font(.footnote.weight(isActionable ? .semibold : .medium))
+                .foregroundStyle(isActionable ? Color.accentColor : Color.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }

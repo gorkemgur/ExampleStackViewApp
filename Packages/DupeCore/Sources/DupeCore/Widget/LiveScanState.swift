@@ -73,9 +73,11 @@ public struct LiveScanState: Sendable, Hashable, Codable {
     public var detail: String {
         switch phase {
         case .scanning:
-            return total > 0 ? "\(stageLabel) · \(completed) of \(total)" : stageLabel
+            return total > 0
+                ? "\(stageLabel) · \(completed.formatted()) of \(total.formatted())"
+                : stageLabel
         case .paused:
-            return total > 0 ? "Held at \(completed) of \(total)" : "Held"
+            return total > 0 ? "Held at \(completed.formatted()) of \(total.formatted())" : "Held"
         case .finished:
             guard foundSomething else { return "No duplicates worth removing" }
             return "\(ByteText.string(reclaimableBytes)) in \(Counting.items(candidateCount))"
@@ -97,6 +99,15 @@ public struct LiveScanState: Sendable, Hashable, Codable {
         case .paused: return ""
         case .finished: return foundSomething ? ByteText.tight(reclaimableBytes) : "0"
         case .cancelled, .failed: return "—"
+        }
+    }
+
+    /// The same value for a surface with room for it — the Lock Screen card, where "4.3 GB"
+    /// fits and "4.3G" reads like a truncation.
+    public var displayValue: String {
+        switch phase {
+        case .finished: return foundSomething ? ByteText.string(reclaimableBytes) : "0"
+        default: return compactValue
         }
     }
 

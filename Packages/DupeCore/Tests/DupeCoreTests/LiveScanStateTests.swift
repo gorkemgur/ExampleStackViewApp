@@ -123,6 +123,29 @@ final class LiveScanStateTests: XCTestCase {
         }
     }
 
+    /// A five-digit library read as a phone number before this.
+    func testLargeCountsAreGrouped() {
+        let state = running(completed: 1_204, total: 23_841, stage: .fingerprinting)
+        XCTAssertTrue(state.detail.contains(1_204.formatted()), state.detail)
+        XCTAssertTrue(state.detail.contains(23_841.formatted()), state.detail)
+    }
+
+    /// The island has three glyphs; the Lock Screen card has a line. They are not the same
+    /// number written differently — they are the same number written to the room available.
+    func testTheLockScreenGetsTheFullFigureAndTheIslandTheShortOne() {
+        let state = LiveScanState(
+            phase: .finished,
+            stage: .planning,
+            completed: 1,
+            total: 1,
+            candidateCount: 12,
+            reclaimableBytes: 4_300_000_000
+        )
+        XCTAssertEqual(state.compactValue, "4.3G")
+        XCTAssertEqual(state.displayValue, ByteText.string(4_300_000_000))
+        XCTAssertNotEqual(state.displayValue, state.compactValue)
+    }
+
     func testEveryPhaseHasSomethingToSayAndSomethingToDraw() {
         for phase in [LiveScanState.Phase.scanning, .paused, .finished, .cancelled, .failed] {
             let state = LiveScanState(phase: phase, stage: .matching, completed: 1, total: 2)
