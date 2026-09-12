@@ -54,6 +54,7 @@
   --grad-text: linear-gradient(104deg, #2a9bff 4%, #4fe0f2 72%);
   --teal-ink: #4fe0f2;
   --grain: .062;
+  --screen-mat: #0F1115;
   --sheen: rgba(255,255,255,.16);
   --reflect-1: rgba(255,255,255,.19);
   --reflect-2: rgba(255,255,255,.04);
@@ -100,6 +101,7 @@
     --grad-text: linear-gradient(104deg, #0a70e6 2%, #0e9fba 72%);
     --teal-ink: #0d8fa8;
     --grain: .030;
+    --screen-mat: #E9ECF2;
     --sheen: rgba(255,255,255,.55);
     --card-lift: 0 1px 0 rgba(255,255,255,.9) inset, 0 18px 40px -30px rgba(15,30,60,.45);
   }
@@ -115,6 +117,7 @@
   --field-wash: linear-gradient(180deg, rgba(190,220,250,.75), rgba(214,240,247,.35) 42%, transparent 70%);
   --grad-text: linear-gradient(104deg, #0a70e6 2%, #0e9fba 72%); --teal-ink: #0d8fa8;
   --grain: .030; --sheen: rgba(255,255,255,.55);
+  --screen-mat: #E9ECF2;
   --card-lift: 0 1px 0 rgba(255,255,255,.9) inset, 0 18px 40px -30px rgba(15,30,60,.45);
 }
 
@@ -144,6 +147,16 @@ a { color: var(--accent-text); text-underline-offset: 3px; }
   position: fixed; inset: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 900; opacity: var(--grain);
 }
+
+/* A full-screen SVG filter is cheap to write and expensive to paint: on a phone it is repainted
+   over the whole viewport while a momentum scroll is already saturating the compositor, which is
+   exactly where the scroll progress started to stutter. Texture is not worth a stutter. */
+@media (pointer: coarse), (max-width: 760px) {
+  .grain { display: none; }
+}
+
+/* Long sections that are nowhere near the viewport do not need laying out or painting. */
+section { content-visibility: auto; contain-intrinsic-size: auto 900px; }
 
 /* ---------- structure ---------- */
 .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding-inline: 22px; }
@@ -499,7 +512,14 @@ h1 .grad {
   transition: transform .45s var(--ease);
   transform-style: preserve-3d;
 }
-.device img { border-radius: 32px; }
+/* The screen, not the picture, is what is rounded. A simulator capture has square corners and
+   its status bar runs right up to them, so rounding the image itself ate the "C" of "Carrier"
+   and the battery. The picture is inset instead, and the corners cut the bezel's own colour. */
+.screen {
+  border-radius: 32px; overflow: hidden; background: var(--screen-mat);
+  padding: 7px 7px 0; position: relative; z-index: 1;
+}
+.device img { display: block; width: 100%; border-radius: 0; }
 .device::before {
   content: ""; position: absolute; inset: 11px; border-radius: 32px; z-index: 2;
   pointer-events: none;
@@ -893,8 +913,8 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
       <figure class="figure reveal">
         <div class="device-wrap" data-parallax="16">
           <div class="device" data-tilt>
-            <img src="screenshots/01-overview.png" width="750" height="1334"
-                 alt="The DupeSpace overview screen. A card reads 299.68 GB used of 343.07 GB with a segmented bar, broken into Photos and videos 4.55 GB, Everything else 295.13 GB, Free 43.39 GB, and a note that free space is an estimate. Below it a card headed Find what you can lose least offers a Scan for duplicates button.">
+            <div class="screen"><img src="screenshots/01-overview.png" width="750" height="1334"
+                 alt="The DupeSpace overview screen. A card reads 299.68 GB used of 343.07 GB with a segmented bar, broken into Photos and videos 4.55 GB, Everything else 295.13 GB, Free 43.39 GB, and a note that free space is an estimate. Below it a card headed Find what you can lose least offers a Scan for duplicates button."></div>
           </div>
         </div>
         <figcaption>The first screen is a budget, not a list.</figcaption>
@@ -1011,8 +1031,8 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
       <figure class="figure">
         <div class="device-wrap" data-parallax="20">
           <div class="device" data-tilt>
-            <img src="screenshots/04-review.png" width="750" height="1334" loading="lazy"
-                 alt="The Review screen. A Space budget card reads I need 2.02 GB back above a slider at full travel, a three-way segmented control showing No loss, plus bursts, plus similar, and the line 3 items, 2.02 GB — reaching as far as lower-quality re-sends. A red Delete 3 items button sits in the bottom bar next to the running total.">
+            <div class="screen"><img src="screenshots/04-review.png" width="750" height="1334" loading="lazy"
+                 alt="The Review screen. A Space budget card reads I need 2.02 GB back above a slider at full travel, a three-way segmented control showing No loss, plus bursts, plus similar, and the line 3 items, 2.02 GB — reaching as far as lower-quality re-sends. A red Delete 3 items button sits in the bottom bar next to the running total."></div>
           </div>
         </div>
         <figcaption>The same slider in the app, over a real scan.</figcaption>
@@ -1022,8 +1042,8 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
     <figure class="figure reveal" style="margin-top:44px">
       <div class="device-wrap" data-parallax="24">
         <div class="device" data-tilt>
-          <img src="screenshots/03-results.png" width="750" height="1334" loading="lazy"
-               alt="The results screen. A card reads 2.03 GB across 6 items you could remove with a Review and choose button, followed by tier cards: Identical copies 1.84 GB in 1 item, Lower-quality re-sends 180.4 MB in 2 items, Burst leftovers 12.3 MB in 3 items.">
+          <div class="screen"><img src="screenshots/03-results.png" width="750" height="1334" loading="lazy"
+               alt="The results screen. A card reads 2.03 GB across 6 items you could remove with a Review and choose button, followed by tier cards: Identical copies 1.84 GB in 1 item, Lower-quality re-sends 180.4 MB in 2 items, Burst leftovers 12.3 MB in 3 items."></div>
         </div>
       </div>
       <figcaption>Every screen leads with what it is worth.</figcaption>
@@ -1073,8 +1093,8 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
       <figure class="figure">
         <div class="device-wrap" data-parallax="18">
           <div class="device" data-tilt>
-            <img src="screenshots/02-scan.png" width="750" height="1334" loading="lazy"
-                 alt="The Find duplicates screen. A card headed Scan 28 items explains that metadata is compared first so only the handful of items that could possibly match ever get read, that nothing is downloaded from iCloud and nothing is deleted without you saying so, above a Start scan button.">
+            <div class="screen"><img src="screenshots/02-scan.png" width="750" height="1334" loading="lazy"
+                 alt="The Find duplicates screen. A card headed Scan 28 items explains that metadata is compared first so only the handful of items that could possibly match ever get read, that nothing is downloaded from iCloud and nothing is deleted without you saying so, above a Start scan button."></div>
           </div>
         </div>
         <figcaption>The scan screen says what it is about to do.</figcaption>
@@ -1123,8 +1143,8 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
       <figure class="figure">
         <div class="device-wrap" data-parallax="20">
           <div class="device" data-tilt>
-            <img src="screenshots/08-receipt.png" width="750" height="1334" loading="lazy"
-                 alt="The History screen with a deletion receipt expanded. It reads 2.02 GB reclaimed across 3 items, a card saying the most recent deletion is recoverable for 30 more days in Photos, Recently Deleted, then the removed files listed one by one, each with the file it was kept instead of and which tier it came from.">
+            <div class="screen"><img src="screenshots/08-receipt.png" width="750" height="1334" loading="lazy"
+                 alt="The History screen with a deletion receipt expanded. It reads 2.02 GB reclaimed across 3 items, a card saying the most recent deletion is recoverable for 30 more days in Photos, Recently Deleted, then the removed files listed one by one, each with the file it was kept instead of and which tier it came from."></div>
           </div>
         </div>
         <figcaption>Every deletion leaves a receipt: what went, and what was kept in its place.</figcaption>
@@ -1162,8 +1182,8 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
       <figure class="figure">
         <div class="device-wrap" data-parallax="22">
           <div class="device" data-tilt>
-            <img src="screenshots/01b-live-surfaces.png" width="750" height="1334" loading="lazy"
-                 alt="A Live surfaces sheet previewing each scan state twice, as a Dynamic Island pill and as a Lock Screen card. Running shows Scanning, Fingerprinting 1,204 of 5,000, 24% with a blue progress bar. Held shows Paused, held at 2,600 of 5,000 in amber. Finished shows Found space, 4.3 GB in 128 items, with a green-to-teal bar.">
+            <div class="screen"><img src="screenshots/01b-live-surfaces.png" width="750" height="1334" loading="lazy"
+                 alt="A Live surfaces sheet previewing each scan state twice, as a Dynamic Island pill and as a Lock Screen card. Running shows Scanning, Fingerprinting 1,204 of 5,000, 24% with a blue progress bar. Held shows Paused, held at 2,600 of 5,000 in amber. Finished shows Found space, 4.3 GB in 128 items, with a green-to-teal bar."></div>
           </div>
         </div>
         <figcaption>Every scan state, drawn from one source. No simulator will show a real Live Activity, so the app renders the same views on a screen of its own — which is the only way there is a picture of them at all.</figcaption>
@@ -1218,8 +1238,8 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
       <figure class="figure">
         <div class="device-wrap" data-parallax="14">
           <div class="device" data-tilt>
-            <img src="screenshots/05-confirm.png" width="750" height="1334" loading="lazy"
-                 alt="The confirmation sheet over the Review screen. It reads 2.02 GB comes back to this device, then a section headed When you get it back with a line reading After emptying, 2.02 GB, above a red Delete 3 items button and a Cancel button.">
+            <div class="screen"><img src="screenshots/05-confirm.png" width="750" height="1334" loading="lazy"
+                 alt="The confirmation sheet over the Review screen. It reads 2.02 GB comes back to this device, then a section headed When you get it back with a line reading After emptying, 2.02 GB, above a red Delete 3 items button and a Cancel button."></div>
           </div>
         </div>
         <figcaption>The confirmation splits space that comes back now from space that comes back later.</figcaption>
@@ -1227,8 +1247,8 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
       <figure class="figure">
         <div class="device-wrap" data-parallax="22">
           <div class="device" data-tilt>
-            <img src="screenshots/06-deleted.png" width="750" height="1334" loading="lazy"
-                 alt="The Review screen after deleting. A card reads 3 items removed, says the receipt is in History with what went and what was kept in its place, and that they are in Recently Deleted for 30 days and emptying that album in Photos is what gets the space back now. Below it the space budget slider has reset to zero selected.">
+            <div class="screen"><img src="screenshots/06-deleted.png" width="750" height="1334" loading="lazy"
+                 alt="The Review screen after deleting. A card reads 3 items removed, says the receipt is in History with what went and what was kept in its place, and that they are in Recently Deleted for 30 days and emptying that album in Photos is what gets the space back now. Below it the space budget slider has reset to zero selected."></div>
           </div>
         </div>
         <figcaption>And afterwards it tells you the deletion is not final yet.</figcaption>
@@ -1448,11 +1468,16 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
   /* ---------- everything below is motion; reduced motion registers none of it ---------- */
   if (reduced) return;
 
+  /* A phone gets the rail and nothing else that costs per-frame work: parallax writes a custom
+     property on every framed screenshot while the compositor is already busy, and there is no
+     cursor to follow. */
+  var coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+
   /* scroll-linked: progress rail, section ticks, parallax */
   var topfill = document.getElementById("topfill");
   var railLinks = slice(document.querySelectorAll("#rail a"));
   var rail = document.getElementById("rail");
-  var parallaxEls = slice(document.querySelectorAll("[data-parallax]"));
+  var parallaxEls = coarse ? [] : slice(document.querySelectorAll("[data-parallax]"));
   var measured = [];
   var viewH = window.innerHeight;
   var scrollable = 1;
@@ -1513,6 +1538,11 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
     }, { rootMargin: "-45% 0px -45% 0px" });
     sections.forEach(function (s) { if (s) secIo.observe(s); });
   }
+
+  /* Neither of the two below is registered on a touch device. A finger dragging the page fires
+     pointermove, so on a phone these ran during the scroll — tilting frames and moving lights
+     nobody asked for, on the frame budget the scroll itself needed. */
+  if (coarse) return;
 
   /* pointer: a light that follows the cursor across a card */
   slice(document.querySelectorAll("[data-glow]")).forEach(function (el) {
