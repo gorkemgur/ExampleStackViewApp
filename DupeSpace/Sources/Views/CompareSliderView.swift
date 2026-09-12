@@ -36,8 +36,10 @@ struct CompareSliderView: View {
                     divider(at: proxy.size.width * split, height: proxy.size.height)
                 }
                 .contentShape(Rectangle())
+                // Eight points, not zero: at zero the wipe claims the touch the instant a finger
+                // lands on it, and the screen underneath stops scrolling.
                 .gesture(
-                    DragGesture(minimumDistance: 0)
+                    DragGesture(minimumDistance: 8)
                         .onChanged { value in
                             let fraction = value.location.x / max(proxy.size.width, 1)
                             split = min(max(fraction, 0), 1)

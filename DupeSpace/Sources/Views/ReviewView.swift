@@ -439,7 +439,9 @@ struct ReviewView: View {
             .padding(.top, 8)
             .padding(.bottom, 12)
         }
-        .background(.regularMaterial)
+        // The bar is the bottom of the screen now that the tab bar is gone, so its material has
+        // to run under the home indicator rather than stopping short of it.
+        .background(.regularMaterial, ignoresSafeAreaEdges: .bottom)
     }
 
     /// The dearest rung the selection reaches into. Nothing selected reads as the brand's teal —

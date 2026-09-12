@@ -77,7 +77,7 @@ struct StorageCardView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.6)
                 .fixedSize(horizontal: false, vertical: true)
 
             // The library figure is the only one this app can do anything about, and on a
@@ -87,7 +87,9 @@ struct StorageCardView: View {
                 .monospacedDigit()
                 .foregroundStyle(isActionable ? DS.deep : Color.primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                // Three fixed columns, so at an accessibility text size the figure has to
+                // shrink rather than push the one beside it off the screen.
+                .minimumScaleFactor(0.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

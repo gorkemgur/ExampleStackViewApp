@@ -94,6 +94,7 @@ struct ComparisonHighlights: View {
                         Text(metric.keeperValue)
                             .font(.system(.caption, design: .rounded).weight(.semibold))
                             .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                             .truncationMode(.middle)
 
                         Image(systemName: "arrow.right")
@@ -104,6 +105,7 @@ struct ComparisonHighlights: View {
                             .font(.system(.caption, design: .rounded).weight(.semibold))
                             .foregroundStyle(DS.tier(.burstLeftover))
                             .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                             .truncationMode(.middle)
 
                         Spacer(minLength: 0)

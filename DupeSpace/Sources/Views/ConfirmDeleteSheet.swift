@@ -86,7 +86,7 @@ struct ConfirmDeleteSheet: View {
         .buttonStyle(.key(.red, enabled: model.canDelete))
         .disabled(!model.canDelete)
         .padding(16)
-        .background(.regularMaterial)
+        .background(.regularMaterial, ignoresSafeAreaEdges: .bottom)
         .sensoryFeedback(.impact(weight: .heavy), trigger: model.isDeleting) { _, started in started }
         .accessibilityIdentifier("confirm.delete")
     }
