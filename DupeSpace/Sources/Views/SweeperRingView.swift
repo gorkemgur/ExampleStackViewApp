@@ -126,215 +126,254 @@ struct SweeperRingView: View {
         }
     }
 
+    /// The scene inside the ring.
+    ///
+    /// Split into a handful of small drawing functions with fully explicit types, because it
+    /// was one closure and the compiler gave up on it: "unable to type-check this expression in
+    /// reasonable time". The cause is Swift's implicit `CGFloat`/`Double` bridging — every
+    /// piece of this arithmetic mixes a unit-space `Double` with a canvas-space `CGFloat`, and
+    /// forty of those in one expression is an exponential search. The unit maths stays `Double`
+    /// and converts once, at the boundary where a point is placed.
     private func figure(phase: Double) -> some View {
         let x = SweeperFigure.standingX(for: scene, workingPhase: phase)
         let pose = SweeperFigure.pose(x: x, phase: phase, sweeping: true)
 
         return Canvas { context, canvas in
-            // Same duration as the ring, for the same reason: the figure should walk between
-            // reports rather than jump a twelfth of the floor at each one.
-            func point(_ unit: CGPoint) -> CGPoint {
-                CGPoint(x: unit.x * canvas.width, y: unit.y * canvas.height)
-            }
+            let scale = Scale(size: canvas)
 
-            let floorY = SweeperFigure.floorY * canvas.height
-            let inset = canvas.width * 0.2
-
-            // THE FLOOR
-            //
-            // It was a hairline with dots on it, which reads as a diagram rather than as a
-            // place. The rule fades out at both ends instead of stopping dead, the figure
-            // casts a shadow so it stands on something, and the swept part carries a trail
-            // that is brightest right behind the broom.
-            var floor = Path()
-            floor.move(to: CGPoint(x: inset, y: floorY))
-            floor.addLine(to: CGPoint(x: canvas.width - inset, y: floorY))
-            context.stroke(
-                floor,
-                with: .linearGradient(
-                    Gradient(stops: [
-                        .init(color: DS.onSlabMuted.opacity(0), location: 0),
-                        .init(color: DS.onSlabMuted.opacity(0.3), location: 0.18),
-                        .init(color: DS.onSlabMuted.opacity(0.3), location: 0.82),
-                        .init(color: DS.onSlabMuted.opacity(0), location: 1)
-                    ]),
-                    startPoint: CGPoint(x: inset, y: floorY),
-                    endPoint: CGPoint(x: canvas.width - inset, y: floorY)
-                ),
-                lineWidth: 1
-            )
-
-            let sweptTo = scene.isFinished
-                ? canvas.width - inset
-                : min(pose.broomLeft.x * canvas.width, canvas.width - inset)
-
-            if sweptTo > inset {
-                var swept = Path()
-                swept.move(to: CGPoint(x: inset, y: floorY))
-                swept.addLine(to: CGPoint(x: sweptTo, y: floorY))
-                context.opacity = scene.isFinished ? Double(1 - exit) : 1
-                context.stroke(
-                    swept,
-                    with: .linearGradient(
-                        Gradient(colors: [DS.onSlabAccent.opacity(0), DS.onSlabAccent.opacity(0.85)]),
-                        startPoint: CGPoint(x: inset, y: floorY),
-                        endPoint: CGPoint(x: sweptTo, y: floorY)
-                    ),
-                    style: StrokeStyle(lineWidth: 2.4, lineCap: .round)
-                )
-                context.opacity = 1
-            }
-
-            if !scene.isFinished {
-                // The shadow. It narrows as the body leans into a stroke, which is the cheapest
-                // way to make a walk read as weight rather than as a sprite sliding along.
-                let squash = 1 - abs(sin(phase * 2 * .pi)) * 0.18
-                let shadowWidth = canvas.width * 0.115 * squash
-                context.fill(
-                    Path(
-                        ellipseIn: CGRect(
-                            x: x * canvas.width - shadowWidth / 2,
-                            y: floorY - 1,
-                            width: shadowWidth,
-                            height: canvas.height * 0.022
-                        )
-                    ),
-                    with: .color(DS.ink.opacity(0.55))
-                )
-            }
-
-            // What is left to do, at its own size rather than fourteen identical dots. Nothing
-            // once the work is finished: the figure travels to `travel.upperBound`, which is
-            // short of the far edge, so two specks used to sit there uncollected under a tick
-            // claiming the job was done.
-            let grain = SweepFloor.grain()
-            for (index, speck) in SweepFloor.specks().enumerated()
-            where !scene.isFinished && !SweepFloor.isSwept(speck, by: x) {
-                let dot = point(speck)
-                let r = grain[index]
-                context.fill(
-                    Path(ellipseIn: CGRect(x: dot.x - r, y: dot.y - r, width: r * 2, height: r * 2)),
-                    with: .color(DS.onSlabMuted.opacity(0.55))
-                )
-            }
-
-            // THE HEAP
-            //
-            // What the broom has actually collected, riding in front of it and growing with the
-            // count. The same reading as the swept floor, in the form of a thing rather than a
-            // measurement — and the part that makes the figure look like it is doing work
-            // rather than walking.
-            let collected = SweepFloor.collected(by: x)
-            if collected > 0 && !scene.isFinished {
-                let heap = point(CGPoint(x: pose.broomRight.x + 0.012, y: SweeperFigure.floorY))
-                let w = canvas.width * (0.03 + Double(collected) * 0.0085)
-                let h = canvas.height * (0.018 + Double(collected) * 0.0047)
-                var pile = Path()
-                pile.move(to: CGPoint(x: heap.x - w, y: heap.y))
-                pile.addQuadCurve(
-                    to: CGPoint(x: heap.x, y: heap.y - h * 0.72),
-                    control: CGPoint(x: heap.x - w * 0.35, y: heap.y - h)
-                )
-                pile.addQuadCurve(
-                    to: CGPoint(x: heap.x + w, y: heap.y),
-                    control: CGPoint(x: heap.x + w * 0.5, y: heap.y - h * 0.3)
-                )
-                pile.closeSubpath()
-                context.fill(pile, with: .color(DS.onSlabMuted.opacity(0.65)))
-            }
-
-            // And the puff as the figure steps off, so the heap is disposed of rather than
-            // simply deleted from the picture.
-            if scene.isFinished && exit < 1 {
-                let origin = point(CGPoint(x: SweeperFigure.travel.upperBound + 0.13, y: SweeperFigure.floorY))
-                for index in 0..<5 {
-                    let angle = -Double.pi * (0.15 + Double(index) * 0.175)
-                    let distance = exit * canvas.width * 0.12
-                    let r = 2.6 * (1 - exit)
-                    context.fill(
-                        Path(
-                            ellipseIn: CGRect(
-                                x: origin.x + cos(angle) * distance - r,
-                                y: origin.y + sin(angle) * distance * 0.8 - r,
-                                width: r * 2,
-                                height: r * 2
-                            )
-                        ),
-                        with: .color(DS.onSlabMuted.opacity(0.5 * (1 - exit)))
-                    )
-                }
-            }
+            drawFloor(&context, scale: scale, pose: pose)
+            drawShadow(&context, scale: scale, x: x, phase: phase)
+            drawSpecks(&context, scale: scale, x: x)
+            drawHeap(&context, scale: scale, pose: pose, x: x)
+            drawPuff(&context, scale: scale)
 
             // The figure keeps walking through the exit beat, then it is gone.
             guard !scene.isFinished || exit < 1 else { return }
-            context.translateBy(x: exit * canvas.width * 0.16, y: 0)
+            context.translateBy(x: exit * scale.width * 0.16, y: 0)  // `exit` is already a CGFloat
             context.opacity = Double(1 - exit)
+            drawBody(&context, scale: scale, pose: pose, phase: phase)
+        }
+    }
 
-            let body = GraphicsContext.Shading.color(DS.onSlab)
+    /// Unit space to canvas space, in one place.
+    private struct Scale {
+        let width: CGFloat
+        let height: CGFloat
 
-            // Legs.
-            var legs = Path()
-            legs.move(to: point(pose.frontFoot))
-            legs.addLine(to: point(pose.hip))
-            legs.addLine(to: point(pose.backFoot))
-            context.stroke(legs, with: body, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+        init(size: CGSize) {
+            width = size.width
+            height = size.height
+        }
 
-            // Spine.
-            var spine = Path()
-            spine.move(to: point(pose.hip))
-            spine.addLine(to: point(pose.shoulder))
-            context.stroke(spine, with: body, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+        func point(_ unit: CGPoint) -> CGPoint {
+            CGPoint(x: unit.x * width, y: unit.y * height)
+        }
 
-            // Head.
-            let head = point(pose.head)
-            let headSize = canvas.width * 0.075
+        func x(_ unit: CGFloat) -> CGFloat { unit * width }
+        func y(_ unit: CGFloat) -> CGFloat { unit * height }
+
+        var floorY: CGFloat { y(CGFloat(SweeperFigure.floorY)) }
+        var inset: CGFloat { width * 0.2 }
+    }
+
+    /// The ground plane. It fades out at both ends rather than stopping dead, and the part
+    /// already swept carries a trail that is brightest right behind the broom.
+    private func drawFloor(_ context: inout GraphicsContext, scale: Scale, pose: SweeperFigure.Pose) {
+        let floorY = scale.floorY
+        let inset = scale.inset
+        let far = scale.width - inset
+
+        var floor = Path()
+        floor.move(to: CGPoint(x: inset, y: floorY))
+        floor.addLine(to: CGPoint(x: far, y: floorY))
+
+        let rule = Gradient(stops: [
+            .init(color: DS.onSlabMuted.opacity(0), location: 0),
+            .init(color: DS.onSlabMuted.opacity(0.3), location: 0.18),
+            .init(color: DS.onSlabMuted.opacity(0.3), location: 0.82),
+            .init(color: DS.onSlabMuted.opacity(0), location: 1)
+        ])
+        context.stroke(
+            floor,
+            with: .linearGradient(
+                rule,
+                startPoint: CGPoint(x: inset, y: floorY),
+                endPoint: CGPoint(x: far, y: floorY)
+            ),
+            lineWidth: 1
+        )
+
+        let sweptTo: CGFloat = scene.isFinished ? far : min(scale.x(pose.broomLeft.x), far)
+        guard sweptTo > inset else { return }
+
+        var swept = Path()
+        swept.move(to: CGPoint(x: inset, y: floorY))
+        swept.addLine(to: CGPoint(x: sweptTo, y: floorY))
+
+        let trail = Gradient(colors: [DS.onSlabAccent.opacity(0), DS.onSlabAccent.opacity(0.85)])
+        context.opacity = scene.isFinished ? Double(1 - exit) : 1
+        context.stroke(
+            swept,
+            with: .linearGradient(
+                trail,
+                startPoint: CGPoint(x: inset, y: floorY),
+                endPoint: CGPoint(x: sweptTo, y: floorY)
+            ),
+            style: StrokeStyle(lineWidth: 2.4, lineCap: .round)
+        )
+        context.opacity = 1
+    }
+
+    /// It narrows as the body leans into a stroke, which is the cheapest way to make a walk
+    /// read as weight rather than as a sprite sliding along a line.
+    private func drawShadow(_ context: inout GraphicsContext, scale: Scale, x: Double, phase: Double) {
+        guard !scene.isFinished else { return }
+
+        let squash: CGFloat = 1 - CGFloat(abs(sin(phase * 2 * Double.pi))) * 0.18
+        let width: CGFloat = scale.width * 0.115 * squash
+        let rect = CGRect(
+            x: scale.x(CGFloat(x)) - width / 2,
+            y: scale.floorY - 1,
+            width: width,
+            height: scale.height * 0.022
+        )
+        context.fill(Path(ellipseIn: rect), with: .color(DS.ink.opacity(0.55)))
+    }
+
+    /// What is left to do, at its own size rather than fourteen identical dots.
+    private func drawSpecks(_ context: inout GraphicsContext, scale: Scale, x: Double) {
+        guard !scene.isFinished else { return }
+
+        let grain = SweepFloor.grain()
+        for (index, speck) in SweepFloor.specks().enumerated() where !SweepFloor.isSwept(speck, by: x) {
+            let dot = scale.point(speck)
+            let r: CGFloat = grain[index]
+            let rect = CGRect(x: dot.x - r, y: dot.y - r, width: r * 2, height: r * 2)
+            context.fill(Path(ellipseIn: rect), with: .color(DS.onSlabMuted.opacity(0.55)))
+        }
+    }
+
+    /// What the broom has actually collected, riding in front of it and growing with the count.
+    /// The same reading as the swept floor, as a thing you watch rather than a figure you read
+    /// — and the part that makes the figure look like it is working rather than walking.
+    private func drawHeap(_ context: inout GraphicsContext, scale: Scale, pose: SweeperFigure.Pose, x: Double) {
+        guard !scene.isFinished else { return }
+
+        let collected = SweepFloor.collected(by: x)
+        guard collected > 0 else { return }
+
+        let heap = scale.point(CGPoint(x: pose.broomRight.x + 0.012, y: CGFloat(SweeperFigure.floorY)))
+        let w: CGFloat = scale.width * CGFloat(0.03 + Double(collected) * 0.0085)
+        let h: CGFloat = scale.height * CGFloat(0.018 + Double(collected) * 0.0047)
+
+        var pile = Path()
+        pile.move(to: CGPoint(x: heap.x - w, y: heap.y))
+        pile.addQuadCurve(
+            to: CGPoint(x: heap.x, y: heap.y - h * 0.72),
+            control: CGPoint(x: heap.x - w * 0.35, y: heap.y - h)
+        )
+        pile.addQuadCurve(
+            to: CGPoint(x: heap.x + w, y: heap.y),
+            control: CGPoint(x: heap.x + w * 0.5, y: heap.y - h * 0.3)
+        )
+        pile.closeSubpath()
+        context.fill(pile, with: .color(DS.onSlabMuted.opacity(0.65)))
+    }
+
+    /// The heap going up as the figure steps off, so it is disposed of rather than simply
+    /// deleted from the picture.
+    private func drawPuff(_ context: inout GraphicsContext, scale: Scale) {
+        guard scene.isFinished, exit < 1 else { return }
+
+        let origin = scale.point(
+            CGPoint(
+                x: CGFloat(SweeperFigure.travel.upperBound + 0.13),
+                y: CGFloat(SweeperFigure.floorY)
+            )
+        )
+        let distance: CGFloat = exit * scale.width * 0.12
+        let r: CGFloat = 2.6 * (1 - exit)
+
+        for index in 0..<5 {
+            let angle: Double = -Double.pi * (0.15 + Double(index) * 0.175)
+            let dx: CGFloat = CGFloat(cos(angle)) * distance
+            let dy: CGFloat = CGFloat(sin(angle)) * distance * 0.8
+            let rect = CGRect(x: origin.x + dx - r, y: origin.y + dy - r, width: r * 2, height: r * 2)
+            context.fill(Path(ellipseIn: rect), with: .color(DS.onSlabMuted.opacity(0.5 * Double(1 - exit))))
+        }
+    }
+
+    /// The person. Legs, spine, head, the arm on the broom, the brush, and two specks lifting
+    /// off it so the stroke visibly does something.
+    private func drawBody(_ context: inout GraphicsContext, scale: Scale, pose: SweeperFigure.Pose, phase: Double) {
+        let ink = GraphicsContext.Shading.color(DS.onSlab)
+
+        var legs = Path()
+        legs.move(to: scale.point(pose.frontFoot))
+        legs.addLine(to: scale.point(pose.hip))
+        legs.addLine(to: scale.point(pose.backFoot))
+        context.stroke(legs, with: ink, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+
+        var spine = Path()
+        spine.move(to: scale.point(pose.hip))
+        spine.addLine(to: scale.point(pose.shoulder))
+        context.stroke(spine, with: ink, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+
+        let head = scale.point(pose.head)
+        let headSize: CGFloat = scale.width * 0.075
+        context.fill(
+            Path(
+                ellipseIn: CGRect(
+                    x: head.x - headSize / 2,
+                    y: head.y - headSize / 2,
+                    width: headSize,
+                    height: headSize
+                )
+            ),
+            with: ink
+        )
+
+        var arm = Path()
+        arm.move(to: scale.point(pose.shoulder))
+        arm.addLine(to: scale.point(pose.grip))
+        context.stroke(arm, with: ink, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+
+        let brushCentre = CGPoint(
+            x: (pose.broomLeft.x + pose.broomRight.x) / 2,
+            y: CGFloat(SweeperFigure.floorY) - 0.03
+        )
+        var handle = Path()
+        handle.move(to: scale.point(pose.grip))
+        handle.addLine(to: scale.point(brushCentre))
+        context.stroke(
+            handle,
+            with: .color(DS.onSlabAccent),
+            style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+        )
+
+        // A wedge, not a rectangle: a rectangle on a stick reads as a hammer.
+        var brush = Path()
+        brush.move(to: scale.point(CGPoint(x: brushCentre.x - 0.02, y: brushCentre.y)))
+        brush.addLine(to: scale.point(CGPoint(x: brushCentre.x + 0.02, y: brushCentre.y)))
+        brush.addLine(to: scale.point(pose.broomRight))
+        brush.addLine(to: scale.point(pose.broomLeft))
+        brush.closeSubpath()
+        context.fill(brush, with: .color(DS.onSlabAccent))
+
+        let lift: Double = abs(sin(phase * 2 * Double.pi))
+        let offsets: [Double] = [0.035, 0.06]
+        for offset in offsets {
+            let dust = scale.point(
+                CGPoint(
+                    x: pose.broomRight.x + CGFloat(offset),
+                    y: CGFloat(SweeperFigure.floorY - 0.02 - lift * offset)
+                )
+            )
+            let r: CGFloat = 1.4
             context.fill(
-                Path(ellipseIn: CGRect(x: head.x - headSize / 2, y: head.y - headSize / 2, width: headSize, height: headSize)),
-                with: body
+                Path(ellipseIn: CGRect(x: dust.x - r, y: dust.y - r, width: r * 2, height: r * 2)),
+                with: .color(DS.onSlabAccent.opacity(0.55 * (1 - lift * 0.5)))
             )
-
-            // Arm to the grip, then the broom handle down to the floor.
-            var arm = Path()
-            arm.move(to: point(pose.shoulder))
-            arm.addLine(to: point(pose.grip))
-            context.stroke(arm, with: body, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-
-            let broomCentre = CGPoint(
-                x: (pose.broomLeft.x + pose.broomRight.x) / 2,
-                y: SweeperFigure.floorY - 0.03
-            )
-            var handle = Path()
-            handle.move(to: point(pose.grip))
-            handle.addLine(to: point(broomCentre))
-            context.stroke(
-                handle,
-                with: .color(DS.onSlabAccent),
-                style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
-            )
-
-            // The brush: a wedge, not a rectangle — a rectangle on a stick reads as a hammer.
-            var brush = Path()
-            brush.move(to: point(CGPoint(x: broomCentre.x - 0.02, y: broomCentre.y)))
-            brush.addLine(to: point(CGPoint(x: broomCentre.x + 0.02, y: broomCentre.y)))
-            brush.addLine(to: point(pose.broomRight))
-            brush.addLine(to: point(pose.broomLeft))
-            brush.closeSubpath()
-            context.fill(brush, with: .color(DS.onSlabAccent))
-
-            // Two specks lifting off the brush, so the stroke visibly does something.
-            let lift = abs(sin(phase * 2 * .pi))
-            for offset in [0.035, 0.06] {
-                let dust = point(
-                    CGPoint(
-                        x: pose.broomRight.x + offset,
-                        y: SweeperFigure.floorY - 0.02 - lift * offset
-                    )
-                )
-                context.fill(
-                    Path(ellipseIn: CGRect(x: dust.x - 1.4, y: dust.y - 1.4, width: 2.8, height: 2.8)),
-                    with: .color(DS.onSlabAccent.opacity(0.55 * (1 - lift * 0.5)))
-                )
-            }
         }
     }
 
@@ -351,14 +390,14 @@ struct SweeperRingView: View {
             .stroke(DS.onSlabAccent, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
             .frame(width: size * 0.42, height: size * 0.42)
             // The only flourish in the whole thing, and it is three and a half per cent.
-            .scaleEffect(tickTrim >= 1 ? 1 + sin(min(pulse, 1) * .pi) * 0.035 : 1)
+            .scaleEffect(tickTrim >= 1 ? 1 + CGFloat(sin(Double(min(pulse, 1)) * Double.pi)) * 0.035 : 1)
             .accessibilityIdentifier("sweeper.tick")
     }
 
     /// One pulse off the ring, and only one.
     private var ringPulse: some View {
         Circle()
-            .strokeBorder(DS.onSlabAccent.opacity(0.5 * (1 - pulse)), lineWidth: 3)
+            .strokeBorder(DS.onSlabAccent.opacity(0.5 * Double(1 - pulse)), lineWidth: 3)
             .scaleEffect(1 + pulse * 0.12)
     }
 
