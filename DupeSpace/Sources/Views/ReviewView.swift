@@ -659,6 +659,12 @@ struct ReviewView: View {
         let savings = model.outcomeSavings ?? .empty
 
         return VStack(alignment: .leading, spacing: DS.Space.l) {
+            // The ring the person was just watching, with the tick out of the middle of it.
+            // Re-showing it finished makes this read as the arrival of the thing they were
+            // watching rather than a new picture they have to parse.
+            SweeperRingView(scene: .done, size: 104)
+                .frame(maxWidth: .infinity)
+
             VStack(alignment: .leading, spacing: 2) {
                 Eyebrow("What went", tint: DS.onSlabAccent)
 
@@ -675,17 +681,6 @@ struct ReviewView: View {
                     .font(.subheadline)
                     .foregroundStyle(DS.onSlab.opacity(0.72))
                     .accessibilityIdentifier("review.result")
-            }
-
-            if savings.immediateBytes + savings.deferredBytes > 0 {
-                HandoverView(
-                    scene: .settled(
-                        outcome: outcome,
-                        savings: savings,
-                        fileCount: model.outcomeFileCount,
-                        width: 300
-                    )
-                )
             }
 
             VStack(alignment: .leading, spacing: 6) {

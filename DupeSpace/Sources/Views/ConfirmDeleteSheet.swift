@@ -14,10 +14,6 @@ struct ConfirmDeleteSheet: View {
 
     @State private var pickingFolder = false
 
-    /// The instrument's staging width, captured once so the cell layout does not re-solve on
-    /// every progress tick.
-    @State private var instrumentWidth: CGFloat = 320
-
     /// Counts frozen the moment the key is spent. The selection is cleared the instant the
     /// deletion succeeds, so reading it afterwards would collapse the instrument to nothing at
     /// the exact frame it is meant to show the arrival.
@@ -231,36 +227,28 @@ struct ConfirmDeleteSheet: View {
     }
 
     private func handover(_ staged: (files: Int, photos: Int, savings: SavingsBreakdown)) -> some View {
-        HandoverView(scene: scene(staged))
+        SweeperRingView(scene: scene(staged), size: 118, caption: sweepCaption(staged))
+            .frame(maxWidth: .infinity)
             .dsSlab(padding: DS.Space.m, radius: DS.controlCorner)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.onAppear { instrumentWidth = proxy.size.width }
-                }
-            )
     }
 
-    private func scene(_ staged: (files: Int, photos: Int, savings: SavingsBreakdown)) -> HandoverScene {
-        // Arrived. The sheet holds on this for a beat before dismissing, so the crossing is
-        // seen finishing rather than cut off by the transition.
+    /// What the ring says underneath itself. Never a percentage during the atomic half — that
+    /// number does not exist there, and the arc is already saying so.
+    private func sweepCaption(_ staged: (files: Int, photos: Int, savings: SavingsBreakdown)) -> String {
         if let outcome = model.outcome {
-            return .settled(
-                outcome: outcome,
-                savings: model.outcomeSavings ?? staged.savings,
-                fileCount: staged.files,
-                width: instrumentWidth
-            )
+            return "\(Counting.items(outcome.deletedCount)) removed"
         }
-        guard let progress = model.deletionProgress else {
-            return .staged(savings: staged.savings, fileCount: staged.files, width: instrumentWidth)
+        guard let progress = model.deletionProgress, progress.isDeterminate else {
+            return "Settles in one step"
         }
-        return .inFlight(
-            progress: progress,
-            savings: staged.savings,
-            fileCount: staged.files,
-            photoCount: staged.photos,
-            width: instrumentWidth
-        )
+        return "\(progress.settled) of \(progress.total)"
+    }
+
+    private func scene(_ staged: (files: Int, photos: Int, savings: SavingsBreakdown)) -> SweepScene {
+        // Arrived. The sheet holds on this for a beat before dismissing, so the tick is seen
+        // coming out of the ring rather than cut off by the transition.
+        if model.outcome != nil { return .done }
+        return .from(model.deletionProgress)
     }
 
     /// The gauge reading, set the same way as the disk on the overview so the two numbers read
