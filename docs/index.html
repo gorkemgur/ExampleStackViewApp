@@ -5,296 +5,713 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DupeSpace — a regret-ranked space budget for iOS</title>
 <meta name="description" content="DupeSpace is an on-device iOS duplicate finder that answers &quot;I need 12 GB back, what do I lose least?&quot; — candidates ranked by what deleting them actually costs you.">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark light">
 <link rel="icon" href="assets/icon.png" type="image/png">
+<script>document.documentElement.className += " js";</script>
 <style>
+/* ============================================================
+   DupeSpace — dark-first, blue/teal drawn from the app icon.
+   System faces only; the voice comes from scale and spacing.
+   ============================================================ */
+
 :root {
-  --bg: #f4f5f7;
-  --bg-2: #eceef2;
-  --surface: #ffffff;
-  --surface-2: #f8f9fb;
-  --line: #e0e3e9;
-  --line-strong: #c9cfd9;
-  --ink: #14161a;
-  --ink-2: #4a5058;
-  --ink-3: #737b86;
-  --accent: #0a6fdb;
-  --accent-bright: #0a85ff;
-  --teal-bright: #32d6eb;
-  --grad: linear-gradient(115deg, var(--accent-bright), var(--teal-bright));
-  --ok: #1d8a4e;
-  --warn: #b06a10;
-  --neutral: #6b7280;
-  --ok-soft: rgba(29,138,78,.20);
-  --warn-soft: rgba(176,106,16,.20);
-  --neutral-soft: rgba(107,114,128,.22);
-  --shadow: 0 1px 2px rgba(20,30,50,.05), 0 8px 24px -12px rgba(20,30,50,.18);
-  --radius: 16px;
+  /* ground + surfaces */
+  --ground: #06070b;
+  --ground-2: #090b11;
+  --surface: #0d1119;
+  --surface-2: #131926;
+  --surface-3: #1a2231;
+  --line: rgba(255,255,255,.075);
+  --line-2: rgba(255,255,255,.14);
+  --line-lit: rgba(255,255,255,.30);
+
+  /* ink — slate biased toward the accent hue */
+  --ink: #edf1f8;
+  --ink-2: #9dabc0;
+  --ink-3: #6b7889;
+
+  /* the icon's own gradient */
+  --blue: #0a84ff;
+  --teal: #32d7eb;
+  --accent-text: #63b4ff;
+  --grad: linear-gradient(112deg, var(--blue), var(--teal));
+
+  /* semantic — cost of deletion, deliberately not the accent */
+  --free: #3ddc97;
+  --warn: #f5a93b;
+  --judge: #8d9aae;
+  --free-dim: rgba(61,220,151,.22);
+  --warn-dim: rgba(245,169,59,.22);
+  --judge-dim: rgba(141,154,174,.22);
+
+  --glow-a: rgba(10,132,255,.34);
+  --glow-b: rgba(50,215,235,.22);
+  --glow-c: rgba(10,132,255,.14);
+  --field-top: transparent;
+  --grain: .062;
+  --sheen: rgba(255,255,255,.16);
+  --reflect-1: rgba(255,255,255,.19);
+  --reflect-2: rgba(255,255,255,.04);
+  --shell: linear-gradient(158deg, #333b4b, #0b0e15 42%, #04060a);
+  --card-lift: 0 1px 0 rgba(255,255,255,.05) inset, 0 24px 50px -34px rgba(0,0,0,.95);
+
   --maxw: 1060px;
+  --r-lg: 22px;
+  --r-md: 14px;
+  --ease: cubic-bezier(.22,.72,.26,1);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0d11;
-    --bg-2: #101319;
-    --surface: #161a21;
-    --surface-2: #1b202a;
-    --line: #262c37;
-    --line-strong: #39404d;
-    --ink: #e9ecf1;
-    --ink-2: #b3bac5;
-    --ink-3: #858d99;
-    --accent: #57adff;
-    --accent-bright: #0a85ff;
-    --teal-bright: #32d6eb;
-    --ok: #46c97e;
-    --warn: #e0a044;
-    --neutral: #8b94a1;
-    --ok-soft: rgba(70,201,126,.22);
-    --warn-soft: rgba(224,160,68,.22);
-    --neutral-soft: rgba(139,148,161,.24);
-    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+
+/* Light is its own design: cool paper, an aurora only at the top,
+   white surfaces, and a deeper blue so type keeps its contrast. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #eaeef5;
+    --ground-2: #f3f6fa;
+    --surface: #ffffff;
+    --surface-2: #f5f8fc;
+    --surface-3: #eaeff7;
+    --line: rgba(12,22,40,.10);
+    --line-2: rgba(12,22,40,.16);
+    --line-lit: rgba(12,22,40,.34);
+    --ink: #0a0e15;
+    --ink-2: #4b5564;
+    --ink-3: #78838f;
+    --accent-text: #0a62ce;
+    --free: #12925c;
+    --warn: #9a640d;
+    --judge: #5f6b7c;
+    --free-dim: rgba(18,146,92,.20);
+    --warn-dim: rgba(154,100,13,.20);
+    --judge-dim: rgba(95,107,124,.20);
+    --glow-a: rgba(10,132,255,.22);
+    --glow-b: rgba(50,215,235,.20);
+    --glow-c: rgba(10,132,255,.10);
+    --field-top: #dfe9f6;
+    --grain: .030;
+    --sheen: rgba(255,255,255,.55);
+    --card-lift: 0 1px 0 rgba(255,255,255,.9) inset, 0 18px 40px -30px rgba(15,30,60,.45);
   }
+}
+:root[data-theme="light"] {
+  --ground: #eaeef5; --ground-2: #f3f6fa; --surface: #ffffff; --surface-2: #f5f8fc;
+  --surface-3: #eaeff7; --line: rgba(12,22,40,.10); --line-2: rgba(12,22,40,.16);
+  --line-lit: rgba(12,22,40,.34); --ink: #0a0e15; --ink-2: #4b5564; --ink-3: #78838f;
+  --accent-text: #0a62ce; --free: #12925c; --warn: #9a640d; --judge: #5f6b7c;
+  --free-dim: rgba(18,146,92,.20); --warn-dim: rgba(154,100,13,.20); --judge-dim: rgba(95,107,124,.20);
+  --glow-a: rgba(10,132,255,.22); --glow-b: rgba(50,215,235,.20); --glow-c: rgba(10,132,255,.10);
+  --field-top: #dfe9f6; --grain: .030; --sheen: rgba(255,255,255,.55);
+  --card-lift: 0 1px 0 rgba(255,255,255,.9) inset, 0 18px 40px -30px rgba(15,30,60,.45);
 }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--ground);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--sans);
   font-size: 17px;
-  line-height: 1.55;
+  line-height: 1.62;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 img { max-width: 100%; height: auto; display: block; }
-a { color: var(--accent); }
-a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
-  outline: 2px solid var(--accent-bright);
+a { color: var(--accent-text); text-underline-offset: 3px; }
+
+:focus-visible {
+  outline: 2px solid var(--teal);
   outline-offset: 3px;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
-.wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
-section { padding: 56px 0; border-top: 1px solid var(--line); }
-h1, h2, h3 { line-height: 1.2; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
-h2 { font-size: clamp(1.5rem, 4.2vw, 2rem); }
-h3 { font-size: 1.0625rem; letter-spacing: -.01em; }
+/* ---------- grain ---------- */
+.grain {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 900; opacity: var(--grain);
+}
+
+/* ---------- structure ---------- */
+.wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding-inline: 22px; }
+.measure { max-width: 62ch; }
+section { position: relative; padding-block: clamp(64px, 9vw, 118px); }
+section + section::before {
+  content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: min(100% - 44px, var(--maxw)); height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-2) 18%, var(--line-2) 82%, transparent);
+}
+
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 {
+  font-size: clamp(2.5rem, 7.4vw, 5.1rem);
+  line-height: .97; letter-spacing: -.046em; font-weight: 700;
+}
+h2 {
+  font-size: clamp(1.85rem, 4.4vw, 2.95rem);
+  line-height: 1.04; letter-spacing: -.038em; font-weight: 700;
+}
+h3 { font-size: 1.0625rem; line-height: 1.32; letter-spacing: -.015em; font-weight: 650; }
 p { margin: 0 0 1em; overflow-wrap: break-word; }
 p:last-child { margin-bottom: 0; }
+
 .eyebrow {
-  font-size: .75rem; font-weight: 650; letter-spacing: .09em; text-transform: uppercase;
-  color: var(--ink-3); margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: .6875rem; font-weight: 550; letter-spacing: .17em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0 0 14px; display: flex; align-items: center; gap: 12px;
+}
+.eyebrow::before {
+  content: ""; width: 22px; height: 1px; background: var(--line-lit); flex: none;
 }
 .lede { color: var(--ink-2); font-size: 1.0625rem; max-width: 62ch; }
 .small { font-size: .875rem; color: var(--ink-3); }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; overflow-wrap: anywhere; }
+.mono { font-family: var(--mono); font-size: .9em; overflow-wrap: anywhere; color: var(--ink); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+
+/* ---------- progress rail ---------- */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 800;
+  background: transparent; pointer-events: none;
+}
+.topbar i {
+  display: block; height: 100%; width: 100%; transform-origin: 0 50%;
+  transform: scaleX(var(--p, 0));
+  background: var(--grad);
+  box-shadow: 0 0 12px var(--glow-a);
+}
+.rail {
+  position: fixed; left: 20px; top: 50%; transform: translateY(-50%);
+  z-index: 700; display: none; padding: 4px 0;
+}
+.rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 20px; position: relative; }
+.rail ol::before {
+  content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 1px;
+  background: var(--line-2);
+}
+.rail ol::after {
+  content: ""; position: absolute; left: 4px; top: 6px; width: 1px;
+  height: calc((100% - 12px) * var(--p, 0));
+  background: linear-gradient(180deg, var(--blue), var(--teal));
+  box-shadow: 0 0 8px var(--glow-a);
+}
+.rail li { position: relative; }
+.rail a {
+  display: flex; align-items: center; gap: 12px; text-decoration: none;
+  color: var(--ink-3); font-family: var(--mono); font-size: .6875rem;
+  letter-spacing: .1em; text-transform: uppercase; line-height: 1.2;
+  transition: color .3s var(--ease);
+}
+.rail .tick {
+  width: 9px; height: 9px; border-radius: 50%; flex: none; margin-left: 0;
+  background: var(--ground); box-shadow: inset 0 0 0 1px var(--line-lit);
+  transition: box-shadow .35s var(--ease), background .35s var(--ease), transform .35s var(--ease);
+}
+.rail .label { display: none; max-width: 120px; }
+.rail a:hover { color: var(--ink-2); }
+.rail a[aria-current="true"] { color: var(--ink); }
+.rail a[aria-current="true"] .tick {
+  background: var(--teal); transform: scale(1.25);
+  box-shadow: inset 0 0 0 1px var(--teal), 0 0 12px var(--glow-b);
+}
+@media (min-width: 1120px) { .rail { display: block; } }
+@media (min-width: 1400px) { .rail .label { display: block; } }
+
+.skip {
+  position: fixed; left: 14px; top: -70px; z-index: 950;
+  background: var(--surface-2); color: var(--ink); border: 1px solid var(--line-2);
+  padding: 11px 18px; border-radius: 12px; text-decoration: none; font-weight: 600;
+  transition: top .2s var(--ease);
+}
+.skip:focus { top: 14px; }
 
 /* ---------- hero ---------- */
-.hero { position: relative; border-top: 0; padding: 44px 0 56px; overflow: hidden; }
-.glow {
-  position: absolute; z-index: 0; pointer-events: none;
-  top: -280px; left: 50%; width: min(900px, 150vw); height: 620px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(10,133,255,.20), rgba(50,214,235,.10) 55%, transparent 78%);
-  transform: translate3d(-50%, calc(var(--sy, 0) * 1px), 0);
-  will-change: transform;
+.hero { position: relative; overflow: hidden; padding-block: clamp(44px, 7vw, 92px) clamp(56px, 8vw, 104px); }
+.field { position: absolute; inset: -20% -10% auto -10%; height: 150%; z-index: 0; pointer-events: none; }
+.field::before {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, var(--field-top), transparent 62%);
 }
-@media (prefers-color-scheme: dark) {
-  .glow { background: radial-gradient(closest-side, rgba(10,133,255,.26), rgba(50,214,235,.12) 55%, transparent 78%); }
+.blob { position: absolute; border-radius: 50%; will-change: transform; }
+.b1 {
+  top: -14%; left: 8%; width: min(760px, 92vw); aspect-ratio: 1.35;
+  background: radial-gradient(closest-side, var(--glow-a), transparent 72%);
+  animation: drift1 15s ease-in-out infinite alternate;
+}
+.b2 {
+  top: 2%; right: 2%; width: min(620px, 82vw); aspect-ratio: 1.1;
+  background: radial-gradient(closest-side, var(--glow-b), transparent 70%);
+  animation: drift2 19s ease-in-out infinite alternate;
+}
+.b3 {
+  top: 26%; left: 34%; width: min(780px, 96vw); aspect-ratio: 1.6;
+  background: radial-gradient(closest-side, var(--glow-c), transparent 74%);
+  animation: drift3 27s ease-in-out infinite alternate;
+}
+@keyframes drift1 {
+  from { transform: translate3d(-7%, -4%, 0) scale(1); }
+  to   { transform: translate3d(10%, 7%, 0) scale(1.14); }
+}
+@keyframes drift2 {
+  from { transform: translate3d(6%, 6%, 0) scale(1.1); }
+  to   { transform: translate3d(-9%, -5%, 0) scale(.92); }
+}
+@keyframes drift3 {
+  from { transform: translate3d(-10%, 3%, 0) scale(.96); }
+  to   { transform: translate3d(9%, -6%, 0) scale(1.18); }
 }
 .hero .wrap { position: relative; z-index: 1; }
-.hero-grid { display: grid; gap: 40px; grid-template-columns: 1fr; align-items: start; }
-@media (min-width: 800px) { .hero-grid { grid-template-columns: 1.15fr .85fr; gap: 48px; } }
+.hero-grid { display: grid; gap: clamp(38px, 5vw, 56px); grid-template-columns: 1fr; align-items: center; }
+@media (min-width: 940px) { .hero-grid { grid-template-columns: 1.06fr .94fr; } }
 
-.brand { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
-.brand img { width: 60px; height: 60px; border-radius: 14px; box-shadow: var(--shadow); }
-.brand-name { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
-.brand-meta { font-size: .8125rem; color: var(--ink-3); }
-h1 { font-size: clamp(1.9rem, 6.4vw, 3rem); }
-h1 .grad {
-  background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
+.brand { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
+.brand img {
+  width: 58px; height: 58px; border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--line-2), 0 14px 34px -16px rgba(10,132,255,.8);
 }
-.hero p.lede { margin-top: 18px; font-size: 1.09rem; }
+.brand-name { font-size: 1.22rem; font-weight: 700; letter-spacing: -.03em; line-height: 1.2; }
+.brand-meta { font-family: var(--mono); font-size: .6875rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+h1 .grad {
+  background: linear-gradient(104deg, var(--blue) 8%, var(--teal) 78%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero p.lede { margin-top: 24px; font-size: 1.11rem; }
 
-.cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .btn {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 12px 20px; border-radius: 999px; font-weight: 600; font-size: .97rem;
-  text-decoration: none; border: 1px solid transparent; transition: transform .16s ease, box-shadow .16s ease;
+  position: relative; overflow: hidden;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 22px; border-radius: 999px; font-weight: 600; font-size: .97rem;
+  text-decoration: none; border: 1px solid transparent;
+  transition: transform .2s var(--ease), box-shadow .25s var(--ease), border-color .25s var(--ease);
 }
 .btn svg { width: 17px; height: 17px; fill: currentColor; flex: none; }
-.btn-primary { background: var(--grad); color: #fff; box-shadow: 0 6px 18px -8px rgba(10,133,255,.9); }
-.btn-primary:hover { transform: translateY(-1px); }
-.btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
-.btn-ghost:hover { border-color: var(--ink-3); }
-.hero-note { margin-top: 20px; max-width: 48ch; }
-
-/* ---------- phone frames ---------- */
-.phone {
-  border: 1px solid var(--line-strong);
-  border-radius: 26px; padding: 7px; background: var(--surface);
-  box-shadow: var(--shadow); max-width: 300px; margin: 0 auto;
+.btn::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, transparent 34%, var(--sheen) 50%, transparent 66%);
+  transform: translateX(-120%);
+  transition: transform .75s var(--ease);
 }
-.phone img { border-radius: 19px; }
-figure { margin: 0; }
-figcaption { font-size: .8125rem; color: var(--ink-3); margin-top: 12px; text-align: center; max-width: 34ch; margin-left: auto; margin-right: auto; }
-.shots { display: grid; gap: 28px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
-.shots .phone { max-width: 260px; }
+.btn:hover::after, .btn:focus-visible::after { transform: translateX(120%); }
+.btn-primary {
+  background: var(--grad); color: #04121f; font-weight: 700;
+  box-shadow: 0 10px 30px -12px rgba(10,132,255,.95);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 38px -12px rgba(10,132,255,1); }
+.btn-ghost {
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  color: var(--ink); border-color: var(--line-2);
+}
+.btn-ghost:hover { transform: translateY(-2px); border-color: var(--line-lit); }
+.hero-note { margin-top: 24px; max-width: 50ch; }
+
+/* ---------- the signature loop ---------- */
+.signature {
+  position: relative; border-radius: var(--r-lg); padding: 22px 22px 18px;
+  background: linear-gradient(168deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line);
+  box-shadow: var(--card-lift), 0 0 70px -34px var(--glow-a);
+  overflow: hidden;
+}
+.signature::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 70% at 50% -10%, var(--glow-c), transparent 62%);
+}
+.sig-label {
+  position: relative; font-family: var(--mono); font-size: .625rem; letter-spacing: .17em;
+  text-transform: uppercase; color: var(--ink-3);
+  display: flex; justify-content: space-between; gap: 10px;
+}
+.sig-stage { position: relative; height: 178px; margin: 14px 0 4px; }
+.sig-card {
+  position: absolute; left: 50%; top: 50%;
+  width: 112px; height: 138px; border-radius: 16px;
+  margin: -69px 0 0 -56px;
+  background: linear-gradient(150deg, #1f2b3d, #101722);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 18px 36px -22px rgba(0,0,0,.9);
+  display: grid; place-items: end start; padding: 10px;
+  font-family: var(--mono); font-size: .5625rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+:root[data-theme="light"] .sig-card,
+:root:not([data-theme="dark"]) .sig-card { }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .sig-card {
+    background: linear-gradient(150deg, #ffffff, #e9eff8);
+    box-shadow: 0 18px 30px -22px rgba(20,40,80,.55);
+  }
+}
+.sig-card::before {
+  content: ""; position: absolute; inset: 8px 8px 26px;
+  border-radius: 9px;
+  background: linear-gradient(140deg, var(--blue), var(--teal));
+  opacity: .5;
+}
+.sig-card.keep::before { opacity: .95; }
+.sig-card.keep { border-color: color-mix(in srgb, var(--teal) 55%, transparent); }
+
+/* four copies, stacked; three peel away, one always stays */
+.sig-card.c1 { --x: -30px; --y: -14px; --r: -9deg; z-index: 1; animation: peel 11s var(--ease) infinite; animation-delay: 0s; }
+.sig-card.c2 { --x: -14px; --y: -7px;  --r: -4.5deg; z-index: 2; animation: peel 11s var(--ease) infinite; animation-delay: .75s; }
+.sig-card.c3 { --x: 2px;   --y: 0px;   --r: 0deg; z-index: 3; animation: peel 11s var(--ease) infinite; animation-delay: 1.5s; }
+.sig-card.keep { --x: 20px; --y: 8px; --r: 4.5deg; z-index: 4; animation: stay 11s var(--ease) infinite; }
+
+@keyframes peel {
+  0%, 6%   { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
+  20%      { transform: translate3d(calc(var(--x) - 96px), calc(var(--y) - 34px), 0) rotate(calc(var(--r) - 15deg)); opacity: 0; }
+  21%, 88% { transform: translate3d(calc(var(--x) - 96px), calc(var(--y) - 34px), 0) rotate(calc(var(--r) - 15deg)); opacity: 0; }
+  100%     { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
+}
+@keyframes stay {
+  0%, 18%  { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)) scale(1); }
+  34%, 88% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.05); }
+  100%     { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)) scale(1); }
+}
+.sig-meter {
+  position: relative; height: 9px; border-radius: 999px; overflow: hidden;
+  background: var(--surface-3); border: 1px solid var(--line);
+}
+.sig-meter i {
+  position: absolute; inset: 0 auto 0 0; width: 16%; border-radius: 999px;
+  background: var(--grad); box-shadow: 0 0 16px var(--glow-a);
+  animation: refill 11s var(--ease) infinite;
+}
+@keyframes refill {
+  0%, 6%   { width: 16%; }
+  38%      { width: 74%; }
+  88%      { width: 74%; }
+  100%     { width: 16%; }
+}
+.sig-foot {
+  position: relative; display: flex; justify-content: space-between; gap: 10px;
+  margin-top: 10px; font-family: var(--mono); font-size: .625rem;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3);
+}
+.sig-foot .won { color: var(--teal); animation: wink 11s var(--ease) infinite; }
+@keyframes wink {
+  0%, 14% { opacity: 0; transform: translateY(4px); }
+  40%, 86% { opacity: 1; transform: none; }
+  96%, 100% { opacity: 0; transform: translateY(4px); }
+}
+.sig-caption { margin-top: 16px; font-size: .8125rem; color: var(--ink-3); max-width: 44ch; }
+
+/* ---------- capacity instrument ---------- */
+.hero-band {
+  display: grid; gap: clamp(26px, 4vw, 40px); grid-template-columns: 1fr;
+  margin-top: clamp(46px, 6vw, 72px); align-items: center;
+}
+@media (min-width: 880px) { .hero-band { grid-template-columns: 1.25fr .75fr; } }
+
+.capacity {
+  position: relative; border-radius: var(--r-lg); padding: clamp(22px, 3vw, 30px);
+  background: linear-gradient(172deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line); box-shadow: var(--card-lift);
+}
+.cap-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-top: 4px; }
+.cap-big {
+  font-size: clamp(2.4rem, 6.4vw, 3.6rem); font-weight: 700; letter-spacing: -.05em;
+  line-height: 1; font-variant-numeric: tabular-nums;
+}
+.cap-big .unit { font-size: .42em; font-family: var(--mono); letter-spacing: .04em; color: var(--ink-3); margin-left: .28em; }
+.cap-of { color: var(--ink-2); font-size: 1rem; }
+.cap-bar {
+  display: flex; height: 16px; border-radius: 999px; overflow: hidden;
+  background: var(--surface-3); margin: 22px 0 18px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.cap-seg { width: 0; min-width: 0; transition: width 1.3s var(--ease); }
+.in .cap-seg { width: var(--w); }
+.cap-seg:nth-child(2) { transition-delay: .14s; }
+.cap-seg:nth-child(3) { transition-delay: .28s; }
+.cap-photos { background: var(--grad); min-width: 5px; box-shadow: 0 0 18px var(--glow-a); }
+.cap-other { background: linear-gradient(180deg, var(--line-lit), var(--line-2)); }
+.cap-free { background: repeating-linear-gradient(125deg, transparent, transparent 5px, var(--line-2) 5px, var(--line-2) 10px); }
+.cap-key { display: flex; flex-wrap: wrap; gap: 14px 34px; }
+.cap-key .k {
+  display: flex; align-items: center; gap: 8px; color: var(--ink-3);
+  font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase;
+}
+.cap-key .v { font-weight: 650; font-size: 1.0625rem; font-variant-numeric: tabular-nums; margin-top: 3px; }
+.cap-key .v .unit { font-family: var(--mono); font-size: .68em; color: var(--ink-3); margin-left: .22em; font-weight: 500; }
+.dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.dot-photos { background: var(--grad); box-shadow: 0 0 10px var(--glow-a); }
+.dot-other { background: var(--line-lit); }
+.dot-free { background: transparent; box-shadow: inset 0 0 0 1px var(--line-lit); }
+
+/* ---------- device frames ---------- */
+.figure { margin: 0; }
+.device-wrap { perspective: 1100px; transform: translate3d(0, var(--py, 0px), 0); }
+.device {
+  position: relative; width: 100%; max-width: 296px; margin-inline: auto;
+  padding: 9px; border-radius: 40px;
+  background: var(--shell);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.10),
+    inset 0 1.5px 0 rgba(255,255,255,.20),
+    0 34px 64px -34px rgba(0,0,0,.95),
+    0 0 80px -40px var(--glow-a);
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform .45s var(--ease);
+  transform-style: preserve-3d;
+}
+.device img { border-radius: 32px; }
+.device::before {
+  content: ""; position: absolute; inset: 9px; border-radius: 32px; z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(118deg, var(--reflect-1) 0 14%, var(--reflect-2) 26%, transparent 44%, transparent 76%, var(--reflect-2) 92%);
+}
+.device::after {
+  content: ""; position: absolute; inset: 9px; border-radius: 32px; z-index: 3;
+  pointer-events: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+}
+.shots .device { max-width: 268px; }
+figcaption {
+  font-size: .8125rem; color: var(--ink-3); margin-top: 16px; text-align: center;
+  max-width: 38ch; margin-inline: auto; line-height: 1.5;
+}
+.shots { display: grid; gap: 34px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 
 /* ---------- cards ---------- */
 .card {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow);
+  position: relative; overflow: hidden;
+  background: linear-gradient(172deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: clamp(20px, 2.6vw, 26px);
+  box-shadow: var(--card-lift);
 }
-.grid-2 { display: grid; gap: 18px; grid-template-columns: 1fr; }
-@media (min-width: 720px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
-
-/* ---------- capacity bar ---------- */
-.capacity { margin-top: 34px; }
-.cap-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-.cap-big { font-size: clamp(1.6rem, 5vw, 2.1rem); font-weight: 700; letter-spacing: -.03em; }
-.cap-bar {
-  display: flex; height: 14px; border-radius: 999px; overflow: hidden;
-  background: var(--bg-2); margin: 14px 0 16px; border: 1px solid var(--line);
+.card > * { position: relative; z-index: 1; }
+.card[data-glow]::before {
+  content: ""; position: absolute; inset: -1px; z-index: 0; pointer-events: none;
+  background: radial-gradient(280px circle at var(--mx, 50%) var(--my, 0%), var(--glow-c), transparent 70%);
+  opacity: 0; transition: opacity .4s var(--ease);
 }
-.cap-seg { width: 0; min-width: 0; transition: width .9s cubic-bezier(.2,.7,.3,1); }
-.in .cap-seg { width: var(--w); }
-.cap-seg:nth-child(2) { transition-delay: .1s; }
-.cap-seg:nth-child(3) { transition-delay: .2s; }
-.cap-photos { background: var(--grad); min-width: 4px; }
-.cap-other { background: var(--line-strong); }
-.cap-free { background: repeating-linear-gradient(135deg, var(--bg-2), var(--bg-2) 5px, var(--line) 5px, var(--line) 10px); }
-.cap-key { display: flex; flex-wrap: wrap; gap: 6px 26px; }
-.cap-key div { font-size: .875rem; }
-.cap-key .k { display: flex; align-items: center; gap: 7px; color: var(--ink-3); }
-.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-.dot-photos { background: var(--accent-bright); }
-.dot-other { background: var(--line-strong); }
-.dot-free { background: var(--neutral); opacity: .45; }
-.cap-key .v { font-weight: 650; }
+.card[data-glow].glowing::before { opacity: 1; }
+.card p { color: var(--ink-2); font-size: .9375rem; }
+.card h3 + p { margin-top: 10px; }
+.grid-2 { display: grid; gap: 22px; grid-template-columns: 1fr; }
+@media (min-width: 780px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
 
-/* ---------- regret ladder ---------- */
-.ladder { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 12px; }
+/* ---------- the regret ladder ---------- */
+.ladder-zone { position: relative; }
+.ladder-zone::before {
+  content: ""; position: absolute; z-index: 0; pointer-events: none;
+  left: -6%; right: -6%; top: -6%; height: 70%;
+  background: radial-gradient(60% 50% at 30% 40%, var(--glow-c), transparent 70%);
+  animation: breathe 13s ease-in-out infinite alternate;
+}
+@keyframes breathe {
+  from { opacity: .5; transform: translate3d(-3%, 0, 0) scale(1); }
+  to   { opacity: 1; transform: translate3d(4%, 2%, 0) scale(1.1); }
+}
+.ladder { position: relative; z-index: 1; list-style: none; margin: 34px 0 0; padding: 0; display: grid; gap: 10px; }
 .tier {
-  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
-  border-radius: 14px; padding: 16px 18px;
-  opacity: .55; transition: opacity .45s ease, border-left-color .45s ease, transform .45s ease;
+  position: relative; overflow: hidden;
+  background: linear-gradient(172deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: 18px 20px 18px 22px;
+  opacity: .42; transform: translateY(10px);
+  transition: opacity .6s var(--ease), transform .6s var(--ease), border-color .6s var(--ease), box-shadow .6s var(--ease);
 }
-.tier.lit { opacity: 1; border-left-color: var(--tier-color); }
-.tier-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.tier::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--line-2); transition: background .6s var(--ease), box-shadow .6s var(--ease);
+}
+.tier.lit {
+  opacity: 1; transform: none; border-color: var(--line-2);
+  box-shadow: var(--card-lift);
+}
+.tier.lit::before { background: var(--tier-color); box-shadow: 0 0 16px -1px var(--tier-color); }
+.tier-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .tier-rank {
-  font-size: .75rem; font-weight: 700; color: var(--ink-3);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono); font-size: .625rem; font-weight: 600; letter-spacing: .15em;
+  color: var(--ink-3); text-transform: uppercase;
 }
+.tier.lit .tier-rank { color: var(--tier-color); }
 .tier-cost {
-  margin-left: auto; font-size: .75rem; font-weight: 650; letter-spacing: .02em;
-  padding: 3px 10px; border-radius: 999px; color: var(--tier-color);
-  border: 1px solid currentColor; white-space: nowrap;
+  margin-left: auto; font-family: var(--mono); font-size: .625rem; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase;
+  padding: 4px 11px; border-radius: 999px; color: var(--tier-color);
+  box-shadow: inset 0 0 0 1px currentColor; white-space: nowrap;
 }
-.tier p { margin: 6px 0 0; color: var(--ink-2); font-size: .9375rem; max-width: 60ch; }
-.tier-meterrow { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-.tier-track { flex: 1; min-width: 0; height: 8px; background: var(--bg-2); border-radius: 999px; overflow: hidden; }
+.tier p { margin: 8px 0 0; color: var(--ink-2); font-size: .9375rem; max-width: 62ch; }
+.tier-meterrow { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.tier-track {
+  flex: 1; min-width: 0; height: 9px; background: var(--surface-3);
+  border-radius: 999px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line);
+}
 .tier-bar {
-  width: 0; height: 100%; border-radius: 999px; background: var(--line-strong);
-  transition: width .7s cubic-bezier(.2,.7,.3,1);
+  width: 0; height: 100%; border-radius: 999px; background: var(--line-2);
+  transition: width .95s var(--ease), background .6s var(--ease);
   position: relative; overflow: hidden;
 }
 .tier.lit .tier-bar { width: var(--w); background: var(--tier-soft); }
+.tier.lit .tier-bar::after {
+  content: ""; position: absolute; inset: 0; border-radius: 999px;
+  background: linear-gradient(100deg, transparent 38%, var(--sheen) 50%, transparent 62%);
+  transform: translateX(-140%);
+  animation: sweep 4.6s var(--ease) infinite;
+  animation-delay: var(--sweep-delay, 0s);
+}
+@keyframes sweep {
+  0%   { transform: translateX(-140%); }
+  55%  { transform: translateX(140%); }
+  100% { transform: translateX(140%); }
+}
 .tier-taken {
   position: absolute; inset: 0 auto 0 0; width: var(--taken, 0%);
-  background: var(--tier-color); border-radius: 999px; transition: width .28s ease;
+  background: var(--tier-color); border-radius: 999px;
+  transition: width .3s var(--ease); z-index: 1;
 }
-.tier-size { font-size: .8125rem; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.t0, .t1 { --tier-color: var(--ok); --tier-soft: var(--ok-soft); }
-.t2 { --tier-color: var(--warn); --tier-soft: var(--warn-soft); }
-.t3 { --tier-color: var(--neutral); --tier-soft: var(--neutral-soft); }
+.tier-size {
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-3); white-space: nowrap;
+  font-variant-numeric: tabular-nums; letter-spacing: .02em;
+}
+.t0, .t1 { --tier-color: var(--free); --tier-soft: var(--free-dim); }
+.t2 { --tier-color: var(--warn); --tier-soft: var(--warn-dim); }
+.t3 { --tier-color: var(--judge); --tier-soft: var(--judge-dim); }
+.t1 .tier-bar::after { --sweep-delay: .6s; }
+.t2 .tier-bar::after { --sweep-delay: 1.2s; }
+.t3 .tier-bar::after { --sweep-delay: 1.8s; }
 
 /* ---------- budget slider ---------- */
-.budget { margin-top: 22px; }
-.budget-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
-.budget-need { font-size: 1.05rem; color: var(--ink-2); }
-.budget-value { font-size: clamp(1.6rem, 5vw, 2rem); font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.budget-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 6px; }
+.budget-need { font-size: 1rem; color: var(--ink-2); }
+.budget-value {
+  font-size: clamp(1.9rem, 5vw, 2.5rem); font-weight: 700; letter-spacing: -.05em;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.budget-value .unit { font-family: var(--mono); font-size: .4em; letter-spacing: .04em; color: var(--ink-3); margin-left: .3em; }
 input[type="range"] {
-  -webkit-appearance: none; appearance: none; width: 100%; margin: 18px 0 6px;
-  background: transparent; height: 28px; display: block;
+  -webkit-appearance: none; appearance: none; width: 100%; margin: 22px 0 8px;
+  background: transparent; height: 30px; display: block; cursor: pointer;
+  --pct: 58%;
 }
 input[type="range"]::-webkit-slider-runnable-track {
-  height: 8px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line);
+  height: 10px; border-radius: 999px;
+  background:
+    linear-gradient(90deg, var(--blue), var(--teal)) 0 / var(--pct) 100% no-repeat,
+    var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
-input[type="range"]::-moz-range-track { height: 8px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line); }
+input[type="range"]::-moz-range-track {
+  height: 10px; border-radius: 999px;
+  background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--line);
+}
+input[type="range"]::-moz-range-progress {
+  height: 10px; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--teal));
+}
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border-radius: 50%;
-  background: #fff; border: 1px solid var(--line-strong); box-shadow: var(--shadow);
-  margin-top: -10px; cursor: grab;
+  background: radial-gradient(circle at 34% 30%, #ffffff, #d7e3f2);
+  box-shadow: 0 0 0 1px rgba(6,10,18,.35), 0 6px 16px -4px rgba(0,0,0,.7), 0 0 22px -4px var(--glow-a);
+  margin-top: -8px; cursor: grab;
+  transition: transform .18s var(--ease), box-shadow .25s var(--ease);
 }
+input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.1); }
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.16); cursor: grabbing; }
 input[type="range"]::-moz-range-thumb {
-  width: 24px; height: 24px; border-radius: 50%; background: #fff;
-  border: 1px solid var(--line-strong); box-shadow: var(--shadow); cursor: grab;
+  width: 24px; height: 24px; border-radius: 50%; border: 0;
+  background: radial-gradient(circle at 34% 30%, #ffffff, #d7e3f2);
+  box-shadow: 0 0 0 1px rgba(6,10,18,.35), 0 6px 16px -4px rgba(0,0,0,.7);
+  cursor: grab;
 }
-.ticks { display: flex; justify-content: space-between; font-size: .75rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+input[type="range"]:focus-visible { outline: none; }
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--ground), 0 0 0 5px var(--teal), 0 0 26px -2px var(--glow-b);
+}
+input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--ground), 0 0 0 5px var(--teal);
+}
+.ticks {
+  display: flex; justify-content: space-between; font-family: var(--mono);
+  font-size: .625rem; letter-spacing: .1em; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
 .plan {
-  margin-top: 18px; padding: 16px 18px; border-radius: 12px;
-  background: var(--surface-2); border: 1px solid var(--line);
+  margin-top: 20px; padding: 16px 18px; border-radius: var(--r-md);
+  background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--line);
 }
-.plan-main { font-weight: 600; }
-.plan-cost { margin-top: 6px; color: var(--ink-2); font-size: .9375rem; }
+.plan-main { font-weight: 650; color: var(--ink) !important; font-size: 1rem !important; }
+.plan-cost { margin-top: 8px; color: var(--ink-2) !important; font-size: .9375rem !important; }
 
 /* ---------- steps ---------- */
-.steps { list-style: none; counter-reset: s; margin: 26px 0 0; padding: 0; display: grid; gap: 16px; }
-@media (min-width: 760px) { .steps { grid-template-columns: 1fr 1fr; } }
-.step { counter-increment: s; position: relative; padding-left: 46px; }
+.steps { list-style: none; counter-reset: s; margin: 34px 0 0; padding: 0; display: grid; gap: 26px 30px; }
+@media (min-width: 780px) { .steps { grid-template-columns: 1fr 1fr; } }
+.step { counter-increment: s; position: relative; padding-left: 52px; }
 .step::before {
-  content: counter(s); position: absolute; left: 0; top: 1px;
-  width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
-  font-size: .8125rem; font-weight: 700; color: #fff; background: var(--grad);
+  content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 0;
+  width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center;
+  font-family: var(--mono); font-size: .6875rem; font-weight: 600; letter-spacing: .04em;
+  color: var(--teal);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-2), 0 0 24px -10px var(--glow-a);
 }
-.step p { margin: 5px 0 0; color: var(--ink-2); font-size: .9375rem; }
+.step p { margin: 8px 0 0; color: var(--ink-2); font-size: .9375rem; max-width: 52ch; }
 
 /* ---------- rules ---------- */
-.rules { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 14px; }
-@media (min-width: 860px) { .rules { grid-template-columns: 1fr 1fr; } }
-.rule { border-left: 3px solid var(--accent-bright); padding: 2px 0 2px 16px; }
+.rules { list-style: none; counter-reset: r; margin: 34px 0 0; padding: 0; display: grid; gap: 24px 34px; }
+@media (min-width: 880px) { .rules { grid-template-columns: 1fr 1fr; } }
+.rule { position: relative; padding-left: 22px; }
+.rule::before {
+  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--blue), var(--teal));
+  opacity: .75;
+}
 .rule h3 { font-size: 1rem; }
-.rule p { margin: 5px 0 0; color: var(--ink-2); font-size: .9375rem; }
+.rule p { margin: 8px 0 0; color: var(--ink-2); font-size: .9375rem; }
 
-/* ---------- limits ---------- */
-.limits { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 14px; }
-@media (min-width: 860px) { .limits { grid-template-columns: 1fr 1fr; } }
-.limit { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
-.limit h3 { font-size: .9375rem; color: var(--warn); }
-.limit p { margin: 6px 0 0; font-size: .9375rem; color: var(--ink-2); }
+/* ---------- the honest part: quieter, flatter, no glow ---------- */
+.sober { background: var(--ground-2); }
+.limits {
+  list-style: none; margin: 34px 0 0; padding: 0; display: grid; gap: 0;
+  border-top: 1px solid var(--line);
+}
+@media (min-width: 880px) { .limits { grid-template-columns: 1fr 1fr; column-gap: 44px; } }
+.limit { padding: 22px 0 22px 26px; border-bottom: 1px solid var(--line); position: relative; }
+.limit::before {
+  content: ""; position: absolute; left: 0; top: 30px;
+  width: 7px; height: 7px; border-radius: 2px; background: var(--warn); opacity: .8;
+}
+.limit h3 { font-size: .9375rem; color: var(--ink); font-weight: 650; }
+.limit p { margin: 8px 0 0; font-size: .9375rem; color: var(--ink-2); max-width: 54ch; }
 
 /* ---------- footer ---------- */
-footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: var(--bg-2); }
-.foot-grid { display: flex; flex-wrap: wrap; gap: 20px 40px; align-items: center; justify-content: space-between; }
-.foot-brand { display: flex; align-items: center; gap: 12px; }
-.foot-brand img { width: 36px; height: 36px; border-radius: 9px; }
+footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: var(--ground-2); }
+.foot-grid { display: flex; flex-wrap: wrap; gap: 26px 44px; align-items: center; justify-content: space-between; }
+.foot-brand { display: flex; align-items: center; gap: 14px; }
+.foot-brand img { width: 38px; height: 38px; border-radius: 10px; box-shadow: 0 0 0 1px var(--line-2); }
+.foot-name { font-weight: 650; letter-spacing: -.02em; }
 
 /* ---------- reveal ---------- */
-.reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.3,1); }
+.js .reveal { opacity: 0; transform: translateY(22px); }
+.reveal { transition: opacity .75s var(--ease), transform .75s var(--ease); }
 .reveal.in { opacity: 1; transform: none; }
-.stagger > * { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s cubic-bezier(.2,.7,.3,1); }
+.js .stagger > * { opacity: 0; transform: translateY(18px); }
+.stagger > * { transition: opacity .65s var(--ease), transform .65s var(--ease); }
 .stagger.in > * { opacity: 1; transform: none; }
-.stagger.in > *:nth-child(2) { transition-delay: .08s; }
-.stagger.in > *:nth-child(3) { transition-delay: .16s; }
-.stagger.in > *:nth-child(4) { transition-delay: .24s; }
-.stagger.in > *:nth-child(5) { transition-delay: .32s; }
-.stagger.in > *:nth-child(6) { transition-delay: .40s; }
+.stagger.in > *:nth-child(2) { transition-delay: .09s; }
+.stagger.in > *:nth-child(3) { transition-delay: .18s; }
+.stagger.in > *:nth-child(4) { transition-delay: .27s; }
+.stagger.in > *:nth-child(5) { transition-delay: .36s; }
+.stagger.in > *:nth-child(6) { transition-delay: .45s; }
 
-.skip {
-  position: absolute; left: 12px; top: -60px; z-index: 10;
-  background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong);
-  padding: 10px 16px; border-radius: 10px; text-decoration: none; font-weight: 600;
-}
-.skip:focus { top: 12px; }
+/* hero settles on load rather than waiting on a scroll */
+.js .hero .reveal { transform: translateY(26px); }
+.hero .reveal.in { transition-duration: .9s; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  *, *::before, *::after { transition: none !important; animation: none !important; }
-  .reveal, .stagger > * { opacity: 1 !important; transform: none !important; }
-  .glow { transform: translate3d(-50%, 0, 0) !important; }
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal, .stagger > *, .js .reveal, .js .stagger > * { opacity: 1 !important; transform: none !important; }
+  .tier { opacity: 1 !important; transform: none !important; }
+  .device-wrap { transform: none !important; }
+  .device { transform: none !important; }
+  .blob { display: none; }
+  .sig-card { opacity: 1 !important; }
+  .ladder-zone::before { opacity: .7; transform: none; }
 }
 </style>
 </head>
@@ -302,8 +719,32 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
 
 <a class="skip" href="#main">Skip to content</a>
 
-<header class="hero">
-  <div class="glow" aria-hidden="true"></div>
+<svg class="grain" aria-hidden="true" focusable="false">
+  <filter id="grainfilter">
+    <feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="3" stitchTiles="stitch"></feTurbulence>
+    <feColorMatrix type="saturate" values="0"></feColorMatrix>
+  </filter>
+  <rect width="100%" height="100%" filter="url(#grainfilter)"></rect>
+</svg>
+
+<div class="topbar" aria-hidden="true"><i id="topfill"></i></div>
+
+<nav class="rail" id="rail" aria-label="Sections">
+  <ol>
+    <li><a href="#idea"><span class="tick"></span><span class="label">The idea</span></a></li>
+    <li><a href="#how"><span class="tick"></span><span class="label">How it works</span></a></li>
+    <li><a href="#rules"><span class="tick"></span><span class="label">The rules</span></a></li>
+    <li><a href="#outside"><span class="tick"></span><span class="label">Outside the app</span></a></li>
+    <li><a href="#limits"><span class="tick"></span><span class="label">The honest part</span></a></li>
+  </ol>
+</nav>
+
+<header class="hero" id="top">
+  <div class="field" aria-hidden="true">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+  </div>
   <div class="wrap">
     <div class="hero-grid">
       <div>
@@ -315,7 +756,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
           </div>
         </div>
 
-        <h1 class="reveal">I need 12 GB back.<br><span class="grad">What do I lose least?</span></h1>
+        <h1 class="reveal">I need 12&nbsp;GB back.<br><span class="grad">What do I lose least?</span></h1>
 
         <p class="lede reveal">Every duplicate finder hands you a list and leaves the arithmetic to you.
           DupeSpace answers the sentence you actually had in your head. It ranks everything it is
@@ -334,33 +775,68 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
           page come from a simulator run against fixture data, so the numbers in them are the fixtures'.</p>
       </div>
 
-      <figure class="reveal">
-        <div class="phone">
-          <img src="screenshots/01-overview.png" width="750" height="1334"
-               alt="The DupeSpace overview screen. A card reads 299.68 GB used of 343.07 GB with a segmented bar, broken into Photos and videos 4.55 GB, Everything else 295.13 GB, Free 43.39 GB, and a note that free space is an estimate. Below it a card headed Find what you can lose least offers a Scan for duplicates button.">
+      <div class="reveal">
+        <div class="signature" data-glow>
+          <div class="sig-label">
+            <span>Tier 0 · identical copies</span>
+            <span>One group</span>
+          </div>
+          <div class="sig-stage" aria-hidden="true">
+            <div class="sig-card c1">copy</div>
+            <div class="sig-card c2">copy</div>
+            <div class="sig-card c3">copy</div>
+            <div class="sig-card keep">kept</div>
+          </div>
+          <div class="sig-meter" aria-hidden="true"><i></i></div>
+          <div class="sig-foot">
+            <span>Space returned</span>
+            <span class="won">3 of 4 go</span>
+          </div>
+        </div>
+        <p class="sig-caption">Four byte-identical copies. Three go, one always stays — a group never
+          loses every copy.</p>
+      </div>
+    </div>
+
+    <div class="hero-band">
+      <div class="capacity reveal" id="capacity" data-glow>
+        <p class="eyebrow">What the app can actually see</p>
+        <div class="cap-top">
+          <span class="cap-big"><span data-count="299.68" data-dec="2">299.68</span><span class="unit">GB</span></span>
+          <span class="cap-of">used of <span class="num" data-count="343.07" data-dec="2">343.07</span> GB</span>
+        </div>
+        <div class="cap-bar" role="img" aria-label="Storage split: photos and videos 4.55 gigabytes, everything else 295.13 gigabytes, free 43.39 gigabytes, of 343.07 gigabytes total.">
+          <span class="cap-seg cap-photos" style="--w:1.33%"></span>
+          <span class="cap-seg cap-other" style="--w:86.03%"></span>
+          <span class="cap-seg cap-free" style="--w:12.65%"></span>
+        </div>
+        <div class="cap-key">
+          <div>
+            <div class="k"><span class="dot dot-photos"></span>Photos &amp; videos</div>
+            <div class="v num"><span data-count="4.55" data-dec="2">4.55</span><span class="unit">GB</span></div>
+          </div>
+          <div>
+            <div class="k"><span class="dot dot-other"></span>Everything else</div>
+            <div class="v num"><span data-count="295.13" data-dec="2">295.13</span><span class="unit">GB</span></div>
+          </div>
+          <div>
+            <div class="k"><span class="dot dot-free"></span>Free</div>
+            <div class="v num"><span data-count="43.39" data-dec="2">43.39</span><span class="unit">GB</span></div>
+          </div>
+        </div>
+        <p class="small" style="margin-top:18px;max-width:56ch">Only the first slice is DupeSpace's to work with. Free space is an estimate —
+          iOS counts storage it can purge on demand as available.</p>
+      </div>
+
+      <figure class="figure reveal">
+        <div class="device-wrap" data-parallax="16">
+          <div class="device" data-tilt>
+            <img src="screenshots/01-overview.png" width="750" height="1334"
+                 alt="The DupeSpace overview screen. A card reads 299.68 GB used of 343.07 GB with a segmented bar, broken into Photos and videos 4.55 GB, Everything else 295.13 GB, Free 43.39 GB, and a note that free space is an estimate. Below it a card headed Find what you can lose least offers a Scan for duplicates button.">
+          </div>
         </div>
         <figcaption>The first screen is a budget, not a list.</figcaption>
       </figure>
-    </div>
-
-    <div class="capacity card reveal" id="capacity">
-      <p class="eyebrow">What the app can actually see</p>
-      <div class="cap-top">
-        <span class="cap-big">299.68 GB</span>
-        <span class="lede">used of 343.07 GB</span>
-      </div>
-      <div class="cap-bar" role="img" aria-label="Storage split: photos and videos 4.55 gigabytes, everything else 295.13 gigabytes, free 43.39 gigabytes, of 343.07 gigabytes total.">
-        <span class="cap-seg cap-photos" style="--w:1.33%"></span>
-        <span class="cap-seg cap-other" style="--w:86.03%"></span>
-        <span class="cap-seg cap-free" style="--w:12.65%"></span>
-      </div>
-      <div class="cap-key">
-        <div><div class="k"><span class="dot dot-photos"></span>Photos &amp; videos</div><div class="v">4.55 GB</div></div>
-        <div><div class="k"><span class="dot dot-other"></span>Everything else</div><div class="v">295.13 GB</div></div>
-        <div><div class="k"><span class="dot dot-free"></span>Free</div><div class="v">43.39 GB</div></div>
-      </div>
-      <p class="small" style="margin-top:14px">Only the first slice is DupeSpace's to work with. Free space is an estimate —
-        iOS counts storage it can purge on demand as available.</p>
     </div>
   </div>
 </header>
@@ -368,10 +844,10 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
 <main id="main">
 
 <section id="idea">
-  <div class="wrap">
+  <div class="wrap ladder-zone">
     <p class="eyebrow reveal">The idea</p>
-    <h2 class="reveal">A space budget, ranked by regret</h2>
-    <p class="lede reveal" style="margin-top:14px">Apple's Photos finds duplicates and offers to merge them. It does not show
+    <h2 class="reveal">A space budget,<br>ranked by regret</h2>
+    <p class="lede reveal" style="margin-top:20px">Apple's Photos finds duplicates and offers to merge them. It does not show
       you why two pictures matched, does not let you pick which one survives, and never says how many
       gigabytes you get. So you are handed a list and left holding the real question. DupeSpace starts
       from the question: you set a target, and it builds the cheapest set of deletions that reaches it,
@@ -380,19 +856,19 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
     <ol class="ladder" id="ladder">
       <li class="tier t0" data-gb="4.1" data-items="38">
         <div class="tier-head">
-          <span class="tier-rank">TIER 0</span>
+          <span class="tier-rank">Tier 0</span>
           <h3>Identical copies</h3>
           <span class="tier-cost">Loses nothing</span>
         </div>
         <p>Byte for byte the same file. Deleting these loses nothing at all.</p>
         <div class="tier-meterrow">
           <div class="tier-track"><div class="tier-bar" style="--w:66%"><div class="tier-taken"></div></div></div>
-          <div class="tier-size">4.1 GB · 38 items</div>
+          <div class="tier-size"><span data-count="4.1" data-dec="1">4.1</span> GB · <span data-count="38" data-dec="0">38</span> items</div>
         </div>
       </li>
       <li class="tier t1" data-gb="5.3" data-items="112">
         <div class="tier-head">
-          <span class="tier-rank">TIER 1</span>
+          <span class="tier-rank">Tier 1</span>
           <h3>Lower-quality re-sends</h3>
           <span class="tier-cost">Loses nothing</span>
         </div>
@@ -400,41 +876,41 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
           from a chat, while the 4032px original stays.</p>
         <div class="tier-meterrow">
           <div class="tier-track"><div class="tier-bar" style="--w:85%"><div class="tier-taken"></div></div></div>
-          <div class="tier-size">5.3 GB · 112 items</div>
+          <div class="tier-size"><span data-count="5.3" data-dec="1">5.3</span> GB · <span data-count="112" data-dec="0">112</span> items</div>
         </div>
       </li>
       <li class="tier t2" data-gb="3.7" data-items="61">
         <div class="tier-head">
-          <span class="tier-rank">TIER 2</span>
+          <span class="tier-rank">Tier 2</span>
           <h3>Burst leftovers</h3>
           <span class="tier-cost">Very low</span>
         </div>
         <p>Other frames from one press of the shutter, with the sharpest frame staying. Worth a look first.</p>
         <div class="tier-meterrow">
           <div class="tier-track"><div class="tier-bar" style="--w:60%"><div class="tier-taken"></div></div></div>
-          <div class="tier-size">3.7 GB · 61 items</div>
+          <div class="tier-size"><span data-count="3.7" data-dec="1">3.7</span> GB · <span data-count="61" data-dec="0">61</span> items</div>
         </div>
       </li>
       <li class="tier t3" data-gb="6.2" data-items="74">
         <div class="tier-head">
-          <span class="tier-rank">TIER 3</span>
+          <span class="tier-rank">Tier 3</span>
           <h3>Similar shots</h3>
           <span class="tier-cost">Your call</span>
         </div>
         <p>Alike, but not the same photo. Four takes of one view. Nothing here is ever ticked for you.</p>
         <div class="tier-meterrow">
           <div class="tier-track"><div class="tier-bar" style="--w:100%"><div class="tier-taken"></div></div></div>
-          <div class="tier-size">6.2 GB · 74 items</div>
+          <div class="tier-size"><span data-count="6.2" data-dec="1">6.2</span> GB · <span data-count="74" data-dec="0">74</span> items</div>
         </div>
       </li>
     </ol>
 
-    <div class="grid-2 reveal" style="margin-top:26px;align-items:start">
-      <div class="card budget">
+    <div class="grid-2 reveal" style="margin-top:34px;align-items:start;position:relative;z-index:1">
+      <div class="card" data-glow>
         <p class="eyebrow">Try the question</p>
         <div class="budget-head">
           <span class="budget-need">I need</span>
-          <span class="budget-value" id="budget-value">12.0 GB</span>
+          <span class="budget-value"><span id="budget-value">12.0</span><span class="unit">GB</span></span>
           <span class="budget-need">back</span>
         </div>
         <input type="range" id="budget" min="1" max="20" step="0.5" value="12"
@@ -447,23 +923,27 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
               other frames of one shutter press, with the sharpest frame staying.</p>
           </div>
         </div>
-        <p class="small" style="margin-top:12px">Sample numbers, to show the shape of the answer. The app works
+        <p class="small" style="margin-top:14px">Sample numbers, to show the shape of the answer. The app works
           these out from your own library, and selects nothing until you say so.</p>
       </div>
 
-      <figure>
-        <div class="phone">
-          <img src="screenshots/04-review.png" width="750" height="1334" loading="lazy"
-               alt="The Review screen. A Space budget card reads I need 2.02 GB back above a slider at full travel, a three-way segmented control showing No loss, plus bursts, plus similar, and the line 3 items, 2.02 GB — reaching as far as lower-quality re-sends. A red Delete 3 items button sits in the bottom bar next to the running total.">
+      <figure class="figure">
+        <div class="device-wrap" data-parallax="20">
+          <div class="device" data-tilt>
+            <img src="screenshots/04-review.png" width="750" height="1334" loading="lazy"
+                 alt="The Review screen. A Space budget card reads I need 2.02 GB back above a slider at full travel, a three-way segmented control showing No loss, plus bursts, plus similar, and the line 3 items, 2.02 GB — reaching as far as lower-quality re-sends. A red Delete 3 items button sits in the bottom bar next to the running total.">
+          </div>
         </div>
         <figcaption>The same slider in the app, over a real scan.</figcaption>
       </figure>
     </div>
 
-    <figure class="reveal" style="margin-top:36px">
-      <div class="phone">
-        <img src="screenshots/03-results.png" width="750" height="1334" loading="lazy"
-             alt="The results screen. A card reads 2.03 GB across 6 items you could remove with a Review and choose button, followed by tier cards: Identical copies 1.84 GB in 1 item, Lower-quality re-sends 180.4 MB in 2 items, Burst leftovers 12.3 MB in 3 items.">
+    <figure class="figure reveal" style="margin-top:44px">
+      <div class="device-wrap" data-parallax="24">
+        <div class="device" data-tilt>
+          <img src="screenshots/03-results.png" width="750" height="1334" loading="lazy"
+               alt="The results screen. A card reads 2.03 GB across 6 items you could remove with a Review and choose button, followed by tier cards: Identical copies 1.84 GB in 1 item, Lower-quality re-sends 180.4 MB in 2 items, Burst leftovers 12.3 MB in 3 items.">
+        </div>
       </div>
       <figcaption>Every screen leads with what it is worth.</figcaption>
     </figure>
@@ -474,7 +954,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
   <div class="wrap">
     <p class="eyebrow reveal">How it works</p>
     <h2 class="reveal">Four passes, cheapest first</h2>
-    <p class="lede reveal" style="margin-top:14px">Expensive work is only ever done on what survived the cheap work.
+    <p class="lede reveal" style="margin-top:20px">Expensive work is only ever done on what survived the cheap work.
       Nothing leaves the device, and nothing is downloaded to be looked at.</p>
 
     <ol class="steps stagger">
@@ -500,19 +980,21 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
       </li>
     </ol>
 
-    <div class="grid-2 reveal" style="margin-top:34px;align-items:start">
-      <div class="card">
+    <div class="grid-2 reveal" style="margin-top:44px;align-items:start">
+      <div class="card" data-glow>
         <h3>And then it remembers</h3>
-        <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">Everything expensive is cached against a
+        <p>Everything expensive is cached against a
           content version the photo library already hands over, so a second scan of an unchanged library re-reads
           nothing. A scan can be held rather than cancelled, and slows itself down on a hot phone or in Low Power Mode.
           Every scan and every deletion leaves a record: what went, what was kept in its place, what it was worth,
           and how many days remain to undo it.</p>
       </div>
-      <figure>
-        <div class="phone">
-          <img src="screenshots/02-scan.png" width="750" height="1334" loading="lazy"
-               alt="The Find duplicates screen. A card headed Scan 28 items explains that metadata is compared first so only the handful of items that could possibly match ever get read, that nothing is downloaded from iCloud and nothing is deleted without you saying so, above a Start scan button.">
+      <figure class="figure">
+        <div class="device-wrap" data-parallax="18">
+          <div class="device" data-tilt>
+            <img src="screenshots/02-scan.png" width="750" height="1334" loading="lazy"
+                 alt="The Find duplicates screen. A card headed Scan 28 items explains that metadata is compared first so only the handful of items that could possibly match ever get read, that nothing is downloaded from iCloud and nothing is deleted without you saying so, above a Start scan button.">
+          </div>
         </div>
         <figcaption>The scan screen says what it is about to do.</figcaption>
       </figure>
@@ -550,17 +1032,19 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
       </li>
     </ol>
 
-    <div class="grid-2 reveal" style="margin-top:30px;align-items:center">
-      <div class="card">
+    <div class="grid-2 reveal" style="margin-top:44px;align-items:center">
+      <div class="card" data-glow>
         <h3>Where the rules live</h3>
-        <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">Every decision that can destroy a file
+        <p>Every decision that can destroy a file
           sits in <span class="mono">DupeCore</span>, a package with no PhotoKit, Vision or SwiftUI types in it, so all of
           it runs under unit test without a simulator. Which copy survives is scored, not guessed: a favourite or album member outranks everything, then a copy carrying edits, then resolution, size and age, with screenshots and iCloud-only originals pushed down. The reason is written next to each pair on screen, and the survivor is never offered for deletion.</p>
       </div>
-      <figure>
-        <div class="phone">
-          <img src="screenshots/08-receipt.png" width="750" height="1334" loading="lazy"
-               alt="The History screen with a deletion receipt expanded. It reads 2.02 GB reclaimed across 3 items, a card saying the most recent deletion is recoverable for 30 more days in Photos, Recently Deleted, then the removed files listed one by one, each with the file it was kept instead of and which tier it came from.">
+      <figure class="figure">
+        <div class="device-wrap" data-parallax="20">
+          <div class="device" data-tilt>
+            <img src="screenshots/08-receipt.png" width="750" height="1334" loading="lazy"
+                 alt="The History screen with a deletion receipt expanded. It reads 2.02 GB reclaimed across 3 items, a card saying the most recent deletion is recoverable for 30 more days in Photos, Recently Deleted, then the removed files listed one by one, each with the file it was kept instead of and which tier it came from.">
+          </div>
         </div>
         <figcaption>Every deletion leaves a receipt: what went, and what was kept in its place.</figcaption>
       </figure>
@@ -573,31 +1057,33 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
     <p class="eyebrow reveal">Outside the app</p>
     <h2 class="reveal">One state, on every surface</h2>
 
-    <div class="grid-2 reveal" style="margin-top:22px;align-items:start">
+    <div class="grid-2 reveal" style="margin-top:30px;align-items:start">
       <div>
-        <div class="card" style="margin-bottom:18px">
+        <div class="card" data-glow style="margin-bottom:22px">
           <h3>The widget</h3>
-          <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">Free space, what the last scan found,
+          <p>Free space, what the last scan found,
             and how much has been reclaimed in total — in five families, down to the inline one. It reads a snapshot the app
             leaves in a shared container rather than computing anything: a widget gets a few tens of milliseconds and no photo
             library access at all. The write is a file, and atomic, so a widget reloading mid-write reads the previous
             snapshot instead of half of the next one.</p>
         </div>
-        <div class="card">
+        <div class="card" data-glow>
           <h3>The Live Activity</h3>
-          <p class="small" style="margin-top:8px;color:var(--ink-2);font-size:.9375rem">A scan of a full library takes minutes,
+          <p>A scan of a full library takes minutes,
             and nobody watches a progress bar for minutes, so a running scan appears on the Lock Screen and in the Dynamic
             Island. Every surface renders one state, so a scan cannot be 40% done in one place and 60% in another, and nothing
             is claimed found until the scan has actually decided. Updates are rationed against ActivityKit's budget, except
             the ones a person would notice: a change of stage, a hold, and the end.</p>
         </div>
-        <p class="small" style="margin-top:16px">Both are best-effort. No App Group, an iPad, or Live Activities switched
+        <p class="small" style="margin-top:20px">Both are best-effort. No App Group, an iPad, or Live Activities switched
           off means no widget and no live scan — and exactly the same scan.</p>
       </div>
-      <figure>
-        <div class="phone">
-          <img src="screenshots/01b-live-surfaces.png" width="750" height="1334" loading="lazy"
-               alt="A Live surfaces sheet previewing each scan state twice, as a Dynamic Island pill and as a Lock Screen card. Running shows Scanning, Fingerprinting 1,204 of 5,000, 24% with a blue progress bar. Held shows Paused, held at 2,600 of 5,000 in amber. Finished shows Found space, 4.3 GB in 128 items, with a green-to-teal bar.">
+      <figure class="figure">
+        <div class="device-wrap" data-parallax="22">
+          <div class="device" data-tilt>
+            <img src="screenshots/01b-live-surfaces.png" width="750" height="1334" loading="lazy"
+                 alt="A Live surfaces sheet previewing each scan state twice, as a Dynamic Island pill and as a Lock Screen card. Running shows Scanning, Fingerprinting 1,204 of 5,000, 24% with a blue progress bar. Held shows Paused, held at 2,600 of 5,000 in amber. Finished shows Found space, 4.3 GB in 128 items, with a green-to-teal bar.">
+          </div>
         </div>
         <figcaption>Every scan state, drawn from one source. No simulator will show a real Live Activity, so the app renders the same views on a screen of its own — which is the only way there is a picture of them at all.</figcaption>
       </figure>
@@ -605,11 +1091,11 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
   </div>
 </section>
 
-<section id="limits">
+<section id="limits" class="sober">
   <div class="wrap">
     <p class="eyebrow reveal">The honest part</p>
     <h2 class="reveal">What iOS does not allow</h2>
-    <p class="lede reveal" style="margin-top:14px">A storage app that overstates what it can see is worse than no storage app.
+    <p class="lede reveal" style="margin-top:20px">A storage app that overstates what it can see is worse than no storage app.
       These are the limits, said plainly rather than buried.</p>
 
     <ul class="limits stagger">
@@ -647,18 +1133,22 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
       </li>
     </ul>
 
-    <div class="shots reveal" style="margin-top:36px">
-      <figure>
-        <div class="phone">
-          <img src="screenshots/05-confirm.png" width="750" height="1334" loading="lazy"
-               alt="The confirmation sheet over the Review screen. It reads 2.02 GB comes back to this device, then a section headed When you get it back with a line reading After emptying, 2.02 GB, above a red Delete 3 items button and a Cancel button.">
+    <div class="shots reveal" style="margin-top:48px">
+      <figure class="figure">
+        <div class="device-wrap" data-parallax="14">
+          <div class="device" data-tilt>
+            <img src="screenshots/05-confirm.png" width="750" height="1334" loading="lazy"
+                 alt="The confirmation sheet over the Review screen. It reads 2.02 GB comes back to this device, then a section headed When you get it back with a line reading After emptying, 2.02 GB, above a red Delete 3 items button and a Cancel button.">
+          </div>
         </div>
         <figcaption>The confirmation splits space that comes back now from space that comes back later.</figcaption>
       </figure>
-      <figure>
-        <div class="phone">
-          <img src="screenshots/06-deleted.png" width="750" height="1334" loading="lazy"
-               alt="The Review screen after deleting. A card reads 3 items removed, says the receipt is in History with what went and what was kept in its place, and that they are in Recently Deleted for 30 days and emptying that album in Photos is what gets the space back now. Below it the space budget slider has reset to zero selected.">
+      <figure class="figure">
+        <div class="device-wrap" data-parallax="22">
+          <div class="device" data-tilt>
+            <img src="screenshots/06-deleted.png" width="750" height="1334" loading="lazy"
+                 alt="The Review screen after deleting. A card reads 3 items removed, says the receipt is in History with what went and what was kept in its place, and that they are in Recently Deleted for 30 days and emptying that album in Photos is what gets the space back now. Below it the space budget slider has reset to zero selected.">
+          </div>
         </div>
         <figcaption>And afterwards it tells you the deletion is not final yet.</figcaption>
       </figure>
@@ -673,7 +1163,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
     <div class="foot-brand">
       <img src="assets/icon.png" width="256" height="256" alt="">
       <div>
-        <div style="font-weight:650">DupeSpace</div>
+        <div class="foot-name">DupeSpace</div>
         <div class="small">On-device duplicate finder and storage analyser for iOS.</div>
       </div>
     </div>
@@ -682,7 +1172,7 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
         See the code on GitHub
       </a>
-      <p class="small" style="margin-top:12px">Not on the App Store. No account, no network, no analytics.</p>
+      <p class="small" style="margin-top:14px">Not on the App Store. No account, no network, no analytics.</p>
     </div>
   </div>
 </footer>
@@ -691,43 +1181,91 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
 (function () {
   "use strict";
 
-  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var mq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  var reduced = !!(mq && mq.matches);
+  var slice = function (list) { return Array.prototype.slice.call(list); };
+  var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
 
-  /* ---- scroll reveal ---- */
-  var revealables = document.querySelectorAll(".reveal, .stagger, #ladder, #capacity");
+  /* ---------- counters ---------- */
+  var counters = slice(document.querySelectorAll("[data-count]"));
 
-  function show(el) {
-    el.classList.add("in");
-    if (el.id === "ladder") lightLadder();
+  function format(value, dec) {
+    return dec > 0 ? value.toFixed(dec) : String(Math.round(value));
   }
 
-  if (reduced || !("IntersectionObserver" in window)) {
-    Array.prototype.forEach.call(revealables, show);
-  } else {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        show(entry.target);
-        io.unobserve(entry.target);
-      });
-    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.15 });
-    Array.prototype.forEach.call(revealables, function (el) { io.observe(el); });
+  counters.forEach(function (el) {
+    el.dataset.to = el.getAttribute("data-count");
+    if (!reduced) el.textContent = format(0, parseInt(el.getAttribute("data-dec"), 10));
+  });
+
+  function count(el) {
+    if (el.__ran) return;
+    el.__ran = true;
+    var to = parseFloat(el.getAttribute("data-count"));
+    var dec = parseInt(el.getAttribute("data-dec"), 10);
+    if (reduced) { el.textContent = format(to, dec); return; }
+    var started = 0;
+    var duration = 1150;
+    function frame(now) {
+      if (!started) started = now;
+      var p = Math.min(1, (now - started) / duration);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = format(to * eased, dec);
+      if (p < 1) raf(frame);
+    }
+    raf(frame);
   }
 
-  /* ---- the ladder lights up cheapest first ---- */
-  var tiers = Array.prototype.slice.call(document.querySelectorAll("#ladder .tier"));
+  function countInside(root) {
+    slice(root.querySelectorAll("[data-count]")).forEach(count);
+    if (root.hasAttribute && root.hasAttribute("data-count")) count(root);
+  }
+
+  /* ---------- reveal, ladder, counters on entry ---------- */
+  var tiers = slice(document.querySelectorAll("#ladder .tier"));
   var ladderLit = false;
 
   function lightLadder() {
     if (ladderLit) return;
     ladderLit = true;
     tiers.forEach(function (tier, i) {
-      if (reduced) { tier.classList.add("lit"); }
-      else { setTimeout(function () { tier.classList.add("lit"); }, i * 240); }
+      if (reduced) tier.classList.add("lit");
+      else setTimeout(function () { tier.classList.add("lit"); }, i * 260);
     });
   }
 
-  /* ---- the budget slider ---- */
+  var watched = slice(document.querySelectorAll(".reveal, .stagger, #ladder, #capacity"));
+
+  function enter(el) {
+    el.classList.add("in");
+    if (el.id === "ladder") lightLadder();
+    countInside(el);
+  }
+
+  if (reduced || !("IntersectionObserver" in window)) {
+    watched.forEach(enter);
+    counters.forEach(count);
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        enter(entry.target);
+        io.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0.12 });
+    watched.forEach(function (el) { io.observe(el); });
+
+    /* Anything still hidden after the page has settled is shown anyway,
+       so a missed observer can never leave text invisible. */
+    setTimeout(function () {
+      watched.forEach(function (el) {
+        var r = el.getBoundingClientRect();
+        if (r.top < window.innerHeight && r.bottom > 0) enter(el);
+      });
+    }, 1400);
+  }
+
+  /* ---------- the budget slider ---------- */
   var slider = document.getElementById("budget");
   var valueOut = document.getElementById("budget-value");
   var planOut = document.getElementById("plan-out");
@@ -752,6 +1290,23 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
 
   function gb(n) { return n.toFixed(1) + " GB"; }
 
+  /* The displayed figure eases toward the slider rather than snapping. */
+  var shown = slider ? parseFloat(slider.value) : 0;
+  var easing = false;
+
+  function easeValue() {
+    var target = parseFloat(slider.value);
+    var delta = target - shown;
+    if (Math.abs(delta) < 0.015) {
+      shown = target;
+      easing = false;
+    } else {
+      shown += delta * 0.24;
+      raf(easeValue);
+    }
+    valueOut.textContent = shown.toFixed(1);
+  }
+
   function render() {
     var target = parseFloat(slider.value);
     var remaining = target;
@@ -770,8 +1325,19 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
     });
 
     var got = Math.min(target, TOTAL);
-    valueOut.textContent = gb(target);
     slider.setAttribute("aria-valuetext", target.toFixed(1) + " gigabytes");
+
+    var min = parseFloat(slider.min);
+    var max = parseFloat(slider.max);
+    slider.style.setProperty("--pct", ((target - min) / (max - min) * 100).toFixed(2) + "%");
+
+    if (reduced) {
+      shown = target;
+      valueOut.textContent = target.toFixed(1);
+    } else if (!easing) {
+      easing = true;
+      raf(easeValue);
+    }
 
     var main, cost;
     if (target > TOTAL) {
@@ -798,21 +1364,128 @@ footer { border-top: 1px solid var(--line); padding: 40px 0 56px; background: va
     render();
   }
 
-  /* ---- gradient drift behind the hero ---- */
-  var glow = document.querySelector(".glow");
-  if (glow && !reduced) {
-    var ticking = false;
-    var onScroll = function () {
-      if (ticking) return;
-      ticking = true;
-      window.requestAnimationFrame(function () {
-        var y = window.pageYOffset || document.documentElement.scrollTop;
-        glow.style.setProperty("--sy", Math.min(y * 0.25, 220));
-        ticking = false;
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
+  /* ---------- everything below is motion; reduced motion registers none of it ---------- */
+  if (reduced) return;
+
+  /* scroll-linked: progress rail, section ticks, parallax */
+  var topfill = document.getElementById("topfill");
+  var railLinks = slice(document.querySelectorAll("#rail a"));
+  var rail = document.getElementById("rail");
+  var parallaxEls = slice(document.querySelectorAll("[data-parallax]"));
+  var measured = [];
+  var viewH = window.innerHeight;
+  var scrollable = 1;
+
+  function measure() {
+    viewH = window.innerHeight;
+    scrollable = Math.max(1, document.documentElement.scrollHeight - viewH);
+    var sy = window.pageYOffset || document.documentElement.scrollTop;
+    measured = parallaxEls.map(function (el) {
+      var r = el.getBoundingClientRect();
+      return { el: el, mid: r.top + sy + r.height / 2, amount: parseFloat(el.getAttribute("data-parallax")) || 16 };
+    });
   }
+
+  var ticking = false;
+
+  function onFrame() {
+    ticking = false;
+    var sy = window.pageYOffset || document.documentElement.scrollTop;
+    var p = Math.min(1, Math.max(0, sy / scrollable));
+    if (topfill) topfill.style.setProperty("--p", p.toFixed(4));
+    if (rail) rail.style.setProperty("--p", p.toFixed(4));
+
+    var centre = sy + viewH / 2;
+    for (var i = 0; i < measured.length; i++) {
+      var m = measured[i];
+      var d = (centre - m.mid) / viewH;
+      if (d < -1.6 || d > 1.6) continue;
+      m.el.style.setProperty("--py", (d * m.amount).toFixed(1) + "px");
+    }
+  }
+
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    raf(onFrame);
+  }
+
+  measure();
+  onFrame();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", function () { measure(); onFrame(); }, { passive: true });
+  window.addEventListener("load", function () { measure(); onFrame(); });
+
+  if ("IntersectionObserver" in window && railLinks.length) {
+    var sections = railLinks.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+    var secIo = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var idx = sections.indexOf(entry.target);
+        if (idx < 0) return;
+        if (entry.isIntersecting) {
+          railLinks.forEach(function (a, i) {
+            if (i === idx) a.setAttribute("aria-current", "true");
+            else a.removeAttribute("aria-current");
+          });
+        }
+      });
+    }, { rootMargin: "-45% 0px -45% 0px" });
+    sections.forEach(function (s) { if (s) secIo.observe(s); });
+  }
+
+  /* pointer: a light that follows the cursor across a card */
+  slice(document.querySelectorAll("[data-glow]")).forEach(function (el) {
+    var box = null, pending = false, px = 0, py = 0;
+    function apply() {
+      pending = false;
+      if (!box) return;
+      el.style.setProperty("--mx", ((px - box.left) / box.width * 100).toFixed(1) + "%");
+      el.style.setProperty("--my", ((py - box.top) / box.height * 100).toFixed(1) + "%");
+    }
+    el.addEventListener("pointerenter", function (e) {
+      box = el.getBoundingClientRect();
+      px = e.clientX; py = e.clientY;
+      el.classList.add("glowing");
+      apply();
+    });
+    el.addEventListener("pointermove", function (e) {
+      px = e.clientX; py = e.clientY;
+      if (!pending) { pending = true; raf(apply); }
+    });
+    el.addEventListener("pointerleave", function () {
+      el.classList.remove("glowing");
+      box = null;
+    });
+  });
+
+  /* pointer: device frames tilt a little toward the cursor */
+  slice(document.querySelectorAll("[data-tilt]")).forEach(function (el) {
+    var box = null, pending = false, px = 0, py = 0;
+    function apply() {
+      pending = false;
+      if (!box) return;
+      var x = (px - box.left) / box.width - 0.5;
+      var y = (py - box.top) / box.height - 0.5;
+      el.style.setProperty("--ry", (x * 9).toFixed(2) + "deg");
+      el.style.setProperty("--rx", (-y * 6).toFixed(2) + "deg");
+    }
+    el.addEventListener("pointerenter", function (e) {
+      box = el.getBoundingClientRect();
+      px = e.clientX; py = e.clientY;
+      el.style.transitionDuration = ".12s";
+      apply();
+    });
+    el.addEventListener("pointermove", function (e) {
+      px = e.clientX; py = e.clientY;
+      if (!pending) { pending = true; raf(apply); }
+    });
+    el.addEventListener("pointerleave", function () {
+      box = null;
+      el.style.transitionDuration = ".55s";
+      el.style.setProperty("--rx", "0deg");
+      el.style.setProperty("--ry", "0deg");
+    });
+  });
 })();
 </script>
 </body>
