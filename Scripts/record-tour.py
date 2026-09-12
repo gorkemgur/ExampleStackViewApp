@@ -90,18 +90,34 @@ def tap(element, settle=1.2):
     time.sleep(settle)
 
 
-def swipe(from_y, to_y, settle=0.8):
-    run(["idb", "ui", "swipe", "--udid", UDID, "200", str(from_y), "200", str(to_y)])
+def swipe(from_y, to_y, settle=0.5, duration=0.9):
+    """Slow on purpose.
+
+    A scroll is the only continuous motion in a tour of an app that is mostly still pictures,
+    and it is also what somebody actually does with a list. `--duration` makes idb take that
+    long over the gesture instead of flinging it in three frames.
+    """
+    base = ["idb", "ui", "swipe", "--udid", UDID, "200", str(from_y), "200", str(to_y)]
+    # `--duration` is not in every idb build, and a swipe that fails is a tour that films a
+    # still picture. Fall back rather than lose the motion.
+    if run(base + ["--duration", str(duration)]).returncode != 0:
+        run(base)
     time.sleep(settle)
 
 
 def wait_for(identifier, timeout=90):
+    """Polled tight, because every second of this is in the recording.
+
+    At a two-second interval the first cut of these tours came out thirty-six seconds long with
+    twenty-seven moving frames in four hundred and fifty-two: the walk was filming itself
+    waiting.
+    """
     deadline = time.time() + timeout
     while time.time() < deadline:
         element = find(describe(), identifier)
         if element is not None:
             return element
-        time.sleep(2)
+        time.sleep(0.3)
     print(f"  never appeared: {identifier}")
     return None
 
@@ -163,78 +179,96 @@ def hold(recorder, seconds):
 
 def tour_found(recorder):
     """The path with something to find."""
-    hold(recorder, 2.0)
-    swipe(620, 300)
     hold(recorder, 1.2)
-    swipe(300, 620)
+    swipe(700, 330)              # down the overview: the ladder, the folders, the honesty card
+    swipe(700, 330)
+    hold(recorder, 0.8)
+    swipe(330, 700)
 
     entry = reach("root.scan")
     if entry is None:
         return
-    tap(entry, settle=1.4)
+    tap(entry, settle=1.0)
 
     start = wait_for("scan.start", timeout=40)
     if start is None:
         return
-    hold(recorder, 1.6)          # the plan: what is about to be opened
-    tap(start, settle=0.4)
+    hold(recorder, 1.4)          # the plan: what is about to be opened, stated before it is
+    tap(start, settle=0.3)
 
     if wait_for("scan.total", timeout=90) is None:
         return
-    hold(recorder, 1.8)
+    hold(recorder, 1.0)
+    swipe(700, 380)              # what it found
+    hold(recorder, 0.6)
+    swipe(380, 700)
 
     review = reach("scan.review")
     if review is None:
         return
-    tap(review, settle=1.4)
+    tap(review, settle=1.0)
 
     if wait_for("review.total", timeout=60) is None:
         return
-    hold(recorder, 1.6)
-    swipe(700, 380)              # down the ladder
-    hold(recorder, 1.4)
-    swipe(380, 700)
+    hold(recorder, 1.0)
+    swipe(760, 340)              # down the ladder, rung by rung
+    swipe(760, 340)
+    hold(recorder, 0.6)
+    swipe(340, 760)
+    swipe(340, 760)
 
     delete = find(describe(), "review.delete")
     if delete is None:
         return
-    tap(delete, settle=2.0)
+    tap(delete, settle=1.4)
 
     confirm = wait_for("confirm.delete", timeout=40)
     if confirm is None:
         return
-    hold(recorder, 1.4)
+    hold(recorder, 1.2)
     tap(confirm, settle=0.0)
 
+    # The sweeper crossing its ring, the sheet leaving, and the success slab arriving behind it.
     if wait_for("review.freed", timeout=45) is None:
         print("  the outcome never arrived")
-    hold(recorder, 2.2)
+    hold(recorder, 2.0)
 
 
 def tour_clean(recorder):
-    """The same path with nothing to find."""
-    hold(recorder, 2.2)
-    swipe(620, 300)
-    hold(recorder, 1.6)
-    swipe(300, 620)
+    """The same path with nothing to find.
+
+    More scrolling than the other one, deliberately: this tour has no deletion in it, so the
+    screens themselves are the subject and they have to be seen rather than flashed past.
+    """
+    hold(recorder, 1.2)
+    swipe(700, 330)
+    swipe(700, 330)
+    hold(recorder, 0.8)
+    swipe(700, 330)              # all the way to the honesty card
+    hold(recorder, 0.8)
+    swipe(330, 700)
+    swipe(330, 700)
+    swipe(330, 700)
 
     entry = reach("root.scan")
     if entry is None:
         return
-    tap(entry, settle=1.4)
+    tap(entry, settle=1.0)
 
     start = wait_for("scan.start", timeout=40)
     if start is None:
         return
-    hold(recorder, 2.0)
-    tap(start, settle=0.4)
+    hold(recorder, 1.6)          # the same plan, against the same library
+    tap(start, settle=0.3)
 
     if wait_for("scan.total", timeout=90) is None:
         return
-    # The whole point of this tour: the screen that says it looked and found nothing.
-    hold(recorder, 3.5)
-    swipe(620, 360)
-    hold(recorder, recorder.left)
+    # The whole point of this tour: it looked, it did the work, and it found nothing.
+    hold(recorder, 1.6)
+    swipe(700, 380)
+    hold(recorder, 1.2)
+    swipe(700, 380)
+    hold(recorder, max(1.0, recorder.left))
 
 
 def main():
