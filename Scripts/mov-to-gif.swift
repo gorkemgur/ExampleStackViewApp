@@ -22,9 +22,10 @@
 // as motion until the result fits. A GIF nobody waits to load is worth as little as one nobody
 // watches to the end.
 //
-// `requestedTimeToleranceBefore/After = .zero` matters throughout: without it the generator
-// hands back the same keyframe for several consecutive requests and the result stutters where
-// the recording does not.
+// `requestedTimeToleranceBefore/After = .zero` matters for the frames that are written — without
+// it the generator hands back the same keyframe for several consecutive requests and the result
+// stutters where the recording does not. It is deliberately *not* used for the pass that only
+// asks whether the screen changed; see `makeGenerator`.
 import AVFoundation
 import CoreGraphics
 import Foundation
@@ -76,11 +77,22 @@ guard seconds.isFinite, seconds > 0 else {
     exit(1)
 }
 
-func makeGenerator(width: Int) -> AVAssetImageGenerator {
+/// - Parameter exact: whether the frame has to be the one at that instant.
+///
+/// `.zero` tolerance forces a decode from the nearest keyframe for every single request, and
+/// that is what took the first version of this nine minutes on one runner: a thousand exact
+/// seeks through a hundred-megabyte recording, twice over.
+///
+/// It is only needed for the frames actually written, where the wrong one would put the GIF a
+/// beat out of step with the recording. The pass that only asks *did the screen change* does
+/// not care which of two neighbouring frames it gets, so it lets AVFoundation decode forward
+/// at its own pace.
+func makeGenerator(width: Int, exact: Bool) -> AVAssetImageGenerator {
     let generator = AVAssetImageGenerator(asset: asset)
     generator.appliesPreferredTrackTransform = true
-    generator.requestedTimeToleranceBefore = .zero
-    generator.requestedTimeToleranceAfter = .zero
+    let tolerance = exact ? CMTime.zero : CMTime(seconds: 1 / (2 * fps), preferredTimescale: 600)
+    generator.requestedTimeToleranceBefore = tolerance
+    generator.requestedTimeToleranceAfter = tolerance
     // Height unconstrained, so the width is what decides the scale.
     generator.maximumSize = CGSize(width: width, height: 10_000)
     return generator
@@ -121,7 +133,7 @@ func distance(_ a: [UInt8], _ b: [UInt8]) -> Double {
 let frameCount = max(Int(seconds * fps), 2)
 let step = 1.0 / fps
 
-let prober = makeGenerator(width: digestWidth)
+let prober = makeGenerator(width: digestWidth, exact: false)
 var times: [Int] = []
 var digests: [[UInt8]] = []
 for index in 0..<frameCount {
@@ -205,7 +217,7 @@ CGImageDestinationSetProperties(destination, [
     kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]
 ] as CFDictionary)
 
-let writer = makeGenerator(width: targetWidth)
+let writer = makeGenerator(width: targetWidth, exact: true)
 var written = 0
 for frame in chosen {
     let time = CMTime(seconds: Double(frame.index) / fps, preferredTimescale: 600)

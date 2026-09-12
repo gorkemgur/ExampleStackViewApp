@@ -105,6 +105,26 @@ def swipe(from_y, to_y, settle=0.5, duration=0.9):
     time.sleep(settle)
 
 
+def wait_for_any(identifiers, timeout=90):
+    """The first of several to appear.
+
+    A scan that finds nothing does not draw `scan.total`; it draws `scan.empty`. The clean
+    tour waited for the former and so ended at the scan screen every time — which is why the
+    first cut of it looked like a tour of the overview. It was not pacing, it was a walk that
+    had quietly given up.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        tree = describe()
+        for identifier in identifiers:
+            element = find(tree, identifier)
+            if element is not None:
+                return element
+        time.sleep(0.3)
+    print(f"  never appeared: {' or '.join(identifiers)}")
+    return None
+
+
 def wait_for(identifier, timeout=90):
     """Polled tight, because every second of this is in the recording.
 
@@ -260,7 +280,7 @@ def tour_clean(recorder):
     hold(recorder, 1.6)          # the same plan, against the same library
     tap(start, settle=0.3)
 
-    if wait_for("scan.total", timeout=90) is None:
+    if wait_for_any(["scan.empty", "scan.total"], timeout=90) is None:
         return
     # The rest of the budget belongs here: it looked, it did the work, it found nothing, and it
     # offers a looser setting rather than leaving you at a dead end.
