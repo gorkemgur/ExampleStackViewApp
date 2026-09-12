@@ -39,7 +39,9 @@ jobs:
         run: brew install xcodegen
 
       - name: Generate Xcode project
-        run: xcodegen generate
+        run: |
+          xcodegen generate
+          python3 Scripts/check-signing.py
 
       - name: Cache DerivedData
         uses: actions/cache@v4
