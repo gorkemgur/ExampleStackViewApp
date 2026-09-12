@@ -63,6 +63,25 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             2>&1 | tee compile.log
 
+      # Release as well as Debug, because Release is the configuration that ships and until
+      # now nothing in this pipeline ever built it. Whole-module optimisation and a different
+      # set of build settings can fail where Debug does not, and the first time anyone would
+      # have found that out is the first time they tried to archive.
+      - name: Build Release
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -configuration Release \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath .derived-release \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee -a compile.log
+
       - name: What did not compile
         if: failure()
         run: |
