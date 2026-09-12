@@ -25,6 +25,18 @@ final class ReviewViewModel: ObservableObject {
     /// figure has to be the smaller, true one.
     @Published private(set) var outcomeSavings: SavingsBreakdown?
 
+    /// How long the deleter has been taking between reports, as observed.
+    ///
+    /// The ring glides from the last report to the current one, and it should arrive just as
+    /// the next is due — so the fill is always moving and never claims a deletion that has not
+    /// happened. A fixed duration cannot do that: on a real run files settle in about a
+    /// millisecond each and the ring should sweep in one motion, while a slow volume can be
+    /// hundreds of milliseconds apart and a short tween leaves it advancing and then sitting
+    /// still, which is what "catching on something" looks like.
+    @Published private(set) var deletionStepInterval: TimeInterval = 0.15
+
+    private var lastProgressAt: Date?
+
     /// Identifies the deletion currently in flight.
     ///
     /// The deleter reports from a detached task, so each update reaches the main actor through
@@ -623,6 +635,18 @@ final class ReviewViewModel: ObservableObject {
         isExporting = false
     }
 
+    /// Averaged rather than taken from the last gap alone: one slow file on a contended volume
+    /// should not make the ring crawl for the rest of the run.
+    private func noteProgressCadence() {
+        let now = Date()
+        defer { lastProgressAt = now }
+        guard let lastProgressAt else { return }
+
+        let gap = now.timeIntervalSince(lastProgressAt)
+        guard gap > 0, gap < 2 else { return }
+        deletionStepInterval = min(max(deletionStepInterval * 0.6 + gap * 0.4, 0.06), 0.5)
+    }
+
     func clearExportFailure() {
         exportFailure = nil
     }
@@ -697,6 +721,7 @@ final class ReviewViewModel: ObservableObject {
                 // runs on a detached task — so the hop is here rather than at every call site.
                 Task { @MainActor in
                     guard let self, self.deletionRun == run else { return }
+                    self.noteProgressCadence()
                     self.deletionProgress = step
                 }
             }
@@ -729,6 +754,7 @@ final class ReviewViewModel: ObservableObject {
         }
 
         deletionProgress = nil
+        lastProgressAt = nil
         isDeleting = false
     }
 }

@@ -19,6 +19,13 @@ struct SweeperRingView: View {
     var size: CGFloat = 132
     /// Drawn under the ring — the byte figure, or the count, or nothing.
     var caption: String?
+    /// How long the deleter is actually taking between reports.
+    ///
+    /// The fill glides from the last report to the current one over this, so it arrives just as
+    /// the next is due: always moving, and never ahead of what has happened. It used to be a
+    /// fixed 0.15s, which on a cadence any slower than that advanced the ring and then left it
+    /// sitting still — the step-by-step catching you can see when the demo is slowed down.
+    var stepInterval: TimeInterval = 0.15
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -46,6 +53,7 @@ struct SweeperRingView: View {
             }
             .frame(width: size, height: size)
             .animation(reduceMotion ? nil : Motion.content, value: scene.isFinished)
+            .animation(reduceMotion ? nil : .linear(duration: stepInterval), value: scene.sweptFraction)
             .onAppear { if scene.isFinished { arrive() } }
             .onChange(of: scene.isFinished) { _, finished in
                 if finished { arrive() } else { tickTrim = 0; pulse = 0; exit = 0 }
@@ -92,7 +100,7 @@ struct SweeperRingView: View {
                 .trim(from: 0, to: max(scene.ringFraction, scene.isWorking ? 0.24 : 0))
                 .stroke(DS.brandRow, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(reduceMotion ? nil : Motion.readout, value: scene.ringFraction)
+                .animation(reduceMotion ? nil : .linear(duration: stepInterval), value: scene.ringFraction)
         }
     }
 
@@ -117,6 +125,8 @@ struct SweeperRingView: View {
         let pose = SweeperFigure.pose(x: x, phase: phase, sweeping: true)
 
         return Canvas { context, canvas in
+            // Same duration as the ring, for the same reason: the figure should walk between
+            // reports rather than jump a twelfth of the floor at each one.
             func point(_ unit: CGPoint) -> CGPoint {
                 CGPoint(x: unit.x * canvas.width, y: unit.y * canvas.height)
             }

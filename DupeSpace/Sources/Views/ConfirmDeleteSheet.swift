@@ -227,7 +227,12 @@ struct ConfirmDeleteSheet: View {
     }
 
     private func handover(_ staged: (files: Int, photos: Int, savings: SavingsBreakdown)) -> some View {
-        SweeperRingView(scene: scene(staged), size: 118, caption: sweepCaption(staged))
+        SweeperRingView(
+            scene: scene(staged),
+            size: 118,
+            caption: sweepCaption(staged),
+            stepInterval: model.deletionStepInterval
+        )
             .frame(maxWidth: .infinity)
             .dsSlab(padding: DS.Space.m, radius: DS.controlCorner)
     }
