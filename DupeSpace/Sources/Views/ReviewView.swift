@@ -441,10 +441,17 @@ struct ReviewView: View {
 
                 // "None"/"All" read as labels for the current state rather than as the action
                 // they perform, which is the wrong ambiguity on a screen that deletes things.
+                // Measured against what this control may actually tick, not against every
+                // candidate in the rung: with a favourite or two in it the whole-tier button
+                // could never reach "all", so it read "Select all" for ever and tapping it a
+                // second time did nothing.
+                let selectable = model.bulkSelectableIDs(in: section)
+                let allTicked = !selectable.isEmpty && model.selection.containsAll(selectable)
+
                 Button {
-                    model.setSelected(!model.selection.containsAll(section.candidateIDs), in: section)
+                    model.setSelected(!allTicked, in: section)
                 } label: {
-                    Text(model.selection.containsAll(section.candidateIDs) ? "Deselect all" : "Select all")
+                    Text(allTicked ? "Deselect all" : "Select all")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(tint)
                         .lineLimit(1)
@@ -459,7 +466,8 @@ struct ReviewView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(model.selection.containsAll(section.candidateIDs) ? "Deselect" : "Select") every \(KindCopy.title(for: kind).lowercased()) copy in \(ScanCopy.title(for: section.tier).lowercased())")
+                .disabled(selectable.isEmpty)
+                .accessibilityLabel("\(allTicked ? "Deselect" : "Select") every \(KindCopy.title(for: kind).lowercased()) copy in \(ScanCopy.title(for: section.tier).lowercased())")
                 .accessibilityIdentifier("review.selectall.\(KindCopy.slug(for: kind)).\(section.tier.rawValue)")
             }
 
@@ -477,6 +485,21 @@ struct ReviewView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            // A "Select all" that quietly leaves things behind is worse than one that refuses:
+            // the user reads a lower count in the dock than this rung's own figure and has no
+            // way to find out why.
+            let needsEyes = model.needsEyesCount(in: section)
+            if needsEyes > 0 {
+                Label(
+                    "\(Counting.items(needsEyes)) here \(needsEyes == 1 ? "is" : "are") yours to tick — \(needsEyes == 1 ? "it is" : "they are") a favourite, in an album, or the only copy still on this device.",
+                    systemImage: "hand.raised"
+                )
+                .font(.caption)
+                .foregroundStyle(DS.tier(.burstLeftover))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("review.needseyes.\(KindCopy.slug(for: kind)).\(section.tier.rawValue)")
+            }
         }
     }
 

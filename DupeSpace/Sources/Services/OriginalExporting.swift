@@ -22,6 +22,7 @@ enum ExportError: LocalizedError, Equatable {
     case noAccess
     case couldNotCreateFolder(String)
     case nothingExported
+    case manifestNotWritten
 
     var errorDescription: String? {
         switch self {
@@ -31,6 +32,8 @@ enum ExportError: LocalizedError, Equatable {
             return "The export folder could not be created: \(message)"
         case .nothingExported:
             return "None of the originals could be written, so nothing was exported. Nothing has been deleted."
+        case .manifestNotWritten:
+            return "The originals were written but the manifest beside them was not, so there would be no record of which copy each one was replaced by. The export was removed. Nothing has been deleted."
         }
     }
 }
@@ -74,6 +77,13 @@ final class FileSystemOriginalExporter: OriginalExporting {
         let root = destination.appendingPathComponent(folderName, isDirectory: true)
         let originals = root.appendingPathComponent("originals", isDirectory: true)
         do {
+            // `withIntermediateDirectories: false` on the root, deliberately: it makes an
+            // existing folder an error instead of a silent merge. With `true` — and a folder
+            // name that only went down to the minute — a second export into the same place
+            // inside the same minute found every target filename already taken, refused every
+            // write, concluded nothing had been exported, and deleted the directory holding
+            // the *first* export's originals and manifest.
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
             try FileManager.default.createDirectory(at: originals, withIntermediateDirectories: true)
         } catch {
             throw ExportError.couldNotCreateFolder(error.localizedDescription)
@@ -86,17 +96,20 @@ final class FileSystemOriginalExporter: OriginalExporting {
 
         for step in plan {
             let target = originals.appendingPathComponent(step.entry.exportedFileName)
-            let ok: Bool
+            let companions: [String]?
             switch step.item.source {
             case .photoLibrary:
-                ok = await Self.writeAsset(step.item, to: target)
+                companions = await Self.writeAsset(step.item, to: target)
             case .fileFolder:
-                ok = await Self.writeFile(step.item, to: target, registry: registry)
+                companions = await Self.writeFile(step.item, to: target, registry: registry) ? [] : nil
             }
 
-            if ok {
+            if let companions {
                 exported.append(step.item.id)
-                written.append(step.entry)
+                // The paired movie of a Live Photo used to be written and then not mentioned
+                // anywhere: a file in the folder the manifest does not describe, which is the
+                // inverse of the guarantee this document exists to make.
+                written.append(step.entry.withCompanions(companions))
                 bytes += step.item.totalByteSize
             } else {
                 failed.append(step.item.id)
@@ -104,17 +117,27 @@ final class FileSystemOriginalExporter: OriginalExporting {
         }
 
         guard !exported.isEmpty else {
-            // Leave nothing behind: an empty "DupeSpace Export" folder in someone's Files is a
-            // worse outcome than a clean error.
+            // Only ever the folder this call created, which is why the root is made with
+            // `withIntermediateDirectories: false` above.
             try? FileManager.default.removeItem(at: root)
             throw ExportError.nothingExported
         }
 
         // Only what actually landed. A manifest listing a file that is not in the folder beside
         // it is the one thing that would make this feature worse than not having it.
+        //
+        // And it is not written with `try?`. The manifest is the only record of which copy each
+        // original was being deleted in favour of — without it the folder is the pile of opaque
+        // filenames this whole feature exists to avoid. A volume that fills on the last write
+        // used to return a successful receipt saying "the folder holds the original bytes and a
+        // manifest.json", on the strength of which the user then deleted the originals.
         let manifest = ExportManifest(createdAt: Date(), entries: written)
-        if let data = try? manifest.encoded() {
-            try? data.write(to: root.appendingPathComponent("manifest.json"), options: .atomic)
+        do {
+            let data = try manifest.encoded()
+            try data.write(to: root.appendingPathComponent("manifest.json"), options: .atomic)
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw ExportError.manifestNotWritten
         }
 
         return ExportReceipt(
@@ -126,25 +149,29 @@ final class FileSystemOriginalExporter: OriginalExporting {
     }
 
     /// Sortable, and readable by a person looking at a list of folders a year later.
+    ///
+    /// Down to the second. At minute resolution two exports a few taps apart collided, and the
+    /// collision handling then destroyed the first one.
     static func folderName(at date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd HH-mm"
+        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
         return "DupeSpace Export \(formatter.string(from: date))"
     }
 
     // MARK: - Photo library
 
-    private static func writeAsset(_ item: MediaItem, to target: URL) async -> Bool {
+    /// Returns the extra filenames written beside the primary one, or `nil` if nothing landed.
+    private static func writeAsset(_ item: MediaItem, to target: URL) async -> [String]? {
         guard
             let asset = PHAsset.fetchAssets(withLocalIdentifiers: [item.id], options: nil).firstObject
         else {
-            return false
+            return nil
         }
 
         let resources = PHAssetResource.assetResources(for: asset)
-        guard let primary = primaryResource(in: resources) else { return false }
+        guard let primary = primaryResource(in: resources) else { return nil }
 
         let options = PHAssetResourceRequestOptions()
         // Never over the network. An iCloud-only original is reported as a failure, which stops
@@ -152,17 +179,25 @@ final class FileSystemOriginalExporter: OriginalExporting {
         // a backup they did not know they were paying for.
         options.isNetworkAccessAllowed = false
 
-        guard await write(primary, to: target, options: options) else { return false }
+        guard await write(primary, to: target, options: options) else { return nil }
 
         // A Live Photo is two files, and exporting only the still is exporting half of it.
-        if let paired = resources.first(where: { $0.type == .pairedVideo || $0.type == .fullSizePairedVideo }) {
-            let movieTarget = target
-                .deletingPathExtension()
-                .appendingPathExtension("MOV")
-            _ = await write(paired, to: movieTarget, options: options)
+        //
+        // `-live.MOV` rather than swapping the extension: a video asset can carry a
+        // `pairedVideo` resource too, and swapping `.MOV` for `.MOV` produced the same URL as
+        // the primary — the existence guard then fired and the pair was silently dropped.
+        guard
+            let paired = resources.first(where: { $0.type == .pairedVideo || $0.type == .fullSizePairedVideo })
+        else {
+            return []
         }
 
-        return true
+        let movieTarget = target
+            .deletingLastPathComponent()
+            .appendingPathComponent(target.deletingPathExtension().lastPathComponent + "-live.MOV")
+
+        guard await write(paired, to: movieTarget, options: options) else { return [] }
+        return [movieTarget.lastPathComponent]
     }
 
     /// The original, not a rendition. `.fullSizePhoto` is what the edits produced; `.photo` is

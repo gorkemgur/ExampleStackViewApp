@@ -82,8 +82,12 @@ public enum BudgetPlanner {
             return BudgetPlan(targetBytes: max(targetBytes, 0), selected: [], reclaimedBytes: 0, deepestTier: nil)
         }
 
+        // `requiresHuman`, not just the tier. A plan is a bulk control: it ticks copies in
+        // groups the user has never opened, and the tier alone cannot tell it that a copy is a
+        // favourite, sits in an album, or is the last one on the device because its survivor is
+        // in iCloud. Those come through here wearing `.identical`.
         let ordered = candidates
-            .filter { allowedTiers.contains($0.tier) && $0.bytes > 0 }
+            .filter { allowedTiers.contains($0.tier) && $0.bytes > 0 && !$0.requiresHuman }
             .sorted { lhs, rhs in
                 if lhs.tier != rhs.tier { return lhs.tier < rhs.tier }
                 if lhs.bytes != rhs.bytes { return lhs.bytes > rhs.bytes }

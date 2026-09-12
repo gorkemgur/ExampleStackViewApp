@@ -34,6 +34,62 @@ final class TierClassifierTests: XCTestCase {
         XCTAssertEqual(candidates[0].keeperID, "keep")
     }
 
+    // MARK: - The two refusals a tier cannot express
+
+    /// A favourite, or a copy in an album, is byte-for-byte identical to the survivor and
+    /// therefore `.identical` — which is true and beside the point. `CleanupPlanner` refuses to
+    /// pre-tick it; nothing downstream could see that refusal, so the budget key ticked it.
+    func testAFavouriteIsIdenticalAndStillNeedsAHuman() {
+        let items = Fixtures.index([Fixtures.item("keep"), Fixtures.item("loved", favorite: true)])
+        let candidates = TierClassifier.candidates(
+            for: decision(.exact, keeper: "keep", manual: ["loved"]),
+            group: group(.exact, seed: "keep", ids: ["keep", "loved"]),
+            items: items
+        )
+
+        XCTAssertEqual(candidates.map(\.tier), [.identical])
+        XCTAssertTrue(candidates[0].requiresHuman)
+    }
+
+    func testACopyInAnAlbumNeedsAHuman() {
+        let items = Fixtures.index([Fixtures.item("keep"), Fixtures.item("filed", albums: 2)])
+        let candidates = TierClassifier.candidates(
+            for: decision(.exact, keeper: "keep", manual: ["filed"]),
+            group: group(.exact, seed: "keep", ids: ["keep", "filed"]),
+            items: items
+        )
+
+        XCTAssertTrue(candidates[0].requiresHuman)
+    }
+
+    /// The worse one. The survivor is in iCloud and this is the only copy still on the phone,
+    /// so a bulk control taking it leaves the user with a photograph they cannot open offline.
+    func testACopyWhoseSurvivorIsOnlyInICloudNeedsAHuman() {
+        let items = Fixtures.index([
+            Fixtures.item("keep", local: false),
+            Fixtures.item("here")
+        ])
+        let candidates = TierClassifier.candidates(
+            for: decision(.exact, keeper: "keep", manual: ["here"]),
+            group: group(.exact, seed: "keep", ids: ["keep", "here"]),
+            items: items
+        )
+
+        XCTAssertEqual(candidates.map(\.tier), [.identical])
+        XCTAssertTrue(candidates[0].requiresHuman)
+    }
+
+    func testAnOrdinaryCopyDoesNotNeedAHuman() {
+        let items = Fixtures.index([Fixtures.item("keep"), Fixtures.item("dupe")])
+        let candidates = TierClassifier.candidates(
+            for: decision(.exact, keeper: "keep", auto: ["dupe"]),
+            group: group(.exact, seed: "keep", ids: ["keep", "dupe"]),
+            items: items
+        )
+
+        XCTAssertFalse(candidates[0].requiresHuman)
+    }
+
     func testAnEditedCopyIsNotFiledUnderNoLossEvenWhenBytesMatch() {
         let items = Fixtures.index([
             Fixtures.item("keep"),
@@ -157,15 +213,68 @@ final class TierClassifierTests: XCTestCase {
 
 final class BudgetPlannerTests: XCTestCase {
 
-    private func candidate(_ id: String, tier: RegretTier, bytes: Int64, preSelected: Bool = false) -> DeletionCandidate {
+    private func candidate(
+        _ id: String,
+        tier: RegretTier,
+        bytes: Int64,
+        preSelected: Bool = false,
+        requiresHuman: Bool = false
+    ) -> DeletionCandidate {
         DeletionCandidate(
             id: id,
             groupID: "g-\(id)",
             keeperID: "keeper-\(id)",
             tier: tier,
             bytes: bytes,
-            isPreSelected: preSelected
+            isPreSelected: preSelected,
+            requiresHuman: requiresHuman
         )
+    }
+
+    // MARK: - What a bulk control may not touch
+
+    /// The plan is a bulk control: it ticks copies in groups nobody has opened. A tier says
+    /// what information is lost, and that is not the same question as whether this is a copy
+    /// the person has told us matters.
+    func testAPlanNeverTicksACopyThatNeedsAHuman() {
+        let plan = BudgetPlanner.plan(
+            target: 10_000,
+            candidates: [
+                candidate("favourite", tier: .identical, bytes: 5_000, requiresHuman: true),
+                candidate("plain", tier: .identical, bytes: 1_000)
+            ],
+            allowedTiers: [.identical]
+        )
+
+        XCTAssertEqual(plan.selectedIDs, ["plain"])
+        XCTAssertEqual(plan.reclaimedBytes, 1_000)
+        XCTAssertFalse(plan.meetsTarget, "and it says it fell short rather than reaching for the one it may not take")
+    }
+
+    /// The veto holds at every depth, including the ones the user opted into. "+ similar" is
+    /// consent to judgement calls in general, not consent to delete a favourite.
+    func testTheVetoHoldsAtEveryDepth() {
+        for depth in RegretTier.allCases {
+            let plan = BudgetPlanner.plan(
+                target: 999_999,
+                candidates: [candidate("favourite", tier: depth, bytes: 5_000, requiresHuman: true)],
+                allowedTiers: Set(RegretTier.allCases)
+            )
+            XCTAssertTrue(plan.selected.isEmpty, "a vetoed copy was taken at \(depth)")
+        }
+    }
+
+    /// And the veto is not `isPreSelected` wearing another name: nothing in a burst or a
+    /// similar group is ever pre-selected, so a plan that required it would select nothing at
+    /// the two depths the user explicitly asked for.
+    func testADepthTheUserAskedForStillSelectsThingsNobodyPreSelected() {
+        let plan = BudgetPlanner.plan(
+            target: 999_999,
+            candidates: [candidate("burst", tier: .burstLeftover, bytes: 5_000, preSelected: false)],
+            allowedTiers: [.identical, .inferiorCopy, .burstLeftover]
+        )
+
+        XCTAssertEqual(plan.selectedIDs, ["burst"])
     }
 
     func testSummariesAccumulateAcrossTiers() {

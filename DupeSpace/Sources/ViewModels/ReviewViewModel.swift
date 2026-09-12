@@ -20,6 +20,19 @@ final class ReviewViewModel: ObservableObject {
     /// say "working" rather than "sixty per cent".
     @Published private(set) var deletionProgress: DeletionProgress?
     @Published private(set) var outcome: DeletionOutcome?
+    /// What actually went, measured from `outcome.deletedIDs` rather than from what was asked
+    /// for. The two differ whenever a file was refused or had already gone, and the success
+    /// figure has to be the smaller, true one.
+    @Published private(set) var outcomeSavings: SavingsBreakdown?
+
+    /// Identifies the deletion currently in flight.
+    ///
+    /// The deleter reports from a detached task, so each update reaches the main actor through
+    /// an unstructured `Task`, and those are unordered: one could still be queued when
+    /// `delete()` has already returned and cleared the progress, leaving a finished deletion
+    /// wearing a live progress state. An update that does not carry the current run's token is
+    /// a straggler and is dropped.
+    private var deletionRun = 0
     @Published private(set) var failure: String?
 
     /// Target for the "I need this much back" slider, in bytes.
@@ -111,6 +124,7 @@ final class ReviewViewModel: ObservableObject {
     private var cachedVisibleSections: [ReviewSection]?
     private var cachedKindSections: [KindSection]?
     private var cachedPlannable: [DeletionCandidate]?
+    private var cachedVetoed: Set<String>?
 
     init(
         result: ScanResult,
@@ -149,6 +163,7 @@ final class ReviewViewModel: ObservableObject {
         cachedVisibleSections = nil
         cachedKindSections = nil
         cachedPlannable = nil
+        cachedVetoed = nil
     }
 
     var sections: [ReviewSection] {
@@ -278,18 +293,30 @@ final class ReviewViewModel: ObservableObject {
         for decision in revised where clearedGroupIDs.contains(decision.id) {
             guard
                 !candidates.contains(where: { $0.id == decision.keeperID }),
-                let keeper = result.items[decision.keeperID],
-                let tier = candidates.first(where: { $0.groupID == decision.id })?.tier
+                let keeper = result.items[decision.keeperID]
             else { continue }
 
+            // `.similar`, and never the group's own tier.
+            //
+            // This used to take the tier of the first candidate in the group, and
+            // `TierClassifier` emits them cheapest-first — so the survivor, the one copy whose
+            // deletion destroys the photograph itself, was filed under "identical copies,
+            // deleting these loses nothing at all". The confirmation sheet then read "from 3
+            // items that cost you nothing" over a group that was about to cease to exist, and
+            // `judgementCallCount` was zero so the warning card never drew. Being the last copy
+            // is the most expensive thing a deletion can be; it takes the dearest rung.
             candidates.append(
                 DeletionCandidate(
                     id: decision.keeperID,
                     groupID: decision.id,
                     keeperID: decision.keeperID,
-                    tier: tier,
+                    tier: .similar,
                     bytes: keeper.totalByteSize,
-                    isPreSelected: false
+                    isPreSelected: false,
+                    // And no bulk control may ever reach it. The only thing allowed to select
+                    // this is the deliberately awkward control on the group's own screen, which
+                    // is what put it here.
+                    requiresHuman: true
                 )
             )
         }
@@ -402,8 +429,42 @@ final class ReviewViewModel: ObservableObject {
         selection.toggle(id)
     }
 
+    /// A whole tier at once — minus the copies no bulk control may touch.
+    ///
+    /// This acts across every group in a rung, most of which the user has not opened. Ticking a
+    /// favourite, an album member, or the last copy on the device because its survivor is in
+    /// iCloud is exactly what `requiresHuman` exists to prevent, and "Select all" is as much a
+    /// bulk control as the budget key is. Deselecting is unrestricted: taking something *out*
+    /// of a deletion never needs a guard.
     func setSelected(_ isSelected: Bool, in section: ReviewSection) {
-        selection.setSelected(isSelected, for: section.candidateIDs)
+        guard isSelected else {
+            selection.setSelected(false, for: section.candidateIDs)
+            return
+        }
+        selection.setSelected(true, for: bulkSelectableIDs(in: section))
+    }
+
+    /// What a section-wide control is allowed to tick.
+    func bulkSelectableIDs(in section: ReviewSection) -> [String] {
+        let vetoed = vetoedIDs
+        return section.candidateIDs.filter { !vetoed.contains($0) }
+    }
+
+    /// How many copies in this rung the app will not tick for you.
+    ///
+    /// Said on screen, because a "Select all" that quietly leaves things behind is worse than
+    /// one that refuses: the user reads the count in the dock, finds it lower than the rung's
+    /// own figure, and has no way to learn why.
+    func needsEyesCount(in section: ReviewSection) -> Int {
+        section.candidateIDs.count - bulkSelectableIDs(in: section).count
+    }
+
+    /// Every candidate a bulk control must leave alone, by id.
+    private var vetoedIDs: Set<String> {
+        if let cachedVetoed { return cachedVetoed }
+        let value = Set(liveCandidates.filter(\.requiresHuman).map(\.id))
+        cachedVetoed = value
+        return value
     }
 
     func setSelected(_ isSelected: Bool, in group: ReviewGroup) {
@@ -586,6 +647,8 @@ final class ReviewViewModel: ObservableObject {
 
         isDeleting = true
         failure = nil
+        deletionRun &+= 1
+        let run = deletionRun
         deletionProgress = .starting(total: ids.count, isDeterminate: false, stage: .photoLibrary)
 
         // Captured before the selection is cleared: the receipt describes what was sent,
@@ -609,9 +672,14 @@ final class ReviewViewModel: ObservableObject {
             let completed = try await deleter.delete(ids: ids, expecting: stamps) { [weak self] step in
                 // The deleter reports from whichever thread it is running on — the file half
                 // runs on a detached task — so the hop is here rather than at every call site.
-                Task { @MainActor in self?.deletionProgress = step }
+                Task { @MainActor in
+                    guard let self, self.deletionRun == run else { return }
+                    self.deletionProgress = step
+                }
             }
             outcome = completed
+            // Measured from what came back, not from what was sent.
+            outcomeSavings = SavingsCalculator.breakdown(for: Set(completed.deletedIDs), items: result.items)
             deletedIDs.formUnion(completed.deletedIDs)
             selection.clear()
             clampBudget()

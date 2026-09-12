@@ -5,32 +5,72 @@ import DupeCore
 /// each one directly underneath it.
 struct GroupDetailView: View {
 
-    let group: ReviewGroup
+    /// Looked up from the model on every pass, never held.
+    ///
+    /// This used to be `let group: ReviewGroup` — a value frozen when the link was pushed. Tap
+    /// "Keep this one instead" and the model rebuilds its sections correctly, but this screen
+    /// went on showing the *old* survivor under the words "Staying — your choice, not the
+    /// app's", with rows for members that had just stopped being offered and a "Select all"
+    /// built from stale ids. Ticking any of them made `canDelete` false and the red key dead,
+    /// with nothing anywhere saying why. The validator did its job; the screen was lying to the
+    /// person using it while they made further decisions on it.
+    let reviewGroupID: String
     @ObservedObject var model: ReviewViewModel
     let loader: any ThumbnailLoading
 
+    @Environment(\.dismiss) private var dismiss
     @State private var confirmingClearAll = false
+
+    init(group: ReviewGroup, model: ReviewViewModel, loader: any ThumbnailLoading) {
+        self.reviewGroupID = group.id
+        self.model = model
+        self.loader = loader
+    }
+
+    private var group: ReviewGroup? {
+        model.sections.lazy.flatMap(\.groups).first { $0.id == reviewGroupID }
+    }
 
     /// The engine's id for this group. A review group is one tier's slice of it, so its own id
     /// carries the tier as well.
-    private var groupID: String? { group.candidates.first?.groupID }
+    private var groupID: String? { group?.candidates.first?.groupID }
 
-    private var tint: Color { DS.tier(group.tier) }
+    private var tint: Color { DS.tier(group?.tier ?? .identical) }
 
     var body: some View {
+        Group {
+            if let group {
+                content(group)
+            } else {
+                // Everything in it has been deleted, or the group stopped existing when the
+                // survivor changed. Standing on a screen about a group that is gone is not a
+                // state; going back is.
+                ContentUnavailableView(
+                    "This group is gone",
+                    systemImage: "checkmark.seal",
+                    description: Text("Every copy here has been dealt with.")
+                )
+                .background(DS.ink, ignoresSafeAreaEdges: .all)
+                .accessibilityIdentifier("group.gone")
+                .task { dismiss() }
+            }
+        }
+    }
+
+    private func content(_ group: ReviewGroup) -> some View {
         ScrollView {
             // Lazy: a burst can leave sixty copies in one group, and every row here carries a
             // thumbnail that requests itself on appear.
             LazyVStack(spacing: 16) {
-                keeperPanel
+                keeperPanel(group)
 
                 // A group can hold sixty copies of a burst. Without this the only way to tick
                 // a subset was sixty taps, or ticking the whole group on the row before and
                 // untapping back down.
-                copiesHeader
+                copiesHeader(group)
 
                 ForEach(group.items) { item in
-                    candidatePanel(item)
+                    candidatePanel(item, in: group)
                 }
 
                 if let groupID {
@@ -48,7 +88,7 @@ struct GroupDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private var selectedCount: Int {
+    private func selectedCount(_ group: ReviewGroup) -> Int {
         group.candidates.reduce(0) { model.selection.isSelected($1.id) ? $0 + 1 : $0 }
     }
 
@@ -57,8 +97,9 @@ struct GroupDetailView: View {
     /// It can never tick the survivor: `candidateIDs` excludes it by construction, and the
     /// only thing in this app allowed to leave a group with nothing is the deliberately
     /// awkward control at the bottom of this screen.
-    private var copiesHeader: some View {
-        HStack(spacing: DS.Space.s) {
+    private func copiesHeader(_ group: ReviewGroup) -> some View {
+        let selectedCount = selectedCount(group)
+        return HStack(spacing: DS.Space.s) {
             Text(Counting.copies(group.candidates.count))
                 .font(.subheadline.weight(.semibold))
 
@@ -90,7 +131,7 @@ struct GroupDetailView: View {
 
     // MARK: - The survivor
 
-    private var keeperPanel: some View {
+    private func keeperPanel(_ group: ReviewGroup) -> some View {
         Card("Staying", symbolName: "checkmark.seal.fill", identifier: "group.keeper", rail: DS.tier(.inferiorCopy)) {
             HStack(spacing: 12) {
                 ThumbnailView(item: group.keeper, side: 64, loader: loader)
@@ -109,14 +150,14 @@ struct GroupDetailView: View {
                 Spacer(minLength: 0)
             }
 
-            Text(keeperFooter)
+            Text(keeperFooter(group))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var keeperFooter: String {
+    private func keeperFooter(_ group: ReviewGroup) -> String {
         guard let groupID, model.overrides[groupID]?.keeperID != nil else {
             return "Every copy below was compared against this one directly. It is never offered for deletion — unless you say otherwise."
         }
@@ -125,7 +166,7 @@ struct GroupDetailView: View {
 
     // MARK: - One copy on offer
 
-    private func candidatePanel(_ item: MediaItem) -> some View {
+    private func candidatePanel(_ item: MediaItem, in group: ReviewGroup) -> some View {
         Card(rail: tint) {
             candidateRow(item)
 

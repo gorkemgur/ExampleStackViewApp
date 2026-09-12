@@ -216,6 +216,62 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertTrue(model.canDelete)
     }
 
+    /// The survivor of a cleared group is the one copy whose deletion destroys the photograph
+    /// itself. It used to be injected wearing the group's *cheapest* tier — `TierClassifier`
+    /// emits candidates cheapest-first and this took `.first` — so the confirmation sheet read
+    /// "from 3 items that cost you nothing" over a group about to cease to exist, with
+    /// `judgementCallCount` at zero and the warning card never drawn.
+    func testTheLastCopyOfAGroupIsNeverFiledAsCostingNothing() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard
+            let groupID = exactGroupID(model),
+            let decision = model.result.decisions.first(where: { $0.id == groupID })
+        else { return XCTFail("fixture has no exact group") }
+
+        model.setClearingEverything(true, inGroup: groupID)
+
+        let survivor = model.liveCandidates.first { $0.id == decision.keeperID }
+        XCTAssertNotNil(survivor, "the survivor has to be offered once the group is cleared")
+        XCTAssertFalse(survivor?.tier.isLossless ?? true, "destroying the last copy is not a free deletion")
+        XCTAssertTrue(survivor?.requiresHuman ?? false, "and no bulk control may reach it")
+        XCTAssertGreaterThan(model.judgementCallCount, 0, "the confirmation has to warn about this")
+    }
+
+    /// And the budget key must not pick it up — it is also the largest item in its group, so
+    /// the planner's bytes-descending order would have put it first.
+    func testAPlanNeverTicksTheLastCopyOfAClearedGroup() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard
+            let groupID = exactGroupID(model),
+            let decision = model.result.decisions.first(where: { $0.id == groupID })
+        else { return XCTFail("fixture has no exact group") }
+
+        model.setClearingEverything(true, inGroup: groupID)
+        model.budgetDepth = .similar
+        model.budgetBytes = Double(model.plannableBytes)
+
+        XCTAssertFalse(
+            model.budgetPlan.selectedIDs.contains(decision.keeperID),
+            "a plan reached the one copy that would destroy the photograph"
+        )
+    }
+
+    /// "Select all" on a rung acts across every group in it, most of which the user has not
+    /// opened. It is as much a bulk control as the budget key.
+    func testSelectAllOnATierLeavesTheCopiesThatNeedEyes() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+
+        for section in model.sections {
+            model.setSelected(true, in: section)
+        }
+
+        let vetoed = model.liveCandidates.filter(\.requiresHuman).map(\.id)
+        for id in vetoed {
+            XCTAssertFalse(model.selection.isSelected(id), "a whole-tier control ticked \(id)")
+        }
+        XCTAssertTrue(model.violations.isEmpty)
+    }
+
     func testTakingItBackLeavesTheSurvivorAlone() async {
         let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
         guard

@@ -37,6 +37,12 @@ public struct ExportManifest: Codable, Sendable, Equatable {
         public let keptItemID: String
         public let keptDisplayName: String
         public let creationDate: Date?
+        /// Extra files written beside this one — the paired movie of a Live Photo, today.
+        ///
+        /// A file in the export folder that the manifest does not mention is the inverse of the
+        /// guarantee this document exists to make, and it was happening: the paired movie was
+        /// written and then described nowhere.
+        public let companionFileNames: [String]
 
         public init(
             itemID: String,
@@ -49,7 +55,8 @@ public struct ExportManifest: Codable, Sendable, Equatable {
             cost: String,
             keptItemID: String,
             keptDisplayName: String,
-            creationDate: Date?
+            creationDate: Date?,
+            companionFileNames: [String] = []
         ) {
             self.itemID = itemID
             self.displayName = displayName
@@ -62,6 +69,25 @@ public struct ExportManifest: Codable, Sendable, Equatable {
             self.keptItemID = keptItemID
             self.keptDisplayName = keptDisplayName
             self.creationDate = creationDate
+            self.companionFileNames = companionFileNames
+        }
+
+        /// The same row, naming what else landed beside it.
+        public func withCompanions(_ names: [String]) -> Entry {
+            Entry(
+                itemID: itemID,
+                displayName: displayName,
+                exportedFileName: exportedFileName,
+                byteSize: byteSize,
+                kind: kind,
+                source: source,
+                groupID: groupID,
+                cost: cost,
+                keptItemID: keptItemID,
+                keptDisplayName: keptDisplayName,
+                creationDate: creationDate,
+                companionFileNames: names
+            )
         }
     }
 

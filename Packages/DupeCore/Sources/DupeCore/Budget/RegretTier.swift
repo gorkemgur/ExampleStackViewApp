@@ -42,6 +42,21 @@ public struct DeletionCandidate: Sendable, Hashable, Identifiable {
     public let bytes: Int64
     /// Whether the planner is willing to tick this without the user looking at it.
     public let isPreSelected: Bool
+    /// True when no control that acts on many groups at once may tick this copy — however
+    /// cheap its tier says it is.
+    ///
+    /// The tier answers "what information is lost". It does not answer "is this a copy this
+    /// person has told us matters", and two of the planner's refusals are of the second kind:
+    /// a favourite or album member, and a copy whose survivor exists only in iCloud. Both come
+    /// out of `TierClassifier` wearing `.identical` — byte-for-byte the same file, nothing lost
+    /// — which is true and beside the point.
+    ///
+    /// Without this the budget key ticked exactly the copies the planner had refused to
+    /// pre-tick, three taps from deletion, under a confirmation reading "from N items that
+    /// cost you nothing". `isPreSelected` could not stand in for it: nothing in a burst or a
+    /// similar group is ever pre-selected, so a plan that required it would select nothing at
+    /// the "+ bursts" and "+ similar" depths the user explicitly asked for.
+    public let requiresHuman: Bool
 
     public init(
         id: String,
@@ -49,7 +64,8 @@ public struct DeletionCandidate: Sendable, Hashable, Identifiable {
         keeperID: String,
         tier: RegretTier,
         bytes: Int64,
-        isPreSelected: Bool
+        isPreSelected: Bool,
+        requiresHuman: Bool = false
     ) {
         self.id = id
         self.groupID = groupID
@@ -57,6 +73,7 @@ public struct DeletionCandidate: Sendable, Hashable, Identifiable {
         self.tier = tier
         self.bytes = bytes
         self.isPreSelected = isPreSelected
+        self.requiresHuman = requiresHuman
     }
 }
 
@@ -87,12 +104,28 @@ public enum TierClassifier {
                 keeperID: decision.keeperID,
                 tier: tier,
                 bytes: item.totalByteSize,
-                isPreSelected: isPreSelected
+                isPreSelected: isPreSelected,
+                requiresHuman: requiresHuman(item: item, keeper: keeper)
             )
         }
         .sorted { lhs, rhs in
             lhs.tier == rhs.tier ? lhs.id < rhs.id : lhs.tier < rhs.tier
         }
+    }
+
+    /// The two refusals a tier cannot express.
+    ///
+    /// `CleanupPlanner` routes both of these to manual review and says why in its own words:
+    /// "favourites and album members are never offered up without a human looking", and "a
+    /// survivor that is only in iCloud is not a survivor the user still has to hand". Its third
+    /// refusal — a copy carrying edits the survivor lacks — *is* expressible, and `tier(for:)`
+    /// already files it under `.similar`, so it is not repeated here.
+    ///
+    /// Computed here rather than plumbed through from the planner because this is the one place
+    /// that turns a decision into something a bulk control can act on, and a guard that lives
+    /// anywhere else is a guard with a second path around it.
+    private static func requiresHuman(item: MediaItem, keeper: MediaItem) -> Bool {
+        item.isProtected || !keeper.isLocallyAvailable
     }
 
     private static func tier(
