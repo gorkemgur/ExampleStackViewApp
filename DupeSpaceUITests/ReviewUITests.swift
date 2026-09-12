@@ -56,7 +56,22 @@ final class ReviewUITests: XCTestCase {
 
         let slider = app.sliders["budget.slider"]
         XCTAssertTrue(slider.exists, "the space budget control is the point of this screen")
-        slider.adjust(toNormalizedSliderPosition: 0.5)
+
+        // Dragged, not `adjust(toNormalizedSliderPosition:)`.
+        //
+        // The fader is a custom control behind an `accessibilityRepresentation`, and that
+        // representation carries the byte figure as its value — "2.02 GB" — because a
+        // percentage is not what anyone wants read to them here. XCUITest's `adjust` needs a
+        // numeric position it can parse out of that value, so it failed with "unable to get
+        // expected attributes for slider". Choosing between an announcement a person can use
+        // and a convenience method a test can use is not a real choice; the test drags the
+        // control the way a finger does instead, which is also the only thing that proves the
+        // gesture works.
+        slider.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+            .press(
+                forDuration: 0.1,
+                thenDragTo: slider.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+            )
 
         let apply = app.buttons["budget.apply"]
         XCTAssertTrue(apply.waitForExistence(timeout: 5))
