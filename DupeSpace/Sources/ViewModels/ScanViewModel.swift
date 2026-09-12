@@ -61,7 +61,20 @@ final class ScanViewModel: ObservableObject {
             configuration: configurationOverride ?? strictness.configuration,
             pause: gate
         )
+        // Throttled at the source, not at the sink.
+        //
+        // The pipeline reports after every completed item, so a fifty-thousand-photo library
+        // used to enqueue fifty thousand `Task { @MainActor in }` hops, each writing a
+        // `@Published` property and so invalidating the whole scan screen — while the pipeline
+        // was already saturating the device's I/O. The main actor spent the scan servicing
+        // updates nobody could read, which is exactly when the pause and cancel buttons stop
+        // answering. `LiveScanPublishPolicy` rationed the Lock Screen; nothing rationed this.
+        //
+        // A change is worth a hop when it changes the stage or moves the visible percentage.
+        // Everything else is the same frame drawn again.
+        let throttle = ProgressThrottle()
         let onProgress: @Sendable (ScanProgress) -> Void = { [weak self] update in
+            guard throttle.shouldPublish(update) else { return }
             Task { @MainActor in
                 guard let self else { return }
                 self.progress = update
@@ -103,7 +116,6 @@ final class ScanViewModel: ObservableObject {
                 // library's own ids bound it, so items that have gone are forgotten.
                 if let cache = self.cache {
                     await cache.prune(keeping: Set(items.map(\.id)))
-                    await cache.flush()
                 }
             } catch is CancellationError {
                 self.wasCancelled = true
@@ -112,30 +124,40 @@ final class ScanViewModel: ObservableObject {
                 self.failure = error.localizedDescription
                 self.activity?.finish(self.liveState(phase: .failed))
             }
+
+            // Flushed on every ending, not just the happy one. It used to sit inside the
+            // success branch, so cancelling a forty-minute first scan at ninety-five per cent
+            // threw away every fingerprint it had computed and the next launch started from
+            // nothing — the exact opposite of what a scan you are allowed to stop is for.
+            // Every record in there was earned by reading a file; none of it is invalidated by
+            // the scan ending early.
+            await self.cache?.flush()
+
             self.isScanning = false
         }
     }
 
+    // The gate is set synchronously — see the note on `ScanPauseGate`. Wrapping these in
+    // `Task { await … }` meant a quick pause-then-resume could reach the gate the other way
+    // round and hang the scan behind a hold the screen said was not there.
     func pause() {
         guard isScanning, !isPaused else { return }
         isPaused = true
+        gate.pause()
         activity?.update(liveState(phase: .paused))
-        let gate = self.gate
-        Task { await gate.pause() }
     }
 
     func resume() {
         guard isPaused else { return }
         isPaused = false
+        gate.resume()
         activity?.update(liveState(phase: .scanning))
-        let gate = self.gate
-        Task { await gate.resume() }
     }
 
     func cancel() {
-        // Released first: a held scan that is cancelled has to be let go before it can notice.
-        let gate = self.gate
-        Task { await gate.resume() }
+        // Released first, and now genuinely first: a held scan that is cancelled has to be let
+        // go before it can notice.
+        gate.resume()
         isPaused = false
         task?.cancel()
         task = nil
@@ -178,5 +200,42 @@ final class ScanViewModel: ObservableObject {
             reclaimableBytes: reclaimableBytes,
             startedAt: startedAt
         )
+    }
+}
+
+/// Decides which of the pipeline's per-item progress reports are worth waking the main actor
+/// for.
+///
+/// Called from whatever thread the pipeline happens to be on, once per finished item, so it
+/// holds its state under a lock rather than an actor: an actor here would put back the hop this
+/// type exists to remove.
+///
+/// The rule is what the screen can actually show. A stage change always goes through, because
+/// the label is the largest thing on the screen. Otherwise the percentage has to move — at one
+/// decimal place, which is finer than the bar can draw but coarse enough that a fifty-thousand
+/// item stage sends about a thousand updates instead of fifty thousand.
+final class ProgressThrottle: @unchecked Sendable {
+
+    private let lock = NSLock()
+    private var lastStage: ScanProgress.Stage?
+    private var lastTick: Int = -1
+
+    func shouldPublish(_ update: ScanProgress) -> Bool {
+        let tick = update.total > 0
+            ? Int((Double(update.completed) / Double(update.total)) * 1_000)
+            : Int(update.completed)
+
+        lock.lock()
+        defer { lock.unlock() }
+
+        // The end of a stage always goes through, so the bar is never left short of the mark
+        // it reached.
+        let isStageChange = update.stage != lastStage
+        let isComplete = update.total > 0 && update.completed >= update.total
+        guard isStageChange || isComplete || tick != lastTick else { return false }
+
+        lastStage = update.stage
+        lastTick = tick
+        return true
     }
 }

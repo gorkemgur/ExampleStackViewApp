@@ -104,12 +104,30 @@ public struct MediaItem: Sendable, Hashable, Identifiable {
     /// True when the user has signalled they care about this item.
     public var isProtected: Bool { isFavorite || albumCount > 0 }
 
-    /// Changes whenever the item's bytes could have. Cheap to compute from metadata the
-    /// library already handed over, which is the point: it decides whether a stored
-    /// fingerprint can be trusted without opening the file to find out.
+    /// The fingerprinting algorithm's own version, carried in every `contentVersion`.
+    ///
+    /// Without it the cache answers a question it was never asked. `contentVersion` says "these
+    /// bytes have not changed", and the cache reads that as "this stored hash is still the
+    /// right answer" — which is only true while the *hasher* has not changed either. Change the
+    /// render size, the resample chain or a bit in `pHash`, and every cached record stays
+    /// "valid" while the new build compares new hashes against old ones and quietly stops
+    /// finding duplicates. Bump this whenever anything upstream of a stored fingerprint moves.
+    ///
+    /// fp2: the pHash DC term replaced by the (0,8) coefficient.
+    public static let fingerprintFormat = "fp2"
+
+    /// Changes whenever the item's bytes could have — or whenever the way this app reads them
+    /// has. Cheap to compute from metadata the library already handed over, which is the point:
+    /// it decides whether a stored fingerprint can be trusted without opening the file to find
+    /// out.
+    ///
+    /// `isEdited` and `duration` are in here because an adjustment can be applied without
+    /// moving `modificationDate` or changing the resource size, and a stale digest is exactly
+    /// what promotes a pair into the tier this app labels "loses nothing at all".
     public var contentVersion: String {
         let modified = Int((modificationDate?.timeIntervalSince1970 ?? 0).rounded())
-        return "\(byteSize)-\(pairedVideoByteSize)-\(pixelWidth)x\(pixelHeight)-\(modified)"
+        let seconds = Int(duration.rounded())
+        return "\(Self.fingerprintFormat)-\(byteSize)-\(pairedVideoByteSize)-\(pixelWidth)x\(pixelHeight)-\(modified)-\(seconds)-\(isEdited ? 1 : 0)"
     }
 
     public var aspectRatio: Double {

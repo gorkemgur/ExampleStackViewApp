@@ -83,12 +83,27 @@ final class CompositeDeleter: MediaDeleting {
             deleted += try await photos.delete(ids: photoIDs, expecting: [:]).deletedIDs
         }
         if !fileIDs.isEmpty {
-            let outcome = try await files.delete(
-                ids: fileIDs,
-                expecting: stamps.filter { FileItemID.isFile($0.key) }
-            )
-            deleted += outcome.deletedIDs
-            skipped += outcome.skippedIDs
+            do {
+                let outcome = try await files.delete(
+                    ids: fileIDs,
+                    expecting: stamps.filter { FileItemID.isFile($0.key) }
+                )
+                deleted += outcome.deletedIDs
+                skipped += outcome.skippedIDs
+            } catch {
+                // The photos above are already gone. Letting this throw discarded that fact
+                // entirely: the caller wrote no receipt, the review list went on offering
+                // assets that no longer existed, and the user was told nothing had been
+                // deleted while thirty days of undo quietly ran down on assets they did not
+                // know were in Recently Deleted. What happened is reported alongside what
+                // failed, not instead of it.
+                return DeletionOutcome(
+                    requestedIDs: ids,
+                    deletedIDs: deleted,
+                    skippedIDs: skipped,
+                    failure: error.localizedDescription
+                )
+            }
         }
 
         return DeletionOutcome(requestedIDs: ids, deletedIDs: deleted, skippedIDs: skipped)

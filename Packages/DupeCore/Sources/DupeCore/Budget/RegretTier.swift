@@ -126,7 +126,9 @@ public enum TierClassifier {
         groups: [DuplicateGroup],
         items: [String: MediaItem]
     ) -> [DeletionCandidate] {
-        let groupsByID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0) })
+        // Never traps: see the note in `ScanPipeline.run`. Group ids are derived from item
+        // ids, so anything that can collide there can collide here.
+        let groupsByID = Dictionary(groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return decisions.flatMap { decision -> [DeletionCandidate] in
             guard let group = groupsByID[decision.id] else { return [] }
             return candidates(for: decision, group: group, items: items)

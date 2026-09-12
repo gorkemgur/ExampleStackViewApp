@@ -39,8 +39,14 @@ public enum PerceptualHasher {
     }
 
     /// Perceptual hash: 2-D DCT of a 32x32 thumbnail, thresholded against the median of the
-    /// low-frequency 8x8 block (DC excluded from the median so overall exposure does not
-    /// drag the threshold around).
+    /// low-frequency 8x8 block.
+    ///
+    /// The DC term is not one of the 64 bits. It is the scaled sum of non-negative pixels, so
+    /// it sits above the median of the AC terms for every real image — meaning it was a
+    /// constant 1 in every hash this app has ever computed, and the hash carried 63
+    /// discriminating bits while every threshold was written as though it carried 64. The slot
+    /// is given to the next coefficient along the top row instead, which is a real
+    /// low-frequency term and costs nothing.
     public static func pHash(_ image: GrayImage) -> UInt64 {
         let small = image.resized(width: dctSize, height: dctSize)
 
@@ -59,7 +65,10 @@ public enum PerceptualHasher {
             }
         }
 
-        let threshold = median(of: Array(block.dropFirst()))
+        // DC out, (0,8) in: 64 terms, none of them constant.
+        block[0] = coefficients[8]
+
+        let threshold = median(of: block)
 
         var bits: UInt64 = 0
         for (index, value) in block.enumerated() where value > threshold {

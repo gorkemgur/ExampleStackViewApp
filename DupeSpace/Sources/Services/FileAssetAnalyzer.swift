@@ -41,18 +41,10 @@ final class FileAssetAnalyzer: AssetAnalyzing {
 
     func videoSignature(for item: MediaItem) async -> VideoSignature? {
         guard item.kind == .video, item.isLocallyAvailable else { return nil }
-        guard
-            let parsed = FileItemID.parse(item.id),
-            let folder = registry.folders().first(where: { $0.id == parsed.folderID })
-        else {
-            return nil
-        }
 
-        return await FolderAccess.withFolderAsync(folder) { root in
-            await VideoFrameSampler.signature(
-                for: AVURLAsset(url: root.appendingPathComponent(parsed.relativePath))
-            )
-        } ?? nil
+        return await FileMediaLibrary.withFileAsync(itemID: item.id, registry: registry) { url in
+            await VideoFrameSampler.signature(for: AVURLAsset(url: url))
+        }
     }
 
     // MARK: - Work
@@ -117,7 +109,13 @@ final class FileDeleter: MediaDeleting {
                 let outcome = FileMediaLibrary.withFile(itemID: id, registry: registry) { url -> Bool? in
                     // `nil` means "not this file": the deletion is refused rather than failing,
                     // and the caller is told so it can say which.
-                    if let expected = stamps[id], !Self.stillMatches(expected, at: url) {
+                    //
+                    // A missing stamp refuses too. This used to read `if let expected = …`,
+                    // which meant no stamp, no check, delete — the irreversible half of the app
+                    // failing open on the one guard standing between it and a file that was
+                    // replaced after the scan read it. `delete(ids:)` without stamps is part of
+                    // the protocol, so that path is one call site away at all times.
+                    guard let expected = stamps[id], Self.stillMatches(expected, at: url) else {
                         return nil
                     }
 
@@ -132,13 +130,30 @@ final class FileDeleter: MediaDeleting {
                         success = (try? FileManager.default.removeItem(at: target)) != nil
                     }
 
-                    return success && coordinationError == nil
+                    // A coordination failure is a refusal, not a silent nothing. It used to
+                    // return `false`, which fell through to `default: break` and was reported
+                    // to the user as "already gone" — the one wording that is certainly wrong
+                    // when the file is still sitting there.
+                    guard coordinationError == nil else { return nil }
+                    return success
                 }
 
                 switch outcome {
-                case .some(.some(true)): removed.append(id)
-                case .some(.none): refused.append(id)
-                default: break
+                case .some(.some(true)):
+                    removed.append(id)
+                case .some(.none):
+                    // The file is not the one the scan read, or the coordinator refused.
+                    refused.append(id)
+                case .none:
+                    // The folder grant would not resolve, so nothing was even looked at.
+                    // Reporting this as "already gone" would be a guess about a file the app
+                    // could not open.
+                    refused.append(id)
+                case .some(.some(false)):
+                    // The removal itself failed, which for a file that was there a moment ago
+                    // almost always means it is not there now. That is what `missingCount`
+                    // says, and it is left to say it.
+                    break
                 }
             }
             return (removed, refused)

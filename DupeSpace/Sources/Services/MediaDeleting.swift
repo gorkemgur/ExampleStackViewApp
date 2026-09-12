@@ -8,11 +8,24 @@ struct DeletionOutcome: Sendable, Equatable {
     /// Files that were deliberately left alone because they no longer matched what the scan
     /// read. Not a failure — a refusal.
     let skippedIDs: [String]
+    /// Set when part of the work succeeded and part of it did not.
+    ///
+    /// A deletion that spans the photo library and a Files folder is two operations, and the
+    /// second can fail after the first has already happened. Throwing would be a claim that
+    /// nothing was deleted, which by then is false, so the outcome carries both halves and the
+    /// caller records what went and reports what did not.
+    let failure: String?
 
-    init(requestedIDs: [String], deletedIDs: [String], skippedIDs: [String] = []) {
+    init(
+        requestedIDs: [String],
+        deletedIDs: [String],
+        skippedIDs: [String] = [],
+        failure: String? = nil
+    ) {
         self.requestedIDs = requestedIDs
         self.deletedIDs = deletedIDs
         self.skippedIDs = skippedIDs
+        self.failure = failure
     }
 
     var deletedCount: Int { deletedIDs.count }

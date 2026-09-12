@@ -130,7 +130,13 @@ public struct ScanPipeline: Sendable {
         progress: @escaping @Sendable (ScanProgress) -> Void = { _ in }
     ) async throws -> ScanResult {
 
-        let index = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        // `uniquingKeysWith` rather than `uniqueKeysWithValues`, which traps. Two items can
+        // arrive with the same id — a folder granted twice under different paths, a bookmark
+        // that no longer resolves so the overlap check skips it, a `/private` prefix that
+        // defeats a string comparison — and a trap here is a crash inside the engine with the
+        // scan already running and a Live Activity on the Lock Screen. The first wins; a
+        // duplicate id describes the same file either way.
+        let index = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         guard !items.isEmpty else { return .empty }
 
         // Bound to locals so the concurrent closures below capture plain values.

@@ -8,10 +8,28 @@ public struct VideoSignature: Sendable, Hashable, Codable {
     /// silently drops the last position.
     public static let samplePositions: [Double] = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
 
+    /// How many of the ten samples a signature has to resolve to *different* frames before it
+    /// is worth comparing.
+    ///
+    /// Ten samples of the same frame is not ten observations, it is one, and the worst-frame
+    /// veto — the whole reason this signature is ten numbers rather than one — has nothing left
+    /// to veto. Six is the point at which the veto still has a majority of independent evidence
+    /// behind it.
+    public static let minimumDistinctFrames = 6
+
     public let frameHashes: [UInt64]
 
     public init(frameHashes: [UInt64]) {
         self.frameHashes = frameHashes
+    }
+
+    public var distinctFrameCount: Int { Set(frameHashes).count }
+
+    /// False for a signature whose samples collapsed onto the same handful of frames. Refusing
+    /// to judge is the right answer there: a video this app cannot describe is a video it must
+    /// not offer to delete.
+    public var carriesEnoughEvidence: Bool {
+        distinctFrameCount >= Self.minimumDistinctFrames
     }
 }
 
@@ -31,15 +49,27 @@ public enum VideoMatcher {
 
     /// Best alignment within +/- `maxShift` frames.
     ///
-    /// The shift tolerance matters because the frame grabber snaps to the nearest keyframe,
-    /// so the same footage encoded twice can land a sample on either side of a cut.
+    /// Defaults to no shift at all, and the reason is arithmetic rather than taste. The samples
+    /// are taken at *normalised* positions — 5%, 15%, ... 95% of the duration — and the pipeline
+    /// only ever compares two videos whose durations are within half a second of each other. So
+    /// position `i` of one signature and position `i` of the other already describe the same
+    /// moment of the same footage: shift 0 is the correct alignment by construction.
+    ///
+    /// Shifting by one therefore does not tolerate "a frame of drift", which is what this
+    /// argument was documented as doing. It compares content a *tenth of the duration* apart —
+    /// a full minute on a ten-minute recording. All it can do is hand every pair three chances
+    /// to slip under the average threshold instead of one, and a duplicate finder that gets
+    /// three attempts to say yes is a duplicate finder that says yes too often.
+    ///
+    /// Callers that sample at absolute offsets, where snapping to a keyframe really can move a
+    /// sample into the next slot, can still ask for it.
     ///
     /// - Returns: `nil` when the two signatures do not overlap by at least `minimumOverlap`
     ///   frames, which means there is not enough evidence to judge them.
     public static func compare(
         _ lhs: VideoSignature,
         _ rhs: VideoSignature,
-        maxShift: Int = 1,
+        maxShift: Int = 0,
         minimumOverlap: Int = 3
     ) -> Comparison? {
 
@@ -68,12 +98,23 @@ public enum VideoMatcher {
                 comparedFrames: count
             )
 
-            if best == nil || candidate.averageDistance < best!.averageDistance {
+            // Ranked on the worst frame first, then the average. Ranking on the average alone
+            // let an alignment with a marginally lower mean but one wholly different scene
+            // beat an alignment that passed both tests — the veto and the selection pulling in
+            // opposite directions, with the veto losing.
+            if best == nil || isBetter(candidate, than: best!) {
                 best = candidate
             }
         }
 
         return best
+    }
+
+    private static func isBetter(_ candidate: Comparison, than incumbent: Comparison) -> Bool {
+        if candidate.worstDistance != incumbent.worstDistance {
+            return candidate.worstDistance < incumbent.worstDistance
+        }
+        return candidate.averageDistance < incumbent.averageDistance
     }
 
     /// Thresholds tuned to accept re-encodes while rejecting merely similar footage.

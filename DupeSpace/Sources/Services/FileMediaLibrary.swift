@@ -145,4 +145,31 @@ final class FileMediaLibrary: MediaLibrary {
         }
         return resolved ?? nil
     }
+
+    /// The same guard, for work that has to await.
+    ///
+    /// `videoSignature` used to build its URL by hand — `root.appendingPathComponent(...)` with
+    /// no containment check — because the synchronous helper could not carry an `async` body.
+    /// It only ever reads, so it could not have deleted outside the grant, but it could read
+    /// outside it, and the reason the check exists is that the relative path is written to disk
+    /// and read back later.
+    static func withFileAsync<T>(
+        itemID: String,
+        registry: any FolderRegistering,
+        _ body: @Sendable (URL) async -> T?
+    ) async -> T? {
+        guard
+            let parsed = FileItemID.parse(itemID),
+            let folder = registry.folders().first(where: { $0.id == parsed.folderID })
+        else {
+            return nil
+        }
+
+        let resolved: T?? = await FolderAccess.withFolderAsync(folder) { root -> T? in
+            let target = root.appendingPathComponent(parsed.relativePath).standardizedFileURL
+            guard target.path.hasPrefix(root.standardizedFileURL.path + "/") else { return nil }
+            return await body(target)
+        }
+        return resolved ?? nil
+    }
 }

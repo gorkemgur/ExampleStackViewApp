@@ -124,8 +124,20 @@ extension KeeperScorer {
         if !item.isLocallyAvailable { rank -= 25_000 }
 
         // Tie-breakers, scaled so they can never overturn a categorical signal above.
-        rank += Double(item.pixelCount) / 1_000
-        rank += Double(item.totalByteSize) / 1_000_000
+        //
+        // They did not used to be. `pixelCount / 1_000` gives a 48 MP ProRAW 48,000 and a
+        // 15,000x3,500 panorama 52,500 — more than the 40,000 for location metadata and twice
+        // the 25,000 penalty for an original that is not even on the device. So a panorama with
+        // no location outranked a photo with one, and any image over 25 MP cancelled the
+        // cloud-only penalty outright. That is not a tie-breaker, it is a categorical signal
+        // wearing a tie-breaker's clothes, and it decides the seed of every similar group —
+        // which is the copy this app steers the user into keeping.
+        //
+        // Divided until they cannot reach 1.0 at any size a camera produces: a 200 MP frame
+        // contributes 0.2, a 100 GB file 0.01. Pixels still outrank bytes, which is the order
+        // the two were written in.
+        rank += Double(item.pixelCount) / 1_000_000_000
+        rank += Double(item.totalByteSize) / 10_000_000_000_000
         return rank
     }
 

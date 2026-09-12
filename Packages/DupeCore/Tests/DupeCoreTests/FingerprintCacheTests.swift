@@ -219,7 +219,7 @@ final class ScanPauseTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(analyzer.digestCalls, 0, "a held scan must not be reading")
 
-        await gate.resume()
+        gate.resume()
         let result = try await task.value
         XCTAssertGreaterThan(analyzer.digestCalls, 0)
         XCTAssertEqual(result.groups.count, 1, "and it finishes the work it was holding")
@@ -249,15 +249,15 @@ final class ScanPauseTests: XCTestCase {
 
     func testTheGateReportsItsOwnState() async {
         let gate = ScanPauseGate()
-        var paused = await gate.paused
+        var paused = gate.paused
         XCTAssertFalse(paused)
 
-        await gate.pause()
-        paused = await gate.paused
+        gate.pause()
+        paused = gate.paused
         XCTAssertTrue(paused)
 
-        await gate.resume()
-        paused = await gate.paused
+        gate.resume()
+        paused = gate.paused
         XCTAssertFalse(paused)
     }
 

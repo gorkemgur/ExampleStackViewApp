@@ -5,7 +5,9 @@ import DupeCore
 @MainActor
 final class ReviewViewModel: ObservableObject {
 
-    @Published private(set) var selection: CleanupSelection
+    @Published private(set) var selection: CleanupSelection {
+        didSet { cachedViolations = nil }
+    }
     @Published private(set) var isDeleting = false
     @Published private(set) var outcome: DeletionOutcome?
     @Published private(set) var failure: String?
@@ -18,11 +20,15 @@ final class ReviewViewModel: ObservableObject {
     /// Items that have actually been removed. Kept so the list stops offering copies that no
     /// longer exist the moment a deletion succeeds, rather than leaving the user staring at
     /// rows that would fail if tapped.
-    @Published private(set) var deletedIDs: Set<String> = []
+    @Published private(set) var deletedIDs: Set<String> = [] {
+        didSet { invalidateDerived() }
+    }
 
     /// Where the user has overruled the engine: a different survivor, or a group they want gone
     /// entirely. Keyed by group id.
-    @Published private(set) var overrides: [String: GroupOverride] = [:]
+    @Published private(set) var overrides: [String: GroupOverride] = [:] {
+        didSet { invalidateDerived() }
+    }
 
     let result: ScanResult
 
@@ -30,11 +36,32 @@ final class ReviewViewModel: ObservableObject {
     private let deleter: MediaDeleting
     private weak var history: (any HistoryRecording)?
 
+    /// Every id the scan knows about. Hoisted out of `violations`, which is read through
+    /// `canDelete` five times in one pass of the review screen's body and twice more in the
+    /// confirmation — so a fifty-thousand-item library was allocating a fifty-thousand-element
+    /// set seven times per frame, while a finger was on the slider. It cannot change: `result`
+    /// is a `let`.
+    private let knownItemIDs: Set<String>
+
+    // Everything below is derived from `result`, `overrides` and `deletedIDs`, none of which
+    // move while a checkbox is being ticked. They used to be recomputed from scratch on every
+    // read, and SwiftUI reads them several times per body evaluation, so one tap re-ran the
+    // whole revision — decisions, candidates, tier classification, three nested sorts — a
+    // dozen times over. Cleared by `invalidateDerived()` when the things they are derived from
+    // actually change.
+    private var cachedDecisions: [GroupDecision]?
+    private var cachedRevisedCandidates: [DeletionCandidate]?
+    private var cachedLiveCandidates: [DeletionCandidate]?
+    private var cachedSections: [ReviewSection]?
+    private var cachedSafeDefault: CleanupSelection?
+    private var cachedViolations: [CleanupViolation]?
+
     init(result: ScanResult, deleter: MediaDeleting, history: (any HistoryRecording)? = nil) {
         self.result = result
         self.deleter = deleter
         self.history = history
         self.allSections = ReviewBuilder.sections(for: result)
+        self.knownItemIDs = Set(result.items.keys)
         self.selection = .preSelected(from: result.candidates)
 
         // The slider opens where the app's own suggestion already sits. Starting at zero made
@@ -45,18 +72,37 @@ final class ReviewViewModel: ObservableObject {
         )
     }
 
+    /// Drops every cached derivation. Called whenever an override or a deletion lands, which
+    /// are the only two things any of them depend on.
+    private func invalidateDerived() {
+        cachedDecisions = nil
+        cachedRevisedCandidates = nil
+        cachedLiveCandidates = nil
+        cachedSections = nil
+        cachedSafeDefault = nil
+        cachedViolations = nil
+    }
+
     var sections: [ReviewSection] {
-        guard !overrides.isEmpty else {
-            return allSections.compactMap { $0.removing(deletedIDs) }
+        if let cachedSections { return cachedSections }
+        let value: [ReviewSection]
+        if overrides.isEmpty {
+            value = allSections.compactMap { $0.removing(deletedIDs) }
+        } else {
+            value = ReviewBuilder
+                .sections(candidates: revisedCandidates, items: result.items)
+                .compactMap { $0.removing(deletedIDs) }
         }
-        return ReviewBuilder
-            .sections(candidates: revisedCandidates, items: result.items)
-            .compactMap { $0.removing(deletedIDs) }
+        cachedSections = value
+        return value
     }
 
     /// The decisions as they stand after the user has overruled any of them.
     var decisions: [GroupDecision] {
-        GroupRevision.apply(overrides, to: result.decisions)
+        if let cachedDecisions { return cachedDecisions }
+        let value = GroupRevision.apply(overrides, to: result.decisions)
+        cachedDecisions = value
+        return value
     }
 
     /// Groups the user has explicitly asked to remove entirely. The only thing that may empty a
@@ -68,6 +114,13 @@ final class ReviewViewModel: ObservableObject {
     /// Candidates rebuilt from the revised decisions, plus the survivors of groups the user has
     /// asked to clear — those become deletable, which is the whole point of asking.
     private var revisedCandidates: [DeletionCandidate] {
+        if let cachedRevisedCandidates { return cachedRevisedCandidates }
+        let value = buildRevisedCandidates()
+        cachedRevisedCandidates = value
+        return value
+    }
+
+    private func buildRevisedCandidates() -> [DeletionCandidate] {
         let revised = decisions
         var candidates = TierClassifier.candidates(
             decisions: revised,
@@ -98,8 +151,20 @@ final class ReviewViewModel: ObservableObject {
 
     /// Candidates that still exist.
     var liveCandidates: [DeletionCandidate] {
+        if let cachedLiveCandidates { return cachedLiveCandidates }
         let source = overrides.isEmpty ? result.candidates : revisedCandidates
-        return source.filter { !deletedIDs.contains($0.id) }
+        let value = source.filter { !deletedIDs.contains($0.id) }
+        cachedLiveCandidates = value
+        return value
+    }
+
+    /// What the app would tick if the user had not touched anything. Cached because
+    /// `hasChangedTheProposal` is read on every toolbar pass.
+    private var safeDefaultSelection: CleanupSelection {
+        if let cachedSafeDefault { return cachedSafeDefault }
+        let value = CleanupSelection.preSelected(from: liveCandidates)
+        cachedSafeDefault = value
+        return value
     }
 
     // MARK: - Derived
@@ -114,12 +179,15 @@ final class ReviewViewModel: ObservableObject {
     }
 
     var violations: [CleanupViolation] {
-        CleanupValidator.validate(
+        if let cachedViolations { return cachedViolations }
+        let value = CleanupValidator.validate(
             selection: selection.selectedIDs,
             decisions: decisions,
-            knownItemIDs: Set(result.items.keys),
+            knownItemIDs: knownItemIDs,
             clearedGroupIDs: clearedGroupIDs
         )
+        cachedViolations = value
+        return value
     }
 
     var canDelete: Bool { !selection.isEmpty && violations.isEmpty && !isDeleting }
@@ -259,13 +327,13 @@ final class ReviewViewModel: ObservableObject {
     /// a choice.
     func resetToSafeDefaults() {
         overrides = [:]
-        selection = .preSelected(from: liveCandidates)
+        selection = safeDefaultSelection
         clampBudget()
     }
 
     /// True once the user has changed anything the app proposed.
     var hasChangedTheProposal: Bool {
-        !overrides.isEmpty || selection != .preSelected(from: liveCandidates)
+        !overrides.isEmpty || selection != safeDefaultSelection
     }
 
     // MARK: - Deletion
@@ -281,7 +349,7 @@ final class ReviewViewModel: ObservableObject {
         let blocking = CleanupValidator.validate(
             selection: Set(ids),
             decisions: decisions,
-            knownItemIDs: Set(result.items.keys),
+            knownItemIDs: knownItemIDs,
             clearedGroupIDs: clearedGroupIDs
         )
         guard blocking.isEmpty else {
@@ -315,6 +383,11 @@ final class ReviewViewModel: ObservableObject {
             deletedIDs.formUnion(completed.deletedIDs)
             selection.clear()
             clampBudget()
+
+            // A deletion that spans both sources can half-succeed. The outcome says so rather
+            // than throwing, so the receipt below is still written for what actually went and
+            // the user still sees what did not.
+            failure = completed.failure
 
             if !completed.deletedIDs.isEmpty {
                 history?.record(

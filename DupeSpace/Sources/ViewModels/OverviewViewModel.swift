@@ -41,10 +41,17 @@ final class OverviewViewModel: ObservableObject {
         self.changeObserver = changeObserver
     }
 
-    var libraryBytes: Int64 { InventoryAnalyzer.totalBytes(items) }
-    var cloudOnlyBytes: Int64 { InventoryAnalyzer.cloudOnlyBytes(items) }
+    // Computed once when the inventory lands, not on every read.
+    //
+    // These were four computed properties over `items`, and the overview screen reads them
+    // several times per body pass — `largestItems` alone sorted all fifty thousand items to
+    // take five, twice per render, on the main actor. Nothing about them changes between
+    // inventory loads, so they are stored.
+    @Published private(set) var libraryBytes: Int64 = 0
+    @Published private(set) var cloudOnlyBytes: Int64 = 0
+    @Published private(set) var largestItems: [MediaItem] = []
+
     var onDeviceLibraryBytes: Int64 { libraryBytes - cloudOnlyBytes }
-    var largestItems: [MediaItem] { InventoryAnalyzer.largest(items, limit: 5) }
 
     var isLoading: Bool { state == .loading }
 
@@ -135,6 +142,9 @@ final class OverviewViewModel: ObservableObject {
                 let loaded = try await library.loadInventory()
                 items = loaded
                 breakdown = InventoryAnalyzer.breakdown(for: loaded)
+                libraryBytes = InventoryAnalyzer.totalBytes(loaded)
+                cloudOnlyBytes = InventoryAnalyzer.cloudOnlyBytes(loaded)
+                largestItems = InventoryAnalyzer.largest(loaded, limit: 5)
                 state = .loaded
                 WidgetPublisher.publish(storage: storage, libraryBytes: onDeviceLibraryBytes)
             } catch {
