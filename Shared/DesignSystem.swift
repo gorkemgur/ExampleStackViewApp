@@ -654,12 +654,25 @@ struct TargetSlider: View {
     @GestureState private var isDragging = false
 
     private let trackHeight: CGFloat = 16
-    private let gripWidth: CGFloat = 7
+    /// Wide enough to read as a thing you take hold of.
+    ///
+    /// It was seven points. Twice, on two different screens, the first thing anyone said about
+    /// this control was that there was a stray line on it — once for the depth marker at the
+    /// far left, once for the cap itself parked at the far right. A seven-point white sliver on
+    /// a sixteen-point track is a scratch, whatever it was meant to be, and when the reader
+    /// keeps reading it as a scratch the reader is right.
+    private let gripWidth: CGFloat = 18
     private let gripHeight: CGFloat = 30
     /// The control is 30pt of paint in a 44pt target.
     private let hitHeight: CGFloat = 44
 
     private var span: Double { max(range.upperBound - range.lowerBound, 1) }
+
+    /// False when the depth setting can reach nothing, so there is no target to set.
+    ///
+    /// A live-looking white handle on a track where every rung is off the table is the control
+    /// inviting a drag it will not honour. Greyed and unlit, it reads as what it is.
+    private var isLive: Bool { limitFraction > 0 }
 
     private var fraction: Double {
         min(max((value - range.lowerBound) / span, 0), 1)
@@ -689,11 +702,13 @@ struct TargetSlider: View {
         GeometryReader { proxy in
             let width = proxy.size.width
 
-            // One width for the fill and one origin for the cap, derived from each other.
-            // They used to live in two coordinate spaces — the fill spanned 0...width, the cap
-            // travelled 0...(width - gripWidth) — so they agreed only in the middle and left a
-            // visible notch at both ends.
-            let fillWidth = fraction > 0 ? max(width * fraction, gripWidth) : 0
+            // The cap travels the track inset by its own width, and the fill ends at the cap's
+            // centre. One derives from the other, so they cannot disagree — and the cap is
+            // always wholly inside the groove, never half-overhanging an end, which is the
+            // other half of why it read as a sliver rather than as a handle.
+            let travel = max(width - gripWidth, 1)
+            let capX = travel * CGFloat(fraction)
+            let fillWidth = capX + gripWidth / 2
 
             ZStack(alignment: .leading) {
                 // The ladder is the track, and the target lights it up rather than painting
@@ -741,19 +756,31 @@ struct TargetSlider: View {
                         .offset(x: width * limitFraction - 1)
                 }
 
-                RoundedRectangle(cornerRadius: gripWidth / 2, style: .continuous)
-                    .fill(.white)
+                // A fader cap: white, lifted off the track, with the two ridges a real one has.
+                // The ridges are what stop an eighteen-point white rectangle from reading as a
+                // blank tile — they say which way it slides.
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isLive ? Color.white : DS.neutralOnSlab)
                     .overlay(
-                        RoundedRectangle(cornerRadius: gripWidth / 2, style: .continuous)
-                            .strokeBorder(DS.slab.opacity(0.35), lineWidth: 1)
+                        HStack(spacing: 3) {
+                            Capsule().frame(width: 1.5)
+                            Capsule().frame(width: 1.5)
+                        }
+                        .frame(height: gripHeight * 0.36)
+                        .foregroundStyle(DS.slab.opacity(isLive ? 0.28 : 0.45))
                     )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(DS.slab.opacity(0.28), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(isLive ? 0.28 : 0), radius: 4, y: 1)
                     .frame(width: gripWidth, height: gripHeight)
-                    .offset(x: max(fillWidth - gripWidth / 2, 0))
+                    .offset(x: capX)
             }
             .frame(height: hitHeight)
             .contentShape(Rectangle())
-            // Anywhere on the track, not only on the grip: a 7pt cap is a hard thing to catch
-            // and there is no reason to make someone catch it.
+            // Anywhere on the track, not only on the grip. The cap is a proper handle now,
+            // but a fader you have to hit exactly is still a worse fader.
             //
             // But `minimumDistance: 0` is wrong here, and `CompareSliderView` already learned
             // why — at zero the gesture claims the touch the instant a finger lands, so a
