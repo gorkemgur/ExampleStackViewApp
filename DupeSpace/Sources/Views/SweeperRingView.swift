@@ -22,18 +22,29 @@ struct SweeperRingView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// How much of the tick has been drawn. Driven once, on arrival, so the mark strokes itself
+    /// on rather than appearing.
+    @State private var tickTrim: CGFloat = 0
+    /// The single ring pulse that goes with it.
+    @State private var pulse: CGFloat = 0
+
     private let lineWidth: CGFloat = 7
 
     var body: some View {
         VStack(spacing: DS.Space.s) {
             ZStack {
                 track
+                if scene.isFinished { ringPulse }
                 progress
                 interior
                 if scene.isFinished { tick }
             }
             .frame(width: size, height: size)
             .animation(reduceMotion ? nil : Motion.content, value: scene.isFinished)
+            .onAppear { if scene.isFinished { arrive() } }
+            .onChange(of: scene.isFinished) { _, finished in
+                if finished { arrive() } else { tickTrim = 0; pulse = 0 }
+            }
 
             if let caption {
                 Text(caption)
@@ -117,11 +128,20 @@ struct SweeperRingView: View {
 
             var swept = Path()
             swept.move(to: CGPoint(x: inset, y: floorY))
-            swept.addLine(to: CGPoint(x: min(pose.broomLeft.x * canvas.width, canvas.width - inset), y: floorY))
+            swept.addLine(
+                to: CGPoint(
+                    x: scene.isFinished
+                        ? canvas.width - inset
+                        : min(pose.broomLeft.x * canvas.width, canvas.width - inset),
+                    y: floorY
+                )
+            )
             context.stroke(swept, with: .color(DS.onSlabAccent.opacity(0.7)), lineWidth: 2)
 
-            // What is left to do.
-            for speck in SweepFloor.specks() where !SweepFloor.isSwept(speck, by: x) {
+            // What is left to do. Nothing, once the work is finished: the figure travels to
+            // `travel.upperBound`, which is short of the far edge, so two specks used to sit
+            // there uncollected under a tick claiming the job was done.
+            for speck in SweepFloor.specks() where !scene.isFinished && !SweepFloor.isSwept(speck, by: x) {
                 let dot = point(speck)
                 context.fill(
                     Path(ellipseIn: CGRect(x: dot.x - 1.6, y: dot.y - 1.6, width: 3.2, height: 3.2)),
@@ -208,15 +228,34 @@ struct SweeperRingView: View {
     /// the person authorised, not a level cleared.
     private var tick: some View {
         TickMark()
-            .trim(from: 0, to: 1)
+            .trim(from: 0, to: tickTrim)
             .stroke(DS.onSlabAccent, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
             .frame(width: size * 0.42, height: size * 0.42)
-            .transition(
-                reduceMotion
-                    ? .opacity
-                    : .scale(scale: 0.55).combined(with: .opacity)
-            )
             .accessibilityIdentifier("sweeper.tick")
+    }
+
+    /// One pulse off the ring, and only one.
+    private var ringPulse: some View {
+        Circle()
+            .strokeBorder(DS.onSlabAccent.opacity(0.5 * (1 - pulse)), lineWidth: 3)
+            .scaleEffect(1 + pulse * 0.12)
+    }
+
+    /// Arrival, driven once rather than per frame.
+    ///
+    /// The web preview of this had the bug in its clearest form: it rebuilt the tick on every
+    /// frame at dash-offset zero, so the mark restarted sixty times a second and never drew a
+    /// pixel of itself — the finished state appeared to show nothing at all.
+    private func arrive() {
+        guard !reduceMotion else {
+            tickTrim = 1
+            pulse = 1
+            return
+        }
+        tickTrim = 0
+        pulse = 0
+        withAnimation(.snappy(duration: 0.42)) { tickTrim = 1 }
+        withAnimation(.easeOut(duration: 0.5)) { pulse = 1 }
     }
 
     private var spokenValue: String {

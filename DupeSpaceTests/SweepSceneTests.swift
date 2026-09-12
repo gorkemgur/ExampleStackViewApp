@@ -135,4 +135,15 @@ final class SweepSceneTests: XCTestCase {
     func testTheFloorIsTheSameEveryTime() {
         XCTAssertEqual(SweepFloor.specks(), SweepFloor.specks())
     }
+
+    /// The figure stops at `travel.upperBound`, which is short of the far edge, so the last two
+    /// specks sit past where the broom ever reaches. Left as they were, the finished state
+    /// showed a tick over a floor that still had dirt on it.
+    func testTheFigureNeverReachesTheLastSpecksOnItsOwn() {
+        let reach = SweeperFigure.travel.upperBound
+        XCTAssertFalse(
+            SweepFloor.specks().allSatisfy { SweepFloor.isSwept($0, by: reach) },
+            "if this ever passes, the finished state can stop special-casing the floor"
+        )
+    }
 }
