@@ -32,15 +32,9 @@ jobs:
           xcodebuild -version
           swift --version
 
-          # The app calls `glassEffect`, which exists only in the iOS 26 SDK. It is guarded at
-          # runtime with `#available`, but `#available` compiles against any SDK — so on an
-          # older image the failure is a bare "has no member 'glassEffect'" a thousand lines
-          # into a build log. Said out loud here instead.
-          MAJOR=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
-          if [ "$MAJOR" -lt 26 ]; then
-            echo "::error::This project needs Xcode 26 or newer for the iOS 26 SDK; this runner has $MAJOR."
-            exit 1
-          fi
+          # No iOS 26-only API is called any more — the one that was, `glassEffect`, made the
+          # reading on the dock illegible and was removed — so there is nothing to assert
+          # here beyond what the build itself will say.
 
       # The rule the whole layering rests on, enforced by the build rather than by
       # discipline. DupeCore holds the reasoning that decides what gets deleted, and it is
@@ -317,6 +311,13 @@ jobs:
         run: |
           echo "the walk exited ${{ steps.walk.outputs.status }} — see MISSING above"
           exit 1
+
+      # Same lesson as the build job: a diagnostic printed in the middle of a three-thousand
+      # line log is a diagnostic nobody reads. The walk dumps the accessibility tree wherever
+      # it cannot find a control, and those dumps belong at the bottom.
+      - name: What the walk could actually see
+        if: failure()
+        run: python3 Scripts/show-tree-dumps.py artifacts/screens
 
       - name: Upload simulator artifacts
         if: always()

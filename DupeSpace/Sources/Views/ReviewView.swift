@@ -184,32 +184,21 @@ struct ReviewView: View {
         .dsSlab()
     }
 
-    /// How far down the ladder the plan may reach, drawn as the ladder itself.
+    /// How far down the ladder the plan may reach.
+    ///
+    /// Equal steps, deliberately. These carried each rung's real byte weight, which put a
+    /// rung-width ladder directly below the rung-width ladder in the fader's track — and in a
+    /// library whose burst and similar rungs are empty, "No loss" took ninety-seven per cent
+    /// of the bar, so the control read as one solid block and moving the selection changed
+    /// nothing visible. One of the two says what each rung is worth, and that is the fader.
+    /// This one says how far you are willing to go: three equal choices.
     private var depthPicker: some View {
         ReachPicker<RegretTier>(
             selection: $model.budgetDepth,
             options: [
-                // "No loss" is both lossless rungs at once, so it carries both their weights.
-                // There is no separate control for identical copies because there is no
-                // decision to make about them.
-                ReachPicker<RegretTier>.Option(
-                    value: .inferiorCopy,
-                    title: "No loss",
-                    color: DS.tierVivid(.inferiorCopy),
-                    weight: rungBytes(.identical) + rungBytes(.inferiorCopy)
-                ),
-                ReachPicker<RegretTier>.Option(
-                    value: .burstLeftover,
-                    title: "+ bursts",
-                    color: DS.tierVivid(.burstLeftover),
-                    weight: rungBytes(.burstLeftover)
-                ),
-                ReachPicker<RegretTier>.Option(
-                    value: .similar,
-                    title: "+ similar",
-                    color: DS.tierVivid(.similar),
-                    weight: rungBytes(.similar)
-                )
+                ReachPicker<RegretTier>.Option(value: .inferiorCopy, title: "No loss", color: DS.tierVivid(.inferiorCopy)),
+                ReachPicker<RegretTier>.Option(value: .burstLeftover, title: "+ bursts", color: DS.tierVivid(.burstLeftover)),
+                ReachPicker<RegretTier>.Option(value: .similar, title: "+ similar", color: DS.tierVivid(.similar))
             ],
             identifier: "budget.depth",
             onSlab: true

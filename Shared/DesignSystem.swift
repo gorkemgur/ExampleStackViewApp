@@ -705,28 +705,26 @@ extension View {
 
     /// A floating dock: the bar that carries a reading and the action on it.
     ///
-    /// Glass where the system can draw it, the app's own panel where it cannot. iOS 26 gives
-    /// `glassEffect` a shape and lets the content behind it bend the light; on iOS 17 and 18
-    /// the nearest honest thing is the same rounded panel the rest of the app is made of, over
-    /// a material, so the two look like the same object rather than like two designs.
-    @ViewBuilder
+    /// Not `glassEffect`. It was, for one build, and the screenshot is the argument: Liquid
+    /// Glass refracts what is behind it, and what is behind this dock is a dense list of
+    /// filenames and byte figures — so the reading printed *on* the dock came out smeared and
+    /// colour-fringed, and "YOU GET BACK 2.02 GB", the most important number on the screen,
+    /// was the hardest thing on it to read. Glass belongs over quiet content. A bar carrying
+    /// a figure someone is about to act on is not a place to bend light.
+    ///
+    /// The complaint that started this was the shape, not the material: an edge-to-edge band
+    /// welded to the bottom edge. Inset, rounded and lifted off the page, over the app's own
+    /// material, it reads as a panel resting on the list — and the figure on it stays legible.
     func dsDock() -> some View {
-        if #available(iOS 26.0, *) {
-            self.glassEffect(
-                .regular,
-                in: RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
-            )
-        } else {
-            self
-                .background(
-                    RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
-                        .fill(.regularMaterial)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
-                        .strokeBorder(DS.hairline, lineWidth: 1)
-                )
-        }
+        background(
+            RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
+                .strokeBorder(DS.hairline, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.10), radius: 14, y: 4)
     }
 }
 
