@@ -113,24 +113,19 @@ struct ReviewView: View {
     }
 
     /// The one control that makes this app what it is, so it gets the instrument panel: a dark
-    /// slab, the target set as a gauge reading, and the reach of the current setting drawn as a
-    /// ramp in the ladder's own colours underneath the slider that moves it.
+    /// slab, the target set as a gauge reading, and the ladder drawn into the fader's own
+    /// track so the cost of a target is visible before the drag rather than after it.
     private var budgetSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Eyebrow("I need", tint: DS.onSlabAccent)
+                Eyebrow("I need back", tint: DS.onSlabAccent)
 
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Readout.bytes(Int64(model.budgetBytes), tint: DS.onSlabAccent)
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                        .contentTransition(.numericText())
                         .accessibilityIdentifier("budget.target")
-
-                    Text("back")
-                        .font(.subheadline)
-                        .foregroundStyle(DS.onSlab.opacity(0.6))
 
                     Spacer(minLength: 0)
                 }
@@ -150,17 +145,12 @@ struct ReviewView: View {
                         color: DS.tierVivid(tier)
                     )
                 },
+                reachLimit: reachableBytes,
+                label: "Space to free",
                 identifier: "budget.slider"
             )
 
-            // One bar, not three.
-            //
-            // The slab used to stack a slider, a ramp showing what each rung of the ladder was
-            // worth, and a separate control for how far to reach into it — three horizontal
-            // bars within forty points of each other, two of them nearly identical and saying
-            // halves of the same thing. The depth control now *is* the ramp: each step is as
-            // wide as that rung is worth, filled up to the rung the plan may reach, grey
-            // beyond it. Width is the ladder, fill is the reach, and tapping a label moves it.
+            // One bar on this slab, and it is the fader. The depth is three chips.
             depthPicker
 
             Text(planSummary)
@@ -176,10 +166,6 @@ struct ReviewView: View {
             .disabled(model.budgetPlan.selected.isEmpty)
             .accessibilityIdentifier("budget.apply")
 
-            Text("Starts with the copies that cost you nothing and only reaches further if you let it.")
-                .font(.caption2)
-                .foregroundStyle(DS.onSlab.opacity(0.5))
-                .fixedSize(horizontal: false, vertical: true)
         }
         .dsSlab()
     }
@@ -205,6 +191,14 @@ struct ReviewView: View {
         )
     }
 
+    /// What the current depth setting can actually reach, which is where the fader stops
+    /// offering. Everything past this is real space the plan will not take.
+    private var reachableBytes: Double {
+        RegretTier.allCases
+            .filter { $0 <= model.budgetDepth }
+            .reduce(0) { $0 + rungBytes($1) }
+    }
+
     private func rungBytes(_ tier: RegretTier) -> Double {
         Double(model.sections.first { $0.tier == tier }?.bytes ?? 0)
     }
@@ -217,7 +211,10 @@ struct ReviewView: View {
         let reached = ByteFormatting.string(plan.reclaimedBytes)
         let deepest = plan.deepestTier.map { ScanCopy.title(for: $0).lowercased() } ?? "nothing"
         if plan.meetsTarget {
-            return "\(Counting.items(plan.selected.count)), \(reached) — reaching as far as \(deepest)."
+            // Not the count and not the bytes: the dock says both, verbatim, and the readout
+            // sixty points above says the bytes again. What nothing else on the screen says is
+            // how deep this plan actually had to go.
+            return "Reaches as far as \(deepest)."
         }
         return "Only \(reached) is available at this setting (\(Counting.items(plan.selected.count))). Allow more, or accept less."
     }

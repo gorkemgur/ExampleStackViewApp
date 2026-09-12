@@ -301,7 +301,20 @@ extension View {
 /// "iOS default"; this reads as a key on a panel.
 struct KeyButtonStyle: ButtonStyle {
 
-    var fill: AnyShapeStyle = AnyShapeStyle(DS.brandRow)
+    /// The key's own gradient, not the brand row.
+    ///
+    /// `brandRow` runs to `#32D7EB`, and white text on that end measures 1.74:1 — a centred
+    /// label sat at about 2.49:1, under the 3:1 floor for large text across most of the
+    /// button. The brand still reads, because the gradient is still the icon's two hues; it
+    /// just stops before the point where nothing can be printed on it. `brandRow` keeps its
+    /// job on the fader's track, where nothing is set on top of it.
+    static let keyFill = LinearGradient(
+        colors: [Color(dsRGB: 0x0A6FE0), Color(dsRGB: 0x0C8FBE)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
+    var fill: AnyShapeStyle = AnyShapeStyle(KeyButtonStyle.keyFill)
     var foreground: Color = .white
     var height: CGFloat = 52
     var isEnabled: Bool = true
@@ -457,16 +470,8 @@ struct ReachPicker<Value: Hashable>: View {
     struct Option: Identifiable {
         let value: Value
         let title: String
-        /// The colour this step fills the track with once it is reached.
+        /// The colour this step carries once it is reached.
         let color: Color
-        /// How much of the track this step is worth.
-        ///
-        /// Equal by default, which is right for a plain ordinal choice. Given real quantities
-        /// it turns the control into the reading as well: the budget slab used to carry a
-        /// *separate* ramp showing what each rung of the ladder was worth, directly above a
-        /// separate control for how far to reach into it — two bars, two points apart, saying
-        /// halves of one thing. One bar now. Its width is the ladder, its fill is the reach.
-        var weight: Double = 1
 
         var id: Value { value }
     }
@@ -485,79 +490,63 @@ struct ReachPicker<Value: Hashable>: View {
     }
 
     var body: some View {
-        VStack(spacing: DS.Space.s) {
-            track
-
-            HStack(spacing: 0) {
-                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
-                    Button {
-                        withAnimation(reduceMotion ? nil : Motion.control) {
-                            selection = option.value
-                        }
-                    } label: {
-                        Text(option.title)
-                            .font(.footnote.weight(index == selectedIndex ? .bold : .medium))
-                            .foregroundStyle(labelColor(at: index, option: option))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .frame(maxWidth: .infinity)
-                            // The whole column is the target, not just the glyphs in it, and
-                            // it is a full 44pt tall. The simulator audit caught this at 34
-                            // on the first run of this control — a stock segmented picker is
-                            // 32 and gets away with it because the system draws it; a
-                            // hand-built one has to earn the height itself.
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
+        HStack(spacing: DS.Space.s) {
+            ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                Button {
+                    withAnimation(reduceMotion ? nil : Motion.control) {
+                        selection = option.value
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("\(identifier).\(index)")
-                    .accessibilityAddTraits(index == selectedIndex ? [.isSelected] : [])
+                } label: {
+                    Text(option.title)
+                        .font(.footnote.weight(index == selectedIndex ? .bold : .medium))
+                        .foregroundStyle(labelColor(at: index, option: option))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity)
+                        // A full 44pt. The simulator audit caught this control at 34 on its
+                        // first run — a stock segmented picker is 32 and gets away with it
+                        // because the system draws it; a hand-built one earns the height.
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                        .background(chip(at: index, option: option))
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("\(identifier).\(index)")
+                .accessibilityAddTraits(index == selectedIndex ? [.isSelected] : [])
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
 
-    private var totalWeight: Double {
-        let total = options.reduce(0) { $0 + max($1.weight, 0) }
-        return total > 0 ? total : Double(options.count)
+    /// Chips, not a track.
+    ///
+    /// This used to draw a 10pt filled capsule with a hairline border, 23pt below a 16pt
+    /// filled capsule with a hairline border that *is* draggable. Same affordance, different
+    /// behaviour: the bar promised the interaction the fader above it has, while only the
+    /// label columns underneath actually responded — and the bar itself was hidden from
+    /// VoiceOver, so it was decoration that looked like a control.
+    ///
+    /// The ordinal reading survives, because every step up to and including the chosen one is
+    /// filled: the row still says "this far", not "this one". The reach as a *measurement*
+    /// moves to the one place it can be measured — the fader's own track, which now greys out
+    /// everything this setting forbids.
+    @ViewBuilder
+    private func chip(at index: Int, option: Option) -> some View {
+        let reached = index <= selectedIndex
+        RoundedRectangle(cornerRadius: DS.chipCorner, style: .continuous)
+            .fill(reached ? option.color.opacity(index == selectedIndex ? 0.22 : 0.12) : .clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.chipCorner, style: .continuous)
+                    .strokeBorder(
+                        index == selectedIndex ? option.color.opacity(0.6) : unreached,
+                        lineWidth: 1
+                    )
+            )
+            .animation(reduceMotion ? nil : Motion.control, value: selectedIndex)
     }
 
-    private func width(for option: Option, in available: CGFloat) -> CGFloat {
-        // A hairline for a step worth something but very little — a step you can still reach
-        // has to be visible — but taken *out* of the available width first rather than added
-        // on top of it. Reserving 3pt per step and then apportioning the full width meant the
-        // row overran its own track, and with one dominant step the rest were clipped away
-        // entirely: the control read as a solid block and moving the selection changed nothing.
-        let floors = CGFloat(options.count) * 3
-        let apportionable = max(available - floors, 0)
-        return 3 + apportionable * (max(option.weight, 0) / totalWeight)
-    }
-
-    private var track: some View {
-        GeometryReader { proxy in
-            HStack(spacing: 0) {
-                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
-                    Rectangle()
-                        .fill(index <= selectedIndex ? option.color : unreached)
-                        .frame(width: width(for: option, in: proxy.size.width))
-                }
-            }
-        }
-        .frame(height: 10)
-        .clipShape(Capsule(style: .continuous))
-        .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(onSlab ? Color.white.opacity(0.14) : DS.hairline, lineWidth: 1)
-        )
-        .animation(reduceMotion ? nil : Motion.control, value: selectedIndex)
-        .accessibilityHidden(true)
-    }
-
-    /// Space the current setting will not reach. Neutral rather than a faded version of the
-    /// rung's own colour, for the same reason `MeterTrack` mutes to neutral: amber at low
-    /// opacity over the slab is an olive-brown in no palette here.
+    /// The outline of a step this setting has not reached.
     private var unreached: Color {
         onSlab ? Color.white.opacity(0.10) : DS.well
     }
@@ -599,6 +588,16 @@ struct TargetSlider: View {
     let range: ClosedRange<Double>
     /// Drawn behind the fill. Empty draws a plain track.
     var rungs: [Rung] = []
+    /// Bytes the current depth setting actually allows, or `nil` for no limit.
+    ///
+    /// Without it the fader offered, coloured and buzzed for space the plan would not take:
+    /// the range is every candidate in every tier, but the plan only draws from tiers at or
+    /// below the chosen depth. So you dragged into the amber, the readout said "I NEED 9 GB
+    /// back", and the sentence twenty points below answered "only 2.02 GB is available at this
+    /// setting" — the card contradicting itself between two controls you can see at once.
+    var reachLimit: Double?
+    /// A short description of the quantity, for VoiceOver.
+    var label: String
     var identifier: String
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -620,10 +619,19 @@ struct TargetSlider: View {
         min(max((value - range.lowerBound) / span, 0), 1)
     }
 
+    /// Where the current depth setting stops, as a fraction of the track.
+    private var limitFraction: Double {
+        guard let reachLimit else { return 1 }
+        return min(max((reachLimit - range.lowerBound) / span, 0), 1)
+    }
+
     /// Which rung the current target reaches into. Drives the haptic.
+    ///
+    /// Only rungs the plan can actually take: a haptic for crossing into bursts the setting
+    /// forbids is the control congratulating you on a move it will not make.
     private var reachedRung: String {
         var consumed = 0.0
-        let target = value - range.lowerBound
+        let target = min(value - range.lowerBound, (reachLimit ?? range.upperBound) - range.lowerBound)
         for rung in rungs {
             consumed += rung.bytes
             if target <= consumed { return rung.id }
@@ -635,22 +643,38 @@ struct TargetSlider: View {
         GeometryReader { proxy in
             let width = proxy.size.width
 
+            // One width for the fill and one origin for the cap, derived from each other.
+            // They used to live in two coordinate spaces — the fill spanned 0...width, the cap
+            // travelled 0...(width - gripWidth) — so they agreed only in the middle and left a
+            // visible notch at both ends.
+            let fillWidth = fraction > 0 ? max(width * fraction, gripWidth) : 0
+
             ZStack(alignment: .leading) {
-                ladder
+                ladder(in: width)
                     .frame(height: trackHeight)
                     .clipShape(Capsule(style: .continuous))
 
                 Capsule(style: .continuous)
                     .fill(DS.brandRow)
-                    // No floor at zero: a 16pt minimum meant a target of nothing still drew a
-                    // blue stub under a readout saying 0 B.
-                    .frame(width: fraction > 0 ? max(width * fraction, trackHeight) : 0, height: trackHeight)
+                    .frame(width: fillWidth, height: trackHeight)
 
-                RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                // Where the depth setting stops. Everything past it is space this plan will
+                // not take however far the target is dragged.
+                if limitFraction < 1 {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.45))
+                        .frame(width: 2, height: trackHeight)
+                        .offset(x: width * limitFraction - 1)
+                }
+
+                RoundedRectangle(cornerRadius: gripWidth / 2, style: .continuous)
                     .fill(.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: gripWidth / 2, style: .continuous)
+                            .strokeBorder(DS.slab.opacity(0.35), lineWidth: 1)
+                    )
                     .frame(width: gripWidth, height: gripHeight)
-                    .shadow(color: .black.opacity(0.45), radius: 5, y: 2)
-                    .offset(x: max(min(width * fraction - gripWidth / 2, width - gripWidth), 0))
+                    .offset(x: max(fillWidth - gripWidth / 2, 0))
             }
             .frame(height: hitHeight)
             .contentShape(Rectangle())
@@ -674,8 +698,12 @@ struct TargetSlider: View {
         }
         .frame(height: hitHeight)
         .sensoryFeedback(.selection, trigger: reachedRung)
+        // Without a label and a value this announced "fifty per cent, slider" — the byte
+        // figure, which is the entire point of the control, never reached the user.
         .accessibilityRepresentation {
             Slider(value: $value, in: range)
+                .accessibilityLabel(label)
+                .accessibilityValue(ByteText.string(Int64(value)))
                 .accessibilityIdentifier(identifier)
         }
     }
@@ -687,16 +715,38 @@ struct TargetSlider: View {
     /// and a rung worth nothing is dropped before this ever sees it. Any other denominator and
     /// the fill stops somewhere the colours say a different rung begins, which is the one thing
     /// this control exists to say. The trailing rectangle takes up whatever is left.
-    private var ladder: some View {
-        GeometryReader { proxy in
-            HStack(spacing: 0) {
-                ForEach(rungs) { rung in
-                    Rectangle()
-                        .fill(rung.color.opacity(0.30))
-                        .frame(width: max(proxy.size.width * (max(rung.bytes, 0) / span), 2))
-                }
-                Rectangle().fill(Color.white.opacity(0.10))
+    ///
+    /// Rungs past the depth limit are drawn at a tenth of the strength: they are still on the
+    /// track, because the space is real, but they are visibly not on offer.
+    private func ladder(in width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            ForEach(laidOutRungs, id: \.rung.id) { entry in
+                Rectangle()
+                    .fill(entry.rung.color.opacity(entry.isBeyondLimit ? 0.08 : 0.30))
+                    .frame(width: max(width * entry.share, 2))
             }
+            Rectangle().fill(Color.white.opacity(0.10))
+        }
+    }
+
+    private struct LaidOutRung {
+        let rung: Rung
+        /// Fraction of the whole track this rung occupies.
+        let share: Double
+        /// True once the rung starts past the depth limit.
+        let isBeyondLimit: Bool
+    }
+
+    /// Each rung with its share of the track and whether the depth setting has already run out
+    /// by the time it starts. Computed in one pass rather than accumulated inside the view
+    /// body, where a running total would be captured by a `ForEach` closure and never updated.
+    private var laidOutRungs: [LaidOutRung] {
+        var travelled = 0.0
+        return rungs.map { rung in
+            let share = max(rung.bytes, 0) / span
+            let entry = LaidOutRung(rung: rung, share: share, isBeyondLimit: travelled >= limitFraction)
+            travelled += share
+            return entry
         }
     }
 }
