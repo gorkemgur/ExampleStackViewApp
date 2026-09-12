@@ -42,12 +42,17 @@
   --judge: #8d9aae;
   --free-dim: rgba(61,220,151,.22);
   --warn-dim: rgba(245,169,59,.22);
-  --judge-dim: rgba(141,154,174,.22);
+  --judge-dim: rgba(141,154,174,.40);
 
   --glow-a: rgba(10,132,255,.34);
   --glow-b: rgba(50,215,235,.22);
   --glow-c: rgba(10,132,255,.14);
-  --field-top: transparent;
+  --field-a: rgba(10,132,255,.52);
+  --field-b: rgba(50,215,235,.34);
+  --field-c: rgba(58,120,255,.22);
+  --field-wash: linear-gradient(180deg, rgba(10,132,255,.13), rgba(50,215,235,.05) 38%, transparent 68%);
+  --grad-text: linear-gradient(104deg, #2a9bff 4%, #4fe0f2 72%);
+  --teal-ink: #4fe0f2;
   --grain: .062;
   --sheen: rgba(255,255,255,.16);
   --reflect-1: rgba(255,255,255,.19);
@@ -84,11 +89,16 @@
     --judge: #5f6b7c;
     --free-dim: rgba(18,146,92,.20);
     --warn-dim: rgba(154,100,13,.20);
-    --judge-dim: rgba(95,107,124,.20);
+    --judge-dim: rgba(95,107,124,.34);
     --glow-a: rgba(10,132,255,.22);
     --glow-b: rgba(50,215,235,.20);
     --glow-c: rgba(10,132,255,.10);
-    --field-top: #dfe9f6;
+    --field-a: rgba(10,132,255,.30);
+    --field-b: rgba(50,215,235,.34);
+    --field-c: rgba(80,150,255,.20);
+    --field-wash: linear-gradient(180deg, rgba(190,220,250,.75), rgba(214,240,247,.35) 42%, transparent 70%);
+    --grad-text: linear-gradient(104deg, #0a70e6 2%, #0e9fba 72%);
+    --teal-ink: #0d8fa8;
     --grain: .030;
     --sheen: rgba(255,255,255,.55);
     --card-lift: 0 1px 0 rgba(255,255,255,.9) inset, 0 18px 40px -30px rgba(15,30,60,.45);
@@ -99,9 +109,12 @@
   --surface-3: #eaeff7; --line: rgba(12,22,40,.10); --line-2: rgba(12,22,40,.16);
   --line-lit: rgba(12,22,40,.34); --ink: #0a0e15; --ink-2: #4b5564; --ink-3: #78838f;
   --accent-text: #0a62ce; --free: #12925c; --warn: #9a640d; --judge: #5f6b7c;
-  --free-dim: rgba(18,146,92,.20); --warn-dim: rgba(154,100,13,.20); --judge-dim: rgba(95,107,124,.20);
+  --free-dim: rgba(18,146,92,.20); --warn-dim: rgba(154,100,13,.20); --judge-dim: rgba(95,107,124,.34);
   --glow-a: rgba(10,132,255,.22); --glow-b: rgba(50,215,235,.20); --glow-c: rgba(10,132,255,.10);
-  --field-top: #dfe9f6; --grain: .030; --sheen: rgba(255,255,255,.55);
+  --field-a: rgba(10,132,255,.30); --field-b: rgba(50,215,235,.34); --field-c: rgba(80,150,255,.20);
+  --field-wash: linear-gradient(180deg, rgba(190,220,250,.75), rgba(214,240,247,.35) 42%, transparent 70%);
+  --grad-text: linear-gradient(104deg, #0a70e6 2%, #0e9fba 72%); --teal-ink: #0d8fa8;
+  --grain: .030; --sheen: rgba(255,255,255,.55);
   --card-lift: 0 1px 0 rgba(255,255,255,.9) inset, 0 18px 40px -30px rgba(15,30,60,.45);
 }
 
@@ -144,8 +157,9 @@ section + section::before {
 
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 h1 {
-  font-size: clamp(2.5rem, 7.4vw, 5.1rem);
-  line-height: .97; letter-spacing: -.046em; font-weight: 700;
+  font-size: clamp(2.35rem, 6.3vw, 4.65rem);
+  line-height: .98; letter-spacing: -.046em; font-weight: 700;
+  max-width: 17ch;
 }
 h2 {
   font-size: clamp(1.85rem, 4.4vw, 2.95rem);
@@ -226,26 +240,30 @@ p:last-child { margin-bottom: 0; }
 
 /* ---------- hero ---------- */
 .hero { position: relative; overflow: hidden; padding-block: clamp(44px, 7vw, 92px) clamp(56px, 8vw, 104px); }
-.field { position: absolute; inset: -20% -10% auto -10%; height: 150%; z-index: 0; pointer-events: none; }
+.field { position: absolute; inset: -14% -6% auto -6%; height: 150%; z-index: 0; pointer-events: none; }
 .field::before {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg, var(--field-top), transparent 62%);
+  content: ""; position: absolute; inset: 0; background: var(--field-wash);
 }
 .blob { position: absolute; border-radius: 50%; will-change: transform; }
 .b1 {
-  top: -14%; left: 8%; width: min(760px, 92vw); aspect-ratio: 1.35;
-  background: radial-gradient(closest-side, var(--glow-a), transparent 72%);
+  top: 2%; left: -8%; width: min(900px, 110vw); aspect-ratio: 1.25;
+  background: radial-gradient(closest-side, var(--field-a), transparent 70%);
   animation: drift1 15s ease-in-out infinite alternate;
 }
 .b2 {
-  top: 2%; right: 2%; width: min(620px, 82vw); aspect-ratio: 1.1;
-  background: radial-gradient(closest-side, var(--glow-b), transparent 70%);
+  top: 8%; right: -12%; width: min(760px, 104vw); aspect-ratio: 1;
+  background: radial-gradient(closest-side, var(--field-b), transparent 68%);
   animation: drift2 19s ease-in-out infinite alternate;
 }
 .b3 {
-  top: 26%; left: 34%; width: min(780px, 96vw); aspect-ratio: 1.6;
-  background: radial-gradient(closest-side, var(--glow-c), transparent 74%);
+  top: 34%; left: 22%; width: min(880px, 118vw); aspect-ratio: 1.5;
+  background: radial-gradient(closest-side, var(--field-c), transparent 72%);
   animation: drift3 27s ease-in-out infinite alternate;
+}
+/* the hero's light stops at a hairline horizon rather than fading into nothing */
+.hero::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; z-index: 1;
+  background: linear-gradient(90deg, transparent, var(--line-2) 22%, var(--line-lit) 50%, var(--line-2) 78%, transparent);
 }
 @keyframes drift1 {
   from { transform: translate3d(-7%, -4%, 0) scale(1); }
@@ -259,9 +277,10 @@ p:last-child { margin-bottom: 0; }
   from { transform: translate3d(-10%, 3%, 0) scale(.96); }
   to   { transform: translate3d(9%, -6%, 0) scale(1.18); }
 }
-.hero .wrap { position: relative; z-index: 1; }
-.hero-grid { display: grid; gap: clamp(38px, 5vw, 56px); grid-template-columns: 1fr; align-items: center; }
-@media (min-width: 940px) { .hero-grid { grid-template-columns: 1.06fr .94fr; } }
+.hero .wrap { position: relative; z-index: 2; }
+.hero-grid { display: grid; gap: clamp(34px, 4.5vw, 54px); grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 940px) { .hero-grid { grid-template-columns: 1.16fr .84fr; align-items: center; } }
+.hero-top { margin-bottom: clamp(30px, 4vw, 46px); }
 
 .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
 .brand img {
@@ -271,10 +290,14 @@ p:last-child { margin-bottom: 0; }
 .brand-name { font-size: 1.22rem; font-weight: 700; letter-spacing: -.03em; line-height: 1.2; }
 .brand-meta { font-family: var(--mono); font-size: .6875rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 h1 .grad {
-  background: linear-gradient(104deg, var(--blue) 8%, var(--teal) 78%);
+  background: var(--grad-text);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-.hero p.lede { margin-top: 24px; font-size: 1.11rem; }
+.hero p.lede { margin-top: 0; font-size: 1.09rem; }
+@media (max-width: 520px) {
+  .brand-meta { letter-spacing: .05em; font-size: .625rem; }
+  .brand img { width: 50px; height: 50px; }
+}
 
 .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .btn {
@@ -321,13 +344,24 @@ h1 .grad {
   text-transform: uppercase; color: var(--ink-3);
   display: flex; justify-content: space-between; gap: 10px;
 }
-.sig-stage { position: relative; height: 178px; margin: 14px 0 4px; }
+.sig-stage { position: relative; height: 196px; margin: 16px 0 6px; }
+.sig-ghost {
+  position: absolute; left: 50%; top: 50%;
+  width: 116px; height: 144px; border-radius: 16px;
+  margin: -72px 0 0 -58px;
+  border: 1px dashed var(--line-lit);
+  background: linear-gradient(150deg, rgba(255,255,255,.02), transparent);
+  transform: translate3d(var(--x), var(--y), 0) rotate(var(--r));
+}
+.sig-ghost.g1 { --x: -54px; --y: -17px; --r: -9deg; }
+.sig-ghost.g2 { --x: -32px; --y: -11px; --r: -6deg; }
+.sig-ghost.g3 { --x: -11px; --y: -5px; --r: -3deg; }
 .sig-card {
   position: absolute; left: 50%; top: 50%;
-  width: 112px; height: 138px; border-radius: 16px;
-  margin: -69px 0 0 -56px;
-  background: linear-gradient(150deg, #1f2b3d, #101722);
-  border: 1px solid var(--line-2);
+  width: 116px; height: 144px; border-radius: 16px;
+  margin: -72px 0 0 -58px;
+  background: linear-gradient(150deg, #26344a, #131b28);
+  border: 1px solid var(--line-lit);
   box-shadow: 0 18px 36px -22px rgba(0,0,0,.9);
   display: grid; place-items: end start; padding: 10px;
   font-family: var(--mono); font-size: .5625rem; letter-spacing: .1em; text-transform: uppercase;
@@ -351,21 +385,30 @@ h1 .grad {
 .sig-card.keep { border-color: color-mix(in srgb, var(--teal) 55%, transparent); }
 
 /* four copies, stacked; three peel away, one always stays */
-.sig-card.c1 { --x: -30px; --y: -14px; --r: -9deg; z-index: 1; animation: peel 11s var(--ease) infinite; animation-delay: 0s; }
-.sig-card.c2 { --x: -14px; --y: -7px;  --r: -4.5deg; z-index: 2; animation: peel 11s var(--ease) infinite; animation-delay: .75s; }
-.sig-card.c3 { --x: 2px;   --y: 0px;   --r: 0deg; z-index: 3; animation: peel 11s var(--ease) infinite; animation-delay: 1.5s; }
-.sig-card.keep { --x: 20px; --y: 8px; --r: 4.5deg; z-index: 4; animation: stay 11s var(--ease) infinite; }
+.sig-card.c1 { --x: -54px; --y: -17px; --r: -9deg; z-index: 1; animation: peel1 11s var(--ease) infinite; }
+.sig-card.c2 { --x: -32px; --y: -11px; --r: -6deg; z-index: 2; animation: peel2 11s var(--ease) infinite; }
+.sig-card.c3 { --x: -11px; --y: -5px; --r: -3deg; z-index: 3; animation: peel3 11s var(--ease) infinite; }
+.sig-card.keep { --x: 12px; --y: 4px; --r: 3deg; z-index: 4; animation: stay 11s var(--ease) infinite; }
 
-@keyframes peel {
-  0%, 6%   { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
-  20%      { transform: translate3d(calc(var(--x) - 96px), calc(var(--y) - 34px), 0) rotate(calc(var(--r) - 15deg)); opacity: 0; }
-  21%, 88% { transform: translate3d(calc(var(--x) - 96px), calc(var(--y) - 34px), 0) rotate(calc(var(--r) - 15deg)); opacity: 0; }
-  100%     { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
+@keyframes peel1 {
+  0%, 15%  { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
+  26%, 78% { transform: translate3d(calc(var(--x) - 104px), calc(var(--y) - 40px), 0) rotate(calc(var(--r) - 16deg)); opacity: 0; }
+  90%, 100% { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
+}
+@keyframes peel2 {
+  0%, 22%  { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
+  33%, 80% { transform: translate3d(calc(var(--x) - 110px), calc(var(--y) - 30px), 0) rotate(calc(var(--r) - 13deg)); opacity: 0; }
+  92%, 100% { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
+}
+@keyframes peel3 {
+  0%, 29%  { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
+  40%, 82% { transform: translate3d(calc(var(--x) - 116px), calc(var(--y) - 18px), 0) rotate(calc(var(--r) - 10deg)); opacity: 0; }
+  94%, 100% { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)); opacity: 1; }
 }
 @keyframes stay {
-  0%, 18%  { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)) scale(1); }
-  34%, 88% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.05); }
-  100%     { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)) scale(1); }
+  0%, 29%  { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)) scale(1); }
+  44%, 82% { transform: translate3d(6px, 0, 0) rotate(0deg) scale(1.06); }
+  96%, 100% { transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)) scale(1); }
 }
 .sig-meter {
   position: relative; height: 9px; border-radius: 999px; overflow: hidden;
@@ -377,23 +420,25 @@ h1 .grad {
   animation: refill 11s var(--ease) infinite;
 }
 @keyframes refill {
-  0%, 6%   { width: 16%; }
-  38%      { width: 74%; }
-  88%      { width: 74%; }
-  100%     { width: 16%; }
+  0%, 15%  { width: 16%; }
+  26%      { width: 36%; }
+  33%      { width: 55%; }
+  42%, 82% { width: 76%; }
+  94%, 100% { width: 16%; }
 }
 .sig-foot {
   position: relative; display: flex; justify-content: space-between; gap: 10px;
   margin-top: 10px; font-family: var(--mono); font-size: .625rem;
   letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3);
 }
-.sig-foot .won { color: var(--teal); animation: wink 11s var(--ease) infinite; }
+.sig-foot .won { color: var(--teal-ink); animation: wink 11s var(--ease) infinite; }
 @keyframes wink {
-  0%, 14% { opacity: 0; transform: translateY(4px); }
-  40%, 86% { opacity: 1; transform: none; }
-  96%, 100% { opacity: 0; transform: translateY(4px); }
+  0%, 30% { opacity: 0; transform: translateY(4px); }
+  44%, 82% { opacity: 1; transform: none; }
+  92%, 100% { opacity: 0; transform: translateY(4px); }
 }
 .sig-caption { margin-top: 16px; font-size: .8125rem; color: var(--ink-3); max-width: 44ch; }
+@media (max-width: 939px) { .signature { max-width: 470px; } }
 
 /* ---------- capacity instrument ---------- */
 .hero-band {
@@ -426,7 +471,7 @@ h1 .grad {
 .cap-photos { background: var(--grad); min-width: 5px; box-shadow: 0 0 18px var(--glow-a); }
 .cap-other { background: linear-gradient(180deg, var(--line-lit), var(--line-2)); }
 .cap-free { background: repeating-linear-gradient(125deg, transparent, transparent 5px, var(--line-2) 5px, var(--line-2) 10px); }
-.cap-key { display: flex; flex-wrap: wrap; gap: 14px 34px; }
+.cap-key { display: grid; gap: 16px 30px; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
 .cap-key .k {
   display: flex; align-items: center; gap: 8px; color: var(--ink-3);
   font-family: var(--mono); font-size: .625rem; letter-spacing: .12em; text-transform: uppercase;
@@ -443,7 +488,7 @@ h1 .grad {
 .device-wrap { perspective: 1100px; transform: translate3d(0, var(--py, 0px), 0); }
 .device {
   position: relative; width: 100%; max-width: 296px; margin-inline: auto;
-  padding: 9px; border-radius: 40px;
+  padding: 11px; border-radius: 42px;
   background: var(--shell);
   box-shadow:
     inset 0 0 0 1px rgba(255,255,255,.10),
@@ -456,12 +501,12 @@ h1 .grad {
 }
 .device img { border-radius: 32px; }
 .device::before {
-  content: ""; position: absolute; inset: 9px; border-radius: 32px; z-index: 2;
+  content: ""; position: absolute; inset: 11px; border-radius: 32px; z-index: 2;
   pointer-events: none;
   background: linear-gradient(118deg, var(--reflect-1) 0 14%, var(--reflect-2) 26%, transparent 44%, transparent 76%, var(--reflect-2) 92%);
 }
 .device::after {
-  content: ""; position: absolute; inset: 9px; border-radius: 32px; z-index: 3;
+  content: ""; position: absolute; inset: 11px; border-radius: 32px; z-index: 3;
   pointer-events: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
 }
 .shots .device { max-width: 268px; }
@@ -506,6 +551,7 @@ figcaption {
 .ladder { position: relative; z-index: 1; list-style: none; margin: 34px 0 0; padding: 0; display: grid; gap: 10px; }
 .tier {
   position: relative; overflow: hidden;
+  display: grid; grid-template-columns: 1fr; gap: 16px; align-items: center;
   background: linear-gradient(172deg, var(--surface-2), var(--surface));
   border: 1px solid var(--line);
   border-radius: var(--r-md); padding: 18px 20px 18px 22px;
@@ -521,6 +567,9 @@ figcaption {
   box-shadow: var(--card-lift);
 }
 .tier.lit::before { background: var(--tier-color); box-shadow: 0 0 16px -1px var(--tier-color); }
+@media (min-width: 860px) {
+  .tier { grid-template-columns: minmax(0, 1fr) 268px; gap: 34px; }
+}
 .tier-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .tier-rank {
   font-family: var(--mono); font-size: .625rem; font-weight: 600; letter-spacing: .15em;
@@ -528,13 +577,14 @@ figcaption {
 }
 .tier.lit .tier-rank { color: var(--tier-color); }
 .tier-cost {
-  margin-left: auto; font-family: var(--mono); font-size: .625rem; font-weight: 500;
+  font-family: var(--mono); font-size: .625rem; font-weight: 500;
   letter-spacing: .12em; text-transform: uppercase;
   padding: 4px 11px; border-radius: 999px; color: var(--tier-color);
   box-shadow: inset 0 0 0 1px currentColor; white-space: nowrap;
 }
 .tier p { margin: 8px 0 0; color: var(--ink-2); font-size: .9375rem; max-width: 62ch; }
-.tier-meterrow { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.tier-meter { display: grid; gap: 10px; }
+.tier-meter-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .tier-track {
   flex: 1; min-width: 0; height: 9px; background: var(--surface-3);
   border-radius: 999px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line);
@@ -563,9 +613,10 @@ figcaption {
   transition: width .3s var(--ease); z-index: 1;
 }
 .tier-size {
-  font-family: var(--mono); font-size: .75rem; color: var(--ink-3); white-space: nowrap;
+  font-family: var(--mono); font-size: .75rem; color: var(--ink-2); white-space: nowrap;
   font-variant-numeric: tabular-nums; letter-spacing: .02em;
 }
+.ladder-note { position: relative; z-index: 1; margin: 18px 0 0; max-width: 56ch; }
 .t0, .t1 { --tier-color: var(--free); --tier-soft: var(--free-dim); }
 .t2 { --tier-color: var(--warn); --tier-soft: var(--warn-dim); }
 .t3 { --tier-color: var(--judge); --tier-soft: var(--judge-dim); }
@@ -652,15 +703,20 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 @media (min-width: 880px) { .rules { grid-template-columns: 1fr 1fr; } }
 .rule { position: relative; padding-left: 22px; }
 .rule::before {
-  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px;
-  background: linear-gradient(180deg, var(--blue), var(--teal));
-  opacity: .75;
+  content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 1px;
+  background: var(--line-2);
 }
 .rule h3 { font-size: 1rem; }
 .rule p { margin: 8px 0 0; color: var(--ink-2); font-size: .9375rem; }
 
 /* ---------- the honest part: quieter, flatter, no glow ---------- */
 .sober { background: var(--ground-2); }
+.sober .device {
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.10),
+    inset 0 1.5px 0 rgba(255,255,255,.20),
+    0 28px 56px -34px rgba(0,0,0,.9);
+}
 .limits {
   list-style: none; margin: 34px 0 0; padding: 0; display: grid; gap: 0;
   border-top: 1px solid var(--line);
@@ -709,8 +765,9 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
   .tier { opacity: 1 !important; transform: none !important; }
   .device-wrap { transform: none !important; }
   .device { transform: none !important; }
-  .blob { display: none; }
-  .sig-card { opacity: 1 !important; }
+  /* the gradient field stays, it simply stops moving */
+  .sig-card.c1, .sig-card.c2, .sig-card.c3 { opacity: 0; }
+  .sig-meter i { width: 76%; }
   .ladder-zone::before { opacity: .7; transform: none; }
 }
 </style>
@@ -746,18 +803,20 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
     <div class="blob b3"></div>
   </div>
   <div class="wrap">
-    <div class="hero-grid">
-      <div>
-        <div class="brand reveal">
+    <div class="hero-top">
+      <div class="brand reveal">
           <img src="assets/icon.png" width="256" height="256" alt="The DupeSpace app icon: a white rounded square overlapping a lighter one, on a blue-to-teal gradient.">
           <div>
             <div class="brand-name">DupeSpace</div>
             <div class="brand-meta">iOS 17+ · SwiftUI · entirely on-device</div>
           </div>
-        </div>
+      </div>
 
-        <h1 class="reveal">I need 12&nbsp;GB back.<br><span class="grad">What do I lose least?</span></h1>
+      <h1 class="reveal">I need 12&nbsp;GB back.<br><span class="grad">What do I lose least?</span></h1>
+    </div>
 
+    <div class="hero-grid">
+      <div>
         <p class="lede reveal">Every duplicate finder hands you a list and leaves the arithmetic to you.
           DupeSpace answers the sentence you actually had in your head. It ranks everything it is
           willing to delete by what deleting it costs you — identical copies first, your judgement
@@ -782,9 +841,12 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
             <span>One group</span>
           </div>
           <div class="sig-stage" aria-hidden="true">
-            <div class="sig-card c1">copy</div>
-            <div class="sig-card c2">copy</div>
-            <div class="sig-card c3">copy</div>
+            <div class="sig-ghost g1"></div>
+            <div class="sig-ghost g2"></div>
+            <div class="sig-ghost g3"></div>
+            <div class="sig-card c1"></div>
+            <div class="sig-card c2"></div>
+            <div class="sig-card c3"></div>
             <div class="sig-card keep">kept</div>
           </div>
           <div class="sig-meter" aria-hidden="true"><i></i></div>
@@ -855,55 +917,74 @@ footer { border-top: 1px solid var(--line); padding: 46px 0 64px; background: va
 
     <ol class="ladder" id="ladder">
       <li class="tier t0" data-gb="4.1" data-items="38">
-        <div class="tier-head">
-          <span class="tier-rank">Tier 0</span>
-          <h3>Identical copies</h3>
-          <span class="tier-cost">Loses nothing</span>
+        <div class="tier-text">
+          <div class="tier-head">
+            <span class="tier-rank">Tier 0</span>
+            <h3>Identical copies</h3>
+          </div>
+          <p>Byte for byte the same file. Deleting these loses nothing at all.</p>
         </div>
-        <p>Byte for byte the same file. Deleting these loses nothing at all.</p>
-        <div class="tier-meterrow">
+        <div class="tier-meter">
+          <div class="tier-meter-top">
+            <span class="tier-cost">Loses nothing</span>
+            <span class="tier-size"><span data-count="4.1" data-dec="1">4.1</span> GB · <span data-count="38" data-dec="0">38</span> items</span>
+          </div>
           <div class="tier-track"><div class="tier-bar" style="--w:66%"><div class="tier-taken"></div></div></div>
-          <div class="tier-size"><span data-count="4.1" data-dec="1">4.1</span> GB · <span data-count="38" data-dec="0">38</span> items</div>
         </div>
       </li>
       <li class="tier t1" data-gb="5.3" data-items="112">
-        <div class="tier-head">
-          <span class="tier-rank">Tier 1</span>
-          <h3>Lower-quality re-sends</h3>
-          <span class="tier-cost">Loses nothing</span>
+        <div class="tier-text">
+          <div class="tier-head">
+            <span class="tier-rank">Tier 1</span>
+            <h3>Lower-quality re-sends</h3>
+          </div>
+          <p>Smaller re-encodes of a photo you still have at full size. The 1280px copy that came back
+            from a chat, while the 4032px original stays.</p>
         </div>
-        <p>Smaller re-encodes of a photo you still have at full size. The 1280px copy that came back
-          from a chat, while the 4032px original stays.</p>
-        <div class="tier-meterrow">
+        <div class="tier-meter">
+          <div class="tier-meter-top">
+            <span class="tier-cost">Loses nothing</span>
+            <span class="tier-size"><span data-count="5.3" data-dec="1">5.3</span> GB · <span data-count="112" data-dec="0">112</span> items</span>
+          </div>
           <div class="tier-track"><div class="tier-bar" style="--w:85%"><div class="tier-taken"></div></div></div>
-          <div class="tier-size"><span data-count="5.3" data-dec="1">5.3</span> GB · <span data-count="112" data-dec="0">112</span> items</div>
         </div>
       </li>
       <li class="tier t2" data-gb="3.7" data-items="61">
-        <div class="tier-head">
-          <span class="tier-rank">Tier 2</span>
-          <h3>Burst leftovers</h3>
-          <span class="tier-cost">Very low</span>
+        <div class="tier-text">
+          <div class="tier-head">
+            <span class="tier-rank">Tier 2</span>
+            <h3>Burst leftovers</h3>
+          </div>
+          <p>Other frames from one press of the shutter, with the sharpest frame staying. Worth a look first.</p>
         </div>
-        <p>Other frames from one press of the shutter, with the sharpest frame staying. Worth a look first.</p>
-        <div class="tier-meterrow">
+        <div class="tier-meter">
+          <div class="tier-meter-top">
+            <span class="tier-cost">Very low</span>
+            <span class="tier-size"><span data-count="3.7" data-dec="1">3.7</span> GB · <span data-count="61" data-dec="0">61</span> items</span>
+          </div>
           <div class="tier-track"><div class="tier-bar" style="--w:60%"><div class="tier-taken"></div></div></div>
-          <div class="tier-size"><span data-count="3.7" data-dec="1">3.7</span> GB · <span data-count="61" data-dec="0">61</span> items</div>
         </div>
       </li>
       <li class="tier t3" data-gb="6.2" data-items="74">
-        <div class="tier-head">
-          <span class="tier-rank">Tier 3</span>
-          <h3>Similar shots</h3>
-          <span class="tier-cost">Your call</span>
+        <div class="tier-text">
+          <div class="tier-head">
+            <span class="tier-rank">Tier 3</span>
+            <h3>Similar shots</h3>
+          </div>
+          <p>Alike, but not the same photo. Four takes of one view. Nothing here is ever ticked for you.</p>
         </div>
-        <p>Alike, but not the same photo. Four takes of one view. Nothing here is ever ticked for you.</p>
-        <div class="tier-meterrow">
+        <div class="tier-meter">
+          <div class="tier-meter-top">
+            <span class="tier-cost">Your call</span>
+            <span class="tier-size"><span data-count="6.2" data-dec="1">6.2</span> GB · <span data-count="74" data-dec="0">74</span> items</span>
+          </div>
           <div class="tier-track"><div class="tier-bar" style="--w:100%"><div class="tier-taken"></div></div></div>
-          <div class="tier-size"><span data-count="6.2" data-dec="1">6.2</span> GB · <span data-count="74" data-dec="0">74</span> items</div>
         </div>
       </li>
     </ol>
+
+    <p class="small ladder-note reveal">Bar length is the tier's size against the largest tier. The solid part is
+      what the slider below takes from it.</p>
 
     <div class="grid-2 reveal" style="margin-top:34px;align-items:start;position:relative;z-index:1">
       <div class="card" data-glow>
