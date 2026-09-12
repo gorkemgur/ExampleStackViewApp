@@ -70,8 +70,34 @@ final class CompositeDeleter: MediaDeleting {
     }
 
     func delete(ids: [String], expecting stamps: [String: FileStamp]) async throws -> DeletionOutcome {
+        try await delete(ids: ids, expecting: stamps, onProgress: { _ in })
+    }
+
+    /// Reports what it can and says when it cannot.
+    ///
+    /// The photo half settles every asset at once, so it is one step however many assets are
+    /// in it; the file half is one step per file. A run that is only photos therefore has a
+    /// single step, and `isDeterminate` is false — there is genuinely nothing to count, and a
+    /// bar creeping across the screen during it would be an animation, not a measurement.
+    func delete(
+        ids: [String],
+        expecting stamps: [String: FileStamp],
+        onProgress: @escaping DeletionProgressHandler
+    ) async throws -> DeletionOutcome {
         let fileIDs = ids.filter { FileItemID.isFile($0) }
         let photoIDs = ids.filter { !FileItemID.isFile($0) }
+
+        let steps = (photoIDs.isEmpty ? 0 : 1) + fileIDs.count
+        let isDeterminate = steps > 1
+        var settled = 0
+
+        onProgress(
+            .starting(
+                total: ids.count,
+                isDeterminate: isDeterminate,
+                stage: photoIDs.isEmpty ? .files : .photoLibrary
+            )
+        )
 
         var deleted: [String] = []
         var skipped: [String] = []
@@ -81,13 +107,35 @@ final class CompositeDeleter: MediaDeleting {
         // arrive after files have already been removed for good.
         if !photoIDs.isEmpty {
             deleted += try await photos.delete(ids: photoIDs, expecting: [:]).deletedIDs
+            settled += photoIDs.count
+            onProgress(
+                DeletionProgress(
+                    stage: fileIDs.isEmpty ? .done : .files,
+                    settled: settled,
+                    total: ids.count,
+                    isDeterminate: isDeterminate
+                )
+            )
         }
         if !fileIDs.isEmpty {
             do {
+                let settledBeforeFiles = settled
+                let total = ids.count
                 let outcome = try await files.delete(
                     ids: fileIDs,
-                    expecting: stamps.filter { FileItemID.isFile($0.key) }
+                    expecting: stamps.filter { FileItemID.isFile($0.key) },
+                    onProgress: { step in
+                        onProgress(
+                            DeletionProgress(
+                                stage: .files,
+                                settled: settledBeforeFiles + step.settled,
+                                total: total,
+                                isDeterminate: isDeterminate
+                            )
+                        )
+                    }
                 )
+                settled = settledBeforeFiles + fileIDs.count
                 deleted += outcome.deletedIDs
                 skipped += outcome.skippedIDs
             } catch {
@@ -106,6 +154,9 @@ final class CompositeDeleter: MediaDeleting {
             }
         }
 
+        onProgress(
+            DeletionProgress(stage: .done, settled: ids.count, total: ids.count, isDeterminate: isDeterminate)
+        )
         return DeletionOutcome(requestedIDs: ids, deletedIDs: deleted, skippedIDs: skipped)
     }
 }

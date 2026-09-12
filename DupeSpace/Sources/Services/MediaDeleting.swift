@@ -54,16 +54,75 @@ enum DeletionError: LocalizedError, Equatable {
     }
 }
 
+/// How far a deletion has got, honestly.
+///
+/// The two halves of a deletion report differently and the difference is not a detail. Files
+/// are removed one at a time, so each one is a step. The photo library half is a single
+/// `PHPhotoLibrary.performChanges`: it is atomic, it is behind a system confirmation the user
+/// has to answer, and there is nothing to count through it — ninety assets settle in one
+/// instant or none of them do.
+///
+/// So this carries `isDeterminate` rather than leaving a screen to invent a percentage. A run
+/// that is one atomic change says so, and whatever draws it has to be honest about not knowing.
+struct DeletionProgress: Sendable, Equatable {
+
+    enum Stage: Sendable, Equatable {
+        /// Waiting on the system's own confirmation and the atomic change behind it.
+        case photoLibrary
+        /// Walking the granted folders, one file at a time.
+        case files
+        case done
+    }
+
+    let stage: Stage
+    /// Items whose fate is now settled — deleted, refused or found missing.
+    let settled: Int
+    let total: Int
+    /// False when the whole run is one atomic change and there is nothing to count.
+    let isDeterminate: Bool
+
+    var fraction: Double {
+        guard total > 0 else { return 0 }
+        return min(max(Double(settled) / Double(total), 0), 1)
+    }
+
+    static func starting(total: Int, isDeterminate: Bool, stage: Stage) -> DeletionProgress {
+        DeletionProgress(stage: stage, settled: 0, total: total, isDeterminate: isDeterminate)
+    }
+}
+
+/// Called from whatever thread the deletion is running on.
+typealias DeletionProgressHandler = @Sendable (DeletionProgress) -> Void
+
 protocol MediaDeleting: Sendable {
     /// `stamps` says what each file looked like when it was scanned. A deleter that can check
     /// must refuse anything that no longer matches; one whose items carry their own identity
     /// through the system — the photo library — can ignore it.
     func delete(ids: [String], expecting stamps: [String: FileStamp]) async throws -> DeletionOutcome
+
+    /// The same work, reporting as it goes. Defaulted, so a deleter with nothing useful to say
+    /// about its own progress — which is most of them — does not have to pretend.
+    func delete(
+        ids: [String],
+        expecting stamps: [String: FileStamp],
+        onProgress: @escaping DeletionProgressHandler
+    ) async throws -> DeletionOutcome
 }
 
 extension MediaDeleting {
     func delete(ids: [String]) async throws -> DeletionOutcome {
         try await delete(ids: ids, expecting: [:])
+    }
+
+    func delete(
+        ids: [String],
+        expecting stamps: [String: FileStamp],
+        onProgress: @escaping DeletionProgressHandler
+    ) async throws -> DeletionOutcome {
+        onProgress(.starting(total: ids.count, isDeterminate: false, stage: .photoLibrary))
+        let outcome = try await delete(ids: ids, expecting: stamps)
+        onProgress(DeletionProgress(stage: .done, settled: ids.count, total: ids.count, isDeterminate: false))
+        return outcome
     }
 }
 
@@ -124,8 +183,15 @@ final class StubDeleter: MediaDeleting, @unchecked Sendable {
         case fail(String)
     }
 
-    init(behaviour: Behaviour = .succeed) {
+    /// How long to dwell on each item before settling it.
+    ///
+    /// Zero everywhere except the simulator walk, which needs the deletion to last long enough
+    /// to be photographed. A test that waits is a test that is slow for no reason.
+    private let stepDelay: Duration
+
+    init(behaviour: Behaviour = .succeed, stepDelay: Duration = .zero) {
         self.behaviour = behaviour
+        self.stepDelay = stepDelay
     }
 
     var received: [[String]] {
@@ -141,6 +207,14 @@ final class StubDeleter: MediaDeleting, @unchecked Sendable {
     }
 
     func delete(ids: [String], expecting stamps: [String: FileStamp]) async throws -> DeletionOutcome {
+        try await delete(ids: ids, expecting: stamps, onProgress: { _ in })
+    }
+
+    func delete(
+        ids: [String],
+        expecting stamps: [String: FileStamp],
+        onProgress: @escaping DeletionProgressHandler
+    ) async throws -> DeletionOutcome {
         lock.lock()
         _received.append(ids)
         _expectations.append(stamps)
@@ -148,6 +222,21 @@ final class StubDeleter: MediaDeleting, @unchecked Sendable {
 
         switch behaviour {
         case .succeed:
+            onProgress(.starting(total: ids.count, isDeterminate: ids.count > 1, stage: .files))
+            for (index, _) in ids.enumerated() {
+                if stepDelay > .zero { try? await Task.sleep(for: stepDelay) }
+                onProgress(
+                    DeletionProgress(
+                        stage: .files,
+                        settled: index + 1,
+                        total: ids.count,
+                        isDeterminate: ids.count > 1
+                    )
+                )
+            }
+            onProgress(
+                DeletionProgress(stage: .done, settled: ids.count, total: ids.count, isDeterminate: ids.count > 1)
+            )
             return DeletionOutcome(requestedIDs: ids, deletedIDs: ids)
         case .cancel:
             throw DeletionError.cancelledByUser

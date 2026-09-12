@@ -99,11 +99,23 @@ final class FileDeleter: MediaDeleting {
     }
 
     func delete(ids: [String], expecting stamps: [String: FileStamp]) async throws -> DeletionOutcome {
+        try await delete(ids: ids, expecting: stamps, onProgress: { _ in })
+    }
+
+    /// One file is one step, and every one of them is real: this half is a loop, not an atomic
+    /// change, and each turn of it removes something that is gone for good.
+    func delete(
+        ids: [String],
+        expecting stamps: [String: FileStamp],
+        onProgress: @escaping DeletionProgressHandler
+    ) async throws -> DeletionOutcome {
         let registry = self.registry
+        let total = ids.count
 
         let result: (deleted: [String], skipped: [String]) = await Task.detached(priority: .userInitiated) {
             var removed: [String] = []
             var refused: [String] = []
+            var settled = 0
 
             for id in ids {
                 let outcome = FileMediaLibrary.withFile(itemID: id, registry: registry) { url -> Bool? in
@@ -155,6 +167,19 @@ final class FileDeleter: MediaDeleting {
                     // says, and it is left to say it.
                     break
                 }
+
+                // After the switch, not before: a step is reported once the file's fate is
+                // settled, whichever way it went. Reporting on entry would have the screen
+                // counting away files it had not looked at yet.
+                settled += 1
+                onProgress(
+                    DeletionProgress(
+                        stage: .files,
+                        settled: settled,
+                        total: total,
+                        isDeterminate: total > 1
+                    )
+                )
             }
             return (removed, refused)
         }.value

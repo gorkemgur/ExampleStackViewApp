@@ -13,6 +13,12 @@ final class ReviewViewModel: ObservableObject {
         }
     }
     @Published private(set) var isDeleting = false
+    /// How far the deletion has got, as the deleter reports it.
+    ///
+    /// Not a number the screen invents. The photo half is one atomic change behind the system's
+    /// own confirmation, so it carries `isDeterminate == false` and whatever draws it has to
+    /// say "working" rather than "sixty per cent".
+    @Published private(set) var deletionProgress: DeletionProgress?
     @Published private(set) var outcome: DeletionOutcome?
     @Published private(set) var failure: String?
 
@@ -580,6 +586,7 @@ final class ReviewViewModel: ObservableObject {
 
         isDeleting = true
         failure = nil
+        deletionProgress = .starting(total: ids.count, isDeterminate: false, stage: .photoLibrary)
 
         // Captured before the selection is cleared: the receipt describes what was sent,
         // not what is left. The candidate list has to be captured here too — `liveCandidates`
@@ -599,7 +606,11 @@ final class ReviewViewModel: ObservableObject {
         }
 
         do {
-            let completed = try await deleter.delete(ids: ids, expecting: stamps)
+            let completed = try await deleter.delete(ids: ids, expecting: stamps) { [weak self] step in
+                // The deleter reports from whichever thread it is running on — the file half
+                // runs on a detached task — so the hop is here rather than at every call site.
+                Task { @MainActor in self?.deletionProgress = step }
+            }
             outcome = completed
             deletedIDs.formUnion(completed.deletedIDs)
             selection.clear()
@@ -626,6 +637,7 @@ final class ReviewViewModel: ObservableObject {
             failure = error.localizedDescription
         }
 
+        deletionProgress = nil
         isDeleting = false
     }
 }

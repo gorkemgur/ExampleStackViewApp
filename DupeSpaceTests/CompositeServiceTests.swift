@@ -133,6 +133,67 @@ final class CompositeDeleterTests: XCTestCase {
         }
     }
 
+    // MARK: - Progress that does not lie
+
+    /// A screen may only draw a measurement it was actually given. The photo half is one
+    /// atomic `performChanges` behind a system prompt: ninety assets settle in one instant or
+    /// none of them do, so a run made entirely of photos has nothing to count through and says
+    /// so. Anything drawing a bar creeping across during it would be animating, not measuring.
+    func testAPhotoOnlyDeletionReportsThatItCannotBeCounted() async throws {
+        let steps = ProgressRecorder()
+
+        _ = try await CompositeDeleter(photos: StubDeleter(), files: StubDeleter())
+            .delete(ids: [photoID, "DEF456/L0/001"], expecting: [:], onProgress: steps.record)
+
+        let seen = steps.steps
+        XCTAssertFalse(seen.isEmpty)
+        XCTAssertTrue(seen.allSatisfy { !$0.isDeterminate }, "one atomic change is not a progress bar")
+        XCTAssertEqual(seen.last?.stage, .done)
+        XCTAssertEqual(seen.last?.settled, 2)
+    }
+
+    /// Files are a loop, and every turn of it removes something for good. That half can be
+    /// counted, and it has to be counted only after each file's fate is settled.
+    func testAFileDeletionCountsUpOneAtATime() async throws {
+        let steps = ProgressRecorder()
+        let ids = (0..<4).map { _ in fileID }
+
+        _ = try await CompositeDeleter(photos: StubDeleter(), files: StubDeleter())
+            .delete(ids: ids, expecting: [:], onProgress: steps.record)
+
+        let seen = steps.steps
+        XCTAssertTrue(seen.contains { $0.isDeterminate })
+        XCTAssertEqual(seen.last?.settled, 4)
+        XCTAssertEqual(seen.last?.total, 4)
+        XCTAssertEqual(
+            seen.map(\.settled),
+            seen.map(\.settled).sorted(),
+            "progress may never run backwards"
+        )
+        XCTAssertTrue(seen.allSatisfy { $0.settled <= $0.total }, "more settled than requested is not a state")
+    }
+
+    /// The mixed case: the photo batch lands as one jump of however many assets it held, and
+    /// the files tick after it.
+    func testAMixedDeletionJumpsThroughThePhotosThenWalksTheFiles() async throws {
+        let steps = ProgressRecorder()
+        let files = (0..<3).map { _ in fileID }
+
+        _ = try await CompositeDeleter(photos: StubDeleter(), files: StubDeleter())
+            .delete(ids: [photoID] + files, expecting: [:], onProgress: steps.record)
+
+        let seen = steps.steps
+        XCTAssertTrue(seen.contains { $0.stage == .photoLibrary })
+        XCTAssertTrue(seen.contains { $0.stage == .files })
+        XCTAssertEqual(seen.last?.stage, .done)
+        XCTAssertEqual(seen.last?.settled, 4)
+        XCTAssertEqual(
+            seen.map(\.settled),
+            seen.map(\.settled).sorted(),
+            "progress may never run backwards"
+        )
+    }
+
     func testOnlyFilesSelectedNeverTouchesThePhotoLibrary() async throws {
         let photos = StubDeleter()
         let files = StubDeleter()
@@ -152,5 +213,23 @@ final class CompositeDeleterTests: XCTestCase {
         XCTAssertTrue(photos.received.isEmpty)
         XCTAssertTrue(files.received.isEmpty)
         XCTAssertTrue(outcome.deletedIDs.isEmpty)
+    }
+}
+
+/// Collects what a deleter reported, from whatever thread it reported on.
+private final class ProgressRecorder: @unchecked Sendable {
+
+    private let lock = NSLock()
+    private var _steps: [DeletionProgress] = []
+
+    var steps: [DeletionProgress] {
+        lock.lock(); defer { lock.unlock() }
+        return _steps
+    }
+
+    var record: DeletionProgressHandler {
+        { [self] step in
+            lock.lock(); _steps.append(step); lock.unlock()
+        }
     }
 }
