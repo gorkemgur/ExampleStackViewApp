@@ -10,6 +10,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Homebrew re-indexes the world before every `install` otherwise: 20-40 seconds per job,
+  # three jobs, for formulae whose version this project does not care about.
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
 jobs:
   core:
     name: DupeCore unit tests
@@ -49,6 +55,14 @@ jobs:
           fi
           echo "clean"
 
+      - name: Cache the package build
+        uses: actions/cache@v4
+        with:
+          path: Packages/DupeCore/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('Packages/DupeCore/Sources/**/*.swift', 'Packages/DupeCore/Tests/**/*.swift', 'Packages/DupeCore/Package.swift') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
       - name: Run tests
         run: swift test --package-path Packages/DupeCore
 
@@ -75,26 +89,37 @@ jobs:
         id: simulator
         run: echo "udid=$(python3 Scripts/pick-simulator.py)" >> "$GITHUB_OUTPUT"
 
+      # A cold build is two and a half minutes of the six this job takes, every single push,
+      # to recompile files that did not change. The key moves with the sources so a hit is
+      # exact; `restore-keys` falls back to the most recent build of this branch, which is
+      # what makes the *incremental* case work — the common one, where two files changed.
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .derived
+          key: derived-${{ runner.os }}-${{ hashFiles('DupeSpace/Sources/**/*.swift', 'Shared/**/*.swift', 'DupeSpaceWidgets/**/*.swift', 'Packages/DupeCore/Sources/**/*.swift', 'project.yml') }}
+          restore-keys: |
+            derived-${{ runner.os }}-
+
       - name: Test
         run: |
           set -o pipefail
-          # The whole log is three thousand lines and the failure is four of them. Kept, then
-          # the interesting lines printed on the way out: reading a CI log should not require
-          # downloading a 75 MB result bundle.
+          # -enableCodeCoverage NO: instrumenting every file costs about a minute and nothing
+          # in this pipeline reads the coverage. -derivedDataPath: so the cache above has
+          # something to hold on to.
           xcodebuild test \
             -project DupeSpace.xcodeproj \
             -scheme DupeSpace \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath .derived \
             -resultBundlePath TestResults.xcresult \
+            -enableCodeCoverage NO \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee xcodebuild.log || {
-              status=$?
-              echo "::group::What actually failed"
-              grep -nE "error:|warning: .*deprecated|XCTAssert|' failed \(|Failing tests:|\*\* [A-Z ]+ \*\*" xcodebuild.log \
-                | grep -v "Checking existence" | tail -80
-              echo "::endgroup::"
-              exit $status
-            }
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee xcodebuild.log
 
       - name: Upload test results
         if: always()
@@ -103,6 +128,25 @@ jobs:
           name: xcresult
           path: TestResults.xcresult
           retention-days: 7
+
+      # Last, deliberately.
+      #
+      # This used to run inside the test step, which put it *above* the artifact upload and a
+      # hundred lines of Node deprecation notices — so the tail of the log, which is the only
+      # part anyone reads first, never contained the failure. The whole log is three thousand
+      # lines and the reason is four of them; those four belong at the bottom.
+      - name: What actually failed
+        if: failure()
+        run: |
+          echo "::group::Compile errors"
+          grep -nE "error:" xcodebuild.log | grep -v "Checking existence" | sort -u | head -40 || echo "none"
+          echo "::endgroup::"
+          echo "::group::Test failures"
+          grep -nE "XCTAssert|' failed \(|Failing tests:" xcodebuild.log | head -40 || echo "none"
+          echo "::endgroup::"
+          echo "::group::Verdict"
+          grep -nE "\*\* [A-Z ]+ \*\*" xcodebuild.log | tail -5 || true
+          echo "::endgroup::"
 
   site:
     name: Landing page
@@ -116,7 +160,10 @@ jobs:
   idb:
     name: Simulator automation (idb)
     runs-on: macos-15
-    needs: app
+    # No `needs: app`. It waited for the entire test job — six to ten minutes — and then built
+    # the app again from scratch on its own runner, which is seven minutes of wall clock spent
+    # waiting for a result it does not consume. They are separate machines; they can run at
+    # the same time. The screenshot commit is [skip ci] either way.
     permissions:
       contents: write
     steps:
@@ -127,6 +174,21 @@ jobs:
           set -euo pipefail
           XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
           sudo xcode-select -s "$XCODE"
+
+      # brew install idb-companion pulls a large bottle and its dependencies on every run.
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-idb-v1
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: idb-derived-${{ runner.os }}-${{ hashFiles('DupeSpace/Sources/**/*.swift', 'Shared/**/*.swift', 'DupeSpaceWidgets/**/*.swift', 'Packages/DupeCore/Sources/**/*.swift', 'project.yml') }}
+          restore-keys: |
+            idb-derived-${{ runner.os }}-
 
       - name: Install XcodeGen and idb
         run: |
@@ -151,6 +213,8 @@ jobs:
             -configuration Debug \
             -sdk iphonesimulator \
             -derivedDataPath build \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Boot simulator, install and inspect
