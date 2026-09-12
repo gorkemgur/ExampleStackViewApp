@@ -173,11 +173,43 @@ struct ScanView: View {
                     .cardEntrance()
             }
 
+            let lookalikes = NameHeuristic.clusters(
+                for: result.items.values.filter { $0.source == .fileFolder },
+                excluding: Set(result.groups.flatMap(\.itemIDs))
+            )
+            if !lookalikes.isEmpty {
+                nameLookalikeCard(lookalikes, items: result.items)
+            }
+
             if !result.cloudOnlyIDs.isEmpty {
                 Card("Not checked", symbolName: "icloud", identifier: "scan.cloud") {
                     Text("\(Counting.items(result.cloudOnlyIDs.count)) \(result.cloudOnlyIDs.count == 1 ? "has" : "have") the original in iCloud. They were left alone rather than downloaded over your connection.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// Files whose names say "copy" but whose contents do not match.
+    ///
+    /// Shown, never offered for deletion. A name is a hint about a file, not evidence about
+    /// its contents, and the difference is the whole reason this app can be trusted.
+    @ViewBuilder
+    private func nameLookalikeCard(_ clusters: [NameCluster], items: [String: MediaItem]) -> some View {
+        Card("Named like copies, but not copies", symbolName: "text.magnifyingglass", identifier: "scan.lookalikes") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("\(Counting.items(clusters.count)) share a name with something else but hold different content. Nothing here is selected or counted — it is only worth your eyes.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(clusters.prefix(5)) { cluster in
+                    let names = cluster.itemIDs.compactMap { items[$0]?.displayName }
+                    Text(names.joined(separator: "  ·  "))
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
                 }
             }
         }

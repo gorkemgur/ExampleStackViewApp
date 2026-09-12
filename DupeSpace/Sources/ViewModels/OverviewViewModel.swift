@@ -17,11 +17,14 @@ final class OverviewViewModel: ObservableObject {
     @Published private(set) var storage: StorageSnapshot?
     @Published private(set) var items: [MediaItem] = []
     @Published private(set) var breakdown: [CategoryBreakdown] = []
+    @Published private(set) var folders: [GrantedFolder] = []
 
     private let library: MediaLibrary
+    private let folderRegistry: any FolderRegistering
 
-    init(library: MediaLibrary) {
+    init(library: MediaLibrary, folderRegistry: any FolderRegistering = InMemoryFolderRegistry()) {
         self.library = library
+        self.folderRegistry = folderRegistry
     }
 
     var libraryBytes: Int64 { InventoryAnalyzer.totalBytes(items) }
@@ -39,16 +42,34 @@ final class OverviewViewModel: ObservableObject {
     func refresh() async {
         storage = StorageProbe.current()
         access = library.currentAccess()
-        if access == .authorized {
-            await loadInventory()
-        }
+        folders = folderRegistry.folders()
+        // Asked unconditionally: granted folders are readable whatever the photo library says.
+        await loadInventory()
     }
 
     func requestAccess() async {
         access = await library.requestAccess()
-        if access == .authorized {
-            await loadInventory()
-        }
+        await loadInventory()
+    }
+
+    // MARK: - Folders
+
+    func addFolder(at url: URL) async {
+        guard let grant = FolderAccess.makeGrant(for: url) else { return }
+        folderRegistry.add(grant)
+        folders = folderRegistry.folders()
+        await reloadInventory()
+    }
+
+    func removeFolder(id: UUID) async {
+        folderRegistry.remove(id: id)
+        folders = folderRegistry.folders()
+        await reloadInventory()
+    }
+
+    private func reloadInventory() async {
+        state = .idle
+        await loadInventory()
     }
 
     private func loadInventory() async {

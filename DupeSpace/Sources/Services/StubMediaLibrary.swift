@@ -26,6 +26,8 @@ final class StubMediaLibrary: MediaLibrary {
         if delay > .zero {
             try await Task.sleep(for: delay)
         }
+        // Mirrors the real library: without full access there is nothing to hand back.
+        guard access == .authorized else { return [] }
         return items
     }
 

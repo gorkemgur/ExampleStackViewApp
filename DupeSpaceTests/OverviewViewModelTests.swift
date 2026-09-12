@@ -16,13 +16,13 @@ final class OverviewViewModelTests: XCTestCase {
         XCTAssertEqual(model.libraryBytes, InventoryAnalyzer.totalBytes(model.items))
     }
 
-    func testUnauthorisedLibraryIsNeverRead() async {
+    func testUnauthorisedLibraryYieldsNothing() async {
         let model = OverviewViewModel(library: StubMediaLibrary(access: .denied, items: StubMediaLibrary.sampleItems()))
         await model.refresh()
 
         XCTAssertEqual(model.access, .denied)
         XCTAssertTrue(model.items.isEmpty, "nothing may be read without permission")
-        XCTAssertEqual(model.state, .idle)
+        XCTAssertTrue(model.breakdown.isEmpty)
     }
 
     func testLimitedAccessIsTreatedAsNotUsable() async {
@@ -31,6 +31,22 @@ final class OverviewViewModelTests: XCTestCase {
 
         XCTAssertEqual(model.access, .limited)
         XCTAssertTrue(model.items.isEmpty)
+    }
+
+    func testGrantedFoldersAreSurfaced() async {
+        let registry = InMemoryFolderRegistry(folders: [
+            GrantedFolder(displayName: "Downloads", bookmark: Data([1]))
+        ])
+        let model = OverviewViewModel(
+            library: StubMediaLibrary.previewFixture(),
+            folderRegistry: registry
+        )
+        await model.refresh()
+
+        XCTAssertEqual(model.folders.map(\.displayName), ["Downloads"])
+
+        await model.removeFolder(id: registry.folders()[0].id)
+        XCTAssertTrue(model.folders.isEmpty)
     }
 
     func testRequestingAccessLoadsTheLibrary() async {

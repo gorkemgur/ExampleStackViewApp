@@ -55,6 +55,20 @@ final class LaunchUITests: XCTestCase {
         }
     }
 
+    func testFoldersCardOffersAGrantAndSaysWhenThereIsNone() {
+        XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))
+
+        let add = app.buttons["folders.add"]
+        for _ in 0..<8 where !add.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(add.exists, "there must be a way to hand over a folder")
+        XCTAssertTrue(
+            app.staticTexts["folders.empty"].exists,
+            "with no folders granted the card should say so rather than look broken"
+        )
+    }
+
     func testLimitsCardIsAlwaysShown() {
         XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))
 

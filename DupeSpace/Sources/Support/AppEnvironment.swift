@@ -12,16 +12,34 @@ enum AppEnvironment {
         ProcessInfo.processInfo.arguments.contains(uiTestingFlag)
     }
 
+    /// One registry, shared: the library that reads granted folders and the screen that
+    /// manages them have to agree on what is granted.
+    static let folderRegistry: any FolderRegistering = isUITesting
+        ? InMemoryFolderRegistry()
+        : UserDefaultsFolderRegistry()
+
     static func makeLibrary() -> MediaLibrary {
-        isUITesting ? StubMediaLibrary.uiTestFixture() : PhotoKitMediaLibrary()
+        guard !isUITesting else { return StubMediaLibrary.uiTestFixture() }
+        return CompositeMediaLibrary(
+            photos: PhotoKitMediaLibrary(),
+            files: FileMediaLibrary(registry: folderRegistry)
+        )
     }
 
     static func makeAnalyzer() -> any AssetAnalyzing {
-        isUITesting ? StubAssetAnalyzer.uiTestFixture() : PhotoKitAssetAnalyzer()
+        guard !isUITesting else { return StubAssetAnalyzer.uiTestFixture() }
+        return CompositeAssetAnalyzer(
+            photos: PhotoKitAssetAnalyzer(),
+            files: FileAssetAnalyzer(registry: folderRegistry)
+        )
     }
 
     static func makeDeleter() -> MediaDeleting {
-        isUITesting ? StubDeleter() : PhotoKitDeleter()
+        guard !isUITesting else { return StubDeleter() }
+        return CompositeDeleter(
+            photos: PhotoKitDeleter(),
+            files: FileDeleter(registry: folderRegistry)
+        )
     }
 
     static func makeThumbnailLoader() -> ThumbnailLoading {

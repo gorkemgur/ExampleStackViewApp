@@ -1,10 +1,15 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import DupeCore
 
 struct RootView: View {
 
     @EnvironmentObject private var history: HistoryViewModel
-    @StateObject private var model = OverviewViewModel(library: AppEnvironment.makeLibrary())
+    @StateObject private var model = OverviewViewModel(
+        library: AppEnvironment.makeLibrary(),
+        folderRegistry: AppEnvironment.folderRegistry
+    )
+    @State private var pickingFolder = false
 
     var body: some View {
         NavigationStack {
@@ -37,6 +42,13 @@ struct RootView: View {
                             .transition(.opacity.combined(with: .offset(y: 12)))
                     }
 
+                    FoldersCardView(
+                        folders: model.folders,
+                        onAdd: { pickingFolder = true },
+                        onRemove: { id in Task { await model.removeFolder(id: id) } }
+                    )
+                    .cardEntrance()
+
                     if !model.breakdown.isEmpty {
                         BreakdownCardView(breakdown: model.breakdown, totalBytes: model.libraryBytes)
                             .cardEntrance()
@@ -55,6 +67,7 @@ struct RootView: View {
                 .animation(.snappy(duration: 0.35), value: model.items.count)
                 .animation(.snappy(duration: 0.3), value: model.access)
                 .animation(.snappy(duration: 0.3), value: model.isLoading)
+                .animation(.snappy(duration: 0.3), value: model.folders)
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("DupeSpace")
@@ -64,6 +77,14 @@ struct RootView: View {
         }
         .task {
             await model.refresh()
+        }
+        .fileImporter(
+            isPresented: $pickingFolder,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case let .success(urls) = result, let url = urls.first else { return }
+            Task { await model.addFolder(at: url) }
         }
     }
 
