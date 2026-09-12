@@ -121,6 +121,23 @@ final class ReviewUITests: XCTestCase {
             app.staticTexts["review.result"].waitForExistence(timeout: 30),
             "the deletion result was never reported"
         )
+
+        // Everything lossless has just gone, so "No loss" now reaches nothing — and a fader
+        // with no target to set is a control with no job. It is not drawn greyed, it is not
+        // drawn: the line that names what ran out stands where it was.
+        let exhausted = app.otherElements["budget.exhausted"]
+        XCTAssertTrue(
+            exhausted.waitForExistence(timeout: 15),
+            "after a lossless pass the budget card must say the depth has run out"
+        )
+        XCTAssertFalse(
+            app.sliders["budget.slider"].exists,
+            "a fader that can reach nothing should not be on the screen at all"
+        )
+        XCTAssertFalse(
+            app.staticTexts["budget.summary"].exists,
+            "the caption repeats what the line above it already says"
+        )
     }
 
     /// The chips the simulator audit caught at 32 and 34 points tall.

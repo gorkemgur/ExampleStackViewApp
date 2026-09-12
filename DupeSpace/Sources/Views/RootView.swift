@@ -278,7 +278,7 @@ struct RootView: View {
 
                     Spacer(minLength: 8)
 
-                    Badge(DS.cost(tier), tint: DS.costTint(tier, isOnSlab: true))
+                    Badge(DS.cost(tier), tint: DS.costTint(tier))
                 }
             }
         }

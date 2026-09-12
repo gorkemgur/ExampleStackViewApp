@@ -146,13 +146,17 @@ enum DS {
     /// There are two states here, so there are two colours: quiet for the rungs that cost
     /// nothing, the ladder's warning amber for the ones that are a judgement call. The rail
     /// beside the row still says which rung it is.
-    /// The parameters are `rung` and `isOnSlab` because `tier` and `onSlab` are both names
-    /// this type already uses — a five-line body had two shadowed names in it.
-    static func costTint(_ rung: RegretTier, isOnSlab: Bool = false) -> Color {
-        guard !rung.isLossless else {
-            return isOnSlab ? onSlabMuted : .secondary
-        }
-        return isOnSlab ? tierVivid(.burstLeftover) : tier(.burstLeftover)
+    /// The parameter is `rung` because `tier` is a name this type already uses. `isOnSlab`
+    /// went with the dark panel: there is one ground now, so there is one answer.
+    static func costTint(_ rung: RegretTier) -> Color {
+        // Two colours for two meanings, and neither of them grey.
+        //
+        // Lossless was `.secondary`, which was right for an eyebrow and is wrong for a badge:
+        // a grey pill beside a teal rail reads as *disabled*, and "costs nothing" is the good
+        // news on this screen. Not the rung's own colour either — that would only repeat what
+        // the rail already says. The badge carries the binary the rail does not: free, or
+        // yours to judge.
+        rung.isLossless ? tier(.inferiorCopy) : tier(.burstLeftover)
     }
 
     /// The muting neutral, at a value that reads on the slab. It is the most load-bearing

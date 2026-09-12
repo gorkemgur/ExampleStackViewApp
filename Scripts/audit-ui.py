@@ -212,15 +212,22 @@ def audit_layout(screen, tree):
                 f"past the right edge ({width:.0f}pt)"
             )
 
-        if kind == "Button" and (w < MIN_TAP_TARGET or h < MIN_TAP_TARGET):
+        # The same point of slack the edge checks already take, and for the same reason. A
+        # control given `minHeight: 44` came back as 43.7 on a 3x screen and the report said
+        # "44x44pt, under the 44pt tap target" — a finding that reads as a bug in the report,
+        # because it is one. Printed to a decimal now, so a real violation still reads as 32.0
+        # rather than as another rounding.
+        if kind == "Button" and (
+            w < MIN_TAP_TARGET - EDGE_SLACK or h < MIN_TAP_TARGET - EDGE_SLACK
+        ):
             if y < NAVIGATION_BAR_BOTTOM:
                 notes.append(
-                    f"{screen}: {describe_element(element)} is {w:.0f}x{h:.0f}pt, in the "
+                    f"{screen}: {describe_element(element)} is {w:.1f}x{h:.1f}pt, in the "
                     "navigation bar — the bar supplies the hit area"
                 )
             else:
                 findings.append(
-                    f"{screen}: {describe_element(element)} is {w:.0f}x{h:.0f}pt, "
+                    f"{screen}: {describe_element(element)} is {w:.1f}x{h:.1f}pt, "
                     f"under the {MIN_TAP_TARGET:.0f}pt tap target"
                 )
 

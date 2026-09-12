@@ -191,11 +191,13 @@ struct ReviewView: View {
             // One bar on this slab, and it is the fader. The depth is three chips.
             depthPicker
 
-            Text(planSummary)
-                .font(.caption)
-                .foregroundStyle(DS.onSlab.opacity(0.68))
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("budget.summary")
+            if !planSummary.isEmpty {
+                Text(planSummary)
+                    .font(.caption)
+                    .foregroundStyle(DS.onSlab.opacity(0.68))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("budget.summary")
+            }
 
             Button("Select this plan") {
                 model.applyBudgetPlan()
@@ -221,7 +223,7 @@ struct ReviewView: View {
                 .foregroundStyle(DS.tier(.burstLeftover))
 
             Text(model.plannableBytes > 0
-                 ? "Nothing left at this depth — the rest is yours to judge."
+                 ? "Nothing left at this depth. The \(ByteFormatting.string(model.plannableBytes)) still on offer is yours to judge — allow more to reach it."
                  : "Nothing left to offer.")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(DS.onSlab)
@@ -285,15 +287,11 @@ struct ReviewView: View {
         // thing this app could do.
         let scope = model.kindFilter.map { " Within \(KindCopy.title(for: $0).lowercased()) only." } ?? ""
 
-        // The depth setting, not the target, is what has run out — and "nothing is selected by
-        // a plan of zero" blamed the target, which the person had just dragged to the far end.
-        // After a first pass this is the ordinary state: everything lossless has gone, and what
-        // is left is theirs to judge.
+        // Said once. `depthExhausted` stands where the fader was and says this; printing it
+        // again forty points below was the same sentence twice on one card, which is the
+        // complaint this screen has already been through once.
         if reachableBytes <= 0 {
-            let remaining = ByteFormatting.string(Int64(model.plannableBytes))
-            return model.plannableBytes > 0
-                ? "Nothing left at this depth. The \(remaining) still on offer is in the rungs you have to judge — allow more to reach it.\(scope)"
-                : "Nothing left to offer.\(scope)"
+            return scope.trimmingCharacters(in: .whitespaces)
         }
 
         guard !plan.selected.isEmpty else {
