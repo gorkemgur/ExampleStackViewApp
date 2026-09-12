@@ -38,6 +38,112 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertFalse(model.budgetPlan.selected.isEmpty)
     }
 
+    // MARK: - Overruling the engine
+
+    private func exactGroupID(_ model: ReviewViewModel) -> String? {
+        model.result.decisions.first { $0.relation == .exact }?.id
+    }
+
+    func testKeepingADifferentCopyMakesTheOldSurvivorDeletable() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard
+            let groupID = exactGroupID(model),
+            let decision = model.result.decisions.first(where: { $0.id == groupID }),
+            let other = decision.allCandidates.first
+        else { return XCTFail("fixture has no exact group to overrule") }
+
+        let originalKeeper = decision.keeperID
+        model.chooseKeeper(other, inGroup: groupID)
+
+        XCTAssertEqual(model.keeperID(inGroup: groupID), other)
+        XCTAssertTrue(
+            model.liveCandidates.contains { $0.id == originalKeeper },
+            "the copy the app wanted to keep is now the one on offer"
+        )
+        XCTAssertFalse(
+            model.liveCandidates.contains { $0.id == other },
+            "what the user keeps is never offered for deletion"
+        )
+        XCTAssertTrue(model.violations.isEmpty)
+    }
+
+    func testTheNewSurvivorIsNeverLeftTicked() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard
+            let groupID = exactGroupID(model),
+            let decision = model.result.decisions.first(where: { $0.id == groupID }),
+            let other = decision.allCandidates.first
+        else { return XCTFail("fixture has no exact group to overrule") }
+
+        model.chooseKeeper(other, inGroup: groupID)
+
+        XCTAssertFalse(model.selection.isSelected(other))
+        XCTAssertTrue(model.violations.isEmpty, "a tick must never outlive the decision behind it")
+    }
+
+    func testChangingYourMindBackRestoresTheAppsChoice() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard
+            let groupID = exactGroupID(model),
+            let decision = model.result.decisions.first(where: { $0.id == groupID }),
+            let other = decision.allCandidates.first
+        else { return XCTFail("fixture has no exact group to overrule") }
+
+        model.chooseKeeper(other, inGroup: groupID)
+        model.chooseKeeper(decision.keeperID, inGroup: groupID)
+
+        XCTAssertEqual(model.keeperID(inGroup: groupID), decision.keeperID)
+        XCTAssertTrue(model.overrides.isEmpty)
+    }
+
+    /// The only thing in the app that may leave a group with nothing, and it takes an explicit
+    /// per-group instruction to get there.
+    func testDeletingAWholeGroupIsPossibleButOnlyWhenAskedFor() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard
+            let groupID = exactGroupID(model),
+            let decision = model.result.decisions.first(where: { $0.id == groupID })
+        else { return XCTFail("fixture has no exact group") }
+
+        let members = Set([decision.keeperID] + decision.allCandidates)
+
+        model.setClearingEverything(true, inGroup: groupID)
+
+        XCTAssertTrue(members.isSubset(of: model.selection.selectedIDs))
+        XCTAssertTrue(model.violations.isEmpty, "the user named this group; the validator allows it")
+        XCTAssertTrue(model.canDelete)
+    }
+
+    func testTakingItBackLeavesTheSurvivorAlone() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard
+            let groupID = exactGroupID(model),
+            let decision = model.result.decisions.first(where: { $0.id == groupID })
+        else { return XCTFail("fixture has no exact group") }
+
+        model.setClearingEverything(true, inGroup: groupID)
+        model.setClearingEverything(false, inGroup: groupID)
+
+        XCTAssertFalse(model.selection.isSelected(decision.keeperID))
+        XCTAssertTrue(model.violations.isEmpty)
+    }
+
+    /// Nothing the app decides on its own may reach that state.
+    func testNoAutomaticSelectionEverEmptiesAGroup() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+
+        model.budgetBytes = Double(model.maxReclaimableBytes)
+        model.budgetDepth = .similar
+        model.applyBudgetPlan()
+        XCTAssertTrue(model.violations.isEmpty, "a budget plan must never empty a group")
+
+        for section in model.sections {
+            model.setSelected(true, in: section)
+        }
+        XCTAssertTrue(model.violations.isEmpty, "selecting every offered copy must still be safe")
+        XCTAssertTrue(model.clearedGroupIDs.isEmpty)
+    }
+
     func testSectionsAreOrderedByWhatDeletingCosts() async {
         let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
         let tiers = model.sections.map(\.tier)

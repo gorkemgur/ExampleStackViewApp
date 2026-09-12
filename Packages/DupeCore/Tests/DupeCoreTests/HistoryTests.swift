@@ -263,3 +263,59 @@ final class HistoryBuilderTests: XCTestCase {
         XCTAssertEqual(record.items.first?.keptInsteadName, "another copy")
     }
 }
+
+final class ReceiptAfterAnOverrideTests: XCTestCase {
+
+    private func item(_ id: String, bytes: Int64 = 1_000) -> MediaItem {
+        MediaItem(id: id, source: .photoLibrary, kind: .image, displayName: "\(id).heic", byteSize: bytes)
+    }
+
+    /// If the user cleared the whole group, nothing was kept in anything's place — and a receipt
+    /// naming a photo that is also gone is a receipt that cannot be checked against the library.
+    func testAReceiptDoesNotNameASurvivorThatWasItselfDeleted() {
+        let items = ["a": item("a"), "b": item("b")]
+        let candidates = [
+            DeletionCandidate(id: "b", groupID: "g1", keeperID: "a", tier: .identical, bytes: 1_000, isPreSelected: true),
+            DeletionCandidate(id: "a", groupID: "g1", keeperID: "a", tier: .identical, bytes: 1_000, isPreSelected: false)
+        ]
+        let result = ScanResult(
+            items: items,
+            groups: [],
+            decisions: [],
+            candidates: candidates,
+            cloudOnlyIDs: []
+        )
+
+        let record = HistoryBuilder.deletionRecord(
+            deletedIDs: ["a", "b"],
+            result: result,
+            savings: SavingsBreakdown(immediateBytes: 0, deferredBytes: 2_000, cloudOnlyBytes: 0, itemCount: 2, bytesByKind: [:]),
+            performedAt: Date(),
+            candidates: candidates
+        )
+
+        XCTAssertEqual(record.items.count, 2)
+        XCTAssertTrue(
+            record.items.allSatisfy { $0.keptInsteadName == "nothing — every copy went" },
+            record.items.map(\.keptInsteadName).joined(separator: ", ")
+        )
+    }
+
+    func testASurvivorThatStayedIsStillNamed() {
+        let items = ["a": item("a"), "b": item("b")]
+        let candidates = [
+            DeletionCandidate(id: "b", groupID: "g1", keeperID: "a", tier: .identical, bytes: 1_000, isPreSelected: true)
+        ]
+        let result = ScanResult(items: items, groups: [], decisions: [], candidates: candidates, cloudOnlyIDs: [])
+
+        let record = HistoryBuilder.deletionRecord(
+            deletedIDs: ["b"],
+            result: result,
+            savings: SavingsBreakdown(immediateBytes: 0, deferredBytes: 1_000, cloudOnlyBytes: 0, itemCount: 1, bytesByKind: [:]),
+            performedAt: Date(),
+            candidates: candidates
+        )
+
+        XCTAssertEqual(record.items.first?.keptInsteadName, "a.heic")
+    }
+}

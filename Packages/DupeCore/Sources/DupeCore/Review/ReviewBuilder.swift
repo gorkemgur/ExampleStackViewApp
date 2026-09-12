@@ -54,9 +54,18 @@ public struct ReviewSection: Sendable, Identifiable, Equatable {
 public enum ReviewBuilder {
 
     public static func sections(for result: ScanResult) -> [ReviewSection] {
+        sections(candidates: result.candidates, items: result.items)
+    }
+
+    /// The same arrangement over a candidate list the caller has revised — after the user has
+    /// chosen a different survivor, the offer is no longer the one the scan produced.
+    public static func sections(
+        candidates: [DeletionCandidate],
+        items: [String: MediaItem]
+    ) -> [ReviewSection] {
         var byTier: [RegretTier: [String: [DeletionCandidate]]] = [:]
 
-        for candidate in result.candidates {
+        for candidate in candidates {
             byTier[candidate.tier, default: [:]][candidate.groupID, default: []].append(candidate)
         }
 
@@ -72,7 +81,7 @@ public enum ReviewBuilder {
                 .compactMap { groupID, candidates -> ReviewGroup? in
                     guard
                         let keeperID = candidates.first?.keeperID,
-                        let keeper = result.items[keeperID]
+                        let keeper = items[keeperID]
                     else {
                         return nil
                     }
@@ -80,7 +89,7 @@ public enum ReviewBuilder {
                     let ordered = candidates.sorted { lhs, rhs in
                         lhs.bytes == rhs.bytes ? lhs.id < rhs.id : lhs.bytes > rhs.bytes
                     }
-                    let members = ordered.compactMap { result.items[$0.id] }
+                    let members = ordered.compactMap { items[$0.id] }
 
                     return ReviewGroup(
                         id: "\(tier.rawValue)|\(groupID)",

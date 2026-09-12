@@ -31,10 +31,16 @@ public enum CleanupViolation: Sendable, Hashable, CustomStringConvertible {
 /// than trusted. Nothing calls into PhotoKit or `FileManager` until this returns empty.
 public enum CleanupValidator {
 
+    /// `clearedGroupIDs` are groups the user has explicitly asked to remove entirely. They are
+    /// the one case where a group may lose every copy — and it has to be named here, by id,
+    /// having come from a per-group instruction. Nothing the app decides on its own can put an
+    /// id in this set, so the invariant that holds everywhere else is unchanged: a group never
+    /// loses every copy because of something the engine worked out.
     public static func validate(
         selection: Set<String>,
         decisions: [GroupDecision],
-        knownItemIDs: Set<String>
+        knownItemIDs: Set<String>,
+        clearedGroupIDs: Set<String> = []
     ) -> [CleanupViolation] {
 
         var violations: [CleanupViolation] = []
@@ -62,11 +68,14 @@ public enum CleanupValidator {
         }
 
         for decision in decisions {
-            if selection.contains(decision.keeperID) {
+            let cleared = clearedGroupIDs.contains(decision.id)
+
+            if selection.contains(decision.keeperID) && !cleared {
                 violations.append(.keeperSelectedForDeletion(groupID: decision.id, itemID: decision.keeperID))
             }
+
             let allMembers = Set([decision.keeperID] + decision.allCandidates)
-            if allMembers.isSubset(of: selection) {
+            if allMembers.isSubset(of: selection) && !cleared {
                 violations.append(.groupFullyDeleted(groupID: decision.id))
             }
         }
@@ -78,8 +87,14 @@ public enum CleanupValidator {
     public static func isSafe(
         selection: Set<String>,
         decisions: [GroupDecision],
-        knownItemIDs: Set<String>
+        knownItemIDs: Set<String>,
+        clearedGroupIDs: Set<String> = []
     ) -> Bool {
-        validate(selection: selection, decisions: decisions, knownItemIDs: knownItemIDs).isEmpty
+        validate(
+            selection: selection,
+            decisions: decisions,
+            knownItemIDs: knownItemIDs,
+            clearedGroupIDs: clearedGroupIDs
+        ).isEmpty
     }
 }

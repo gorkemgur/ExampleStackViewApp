@@ -20,6 +20,10 @@ final class ReviewViewModel: ObservableObject {
     /// rows that would fail if tapped.
     @Published private(set) var deletedIDs: Set<String> = []
 
+    /// Where the user has overruled the engine: a different survivor, or a group they want gone
+    /// entirely. Keyed by group id.
+    @Published private(set) var overrides: [String: GroupOverride] = [:]
+
     let result: ScanResult
 
     private let allSections: [ReviewSection]
@@ -42,12 +46,60 @@ final class ReviewViewModel: ObservableObject {
     }
 
     var sections: [ReviewSection] {
-        allSections.compactMap { $0.removing(deletedIDs) }
+        guard !overrides.isEmpty else {
+            return allSections.compactMap { $0.removing(deletedIDs) }
+        }
+        return ReviewBuilder
+            .sections(candidates: revisedCandidates, items: result.items)
+            .compactMap { $0.removing(deletedIDs) }
+    }
+
+    /// The decisions as they stand after the user has overruled any of them.
+    var decisions: [GroupDecision] {
+        GroupRevision.apply(overrides, to: result.decisions)
+    }
+
+    /// Groups the user has explicitly asked to remove entirely. The only thing that may empty a
+    /// group, and it can only come from a per-group instruction.
+    var clearedGroupIDs: Set<String> {
+        Set(overrides.filter(\.value.deleteEverything).map(\.key))
+    }
+
+    /// Candidates rebuilt from the revised decisions, plus the survivors of groups the user has
+    /// asked to clear — those become deletable, which is the whole point of asking.
+    private var revisedCandidates: [DeletionCandidate] {
+        let revised = decisions
+        var candidates = TierClassifier.candidates(
+            decisions: revised,
+            groups: result.groups,
+            items: result.items
+        )
+
+        for decision in revised where clearedGroupIDs.contains(decision.id) {
+            guard
+                !candidates.contains(where: { $0.id == decision.keeperID }),
+                let keeper = result.items[decision.keeperID],
+                let tier = candidates.first(where: { $0.groupID == decision.id })?.tier
+            else { continue }
+
+            candidates.append(
+                DeletionCandidate(
+                    id: decision.keeperID,
+                    groupID: decision.id,
+                    keeperID: decision.keeperID,
+                    tier: tier,
+                    bytes: keeper.totalByteSize,
+                    isPreSelected: false
+                )
+            )
+        }
+        return candidates
     }
 
     /// Candidates that still exist.
     var liveCandidates: [DeletionCandidate] {
-        result.candidates.filter { !deletedIDs.contains($0.id) }
+        let source = overrides.isEmpty ? result.candidates : revisedCandidates
+        return source.filter { !deletedIDs.contains($0.id) }
     }
 
     // MARK: - Derived
@@ -61,8 +113,9 @@ final class ReviewViewModel: ObservableObject {
     var violations: [CleanupViolation] {
         CleanupValidator.validate(
             selection: selection.selectedIDs,
-            decisions: result.decisions,
-            knownItemIDs: Set(result.items.keys)
+            decisions: decisions,
+            knownItemIDs: Set(result.items.keys),
+            clearedGroupIDs: clearedGroupIDs
         )
     }
 
@@ -106,6 +159,77 @@ final class ReviewViewModel: ObservableObject {
         selection.setSelected(isSelected, for: group.candidateIDs)
     }
 
+    // MARK: - Overruling the engine
+
+    /// Keeps `id` instead of whatever the scorer chose.
+    ///
+    /// In an exact group every member is interchangeable, so this is free. Anywhere else the
+    /// members were each measured against the seed and against nothing else, so keeping a
+    /// different copy leaves only the seed with direct evidence against it — the rest stop being
+    /// offered rather than being re-parented to a survivor nobody compared them with.
+    func chooseKeeper(_ id: String, inGroup groupID: String) {
+        guard let decision = result.decisions.first(where: { $0.id == groupID }) else { return }
+        guard GroupRevision.members(of: decision).contains(id) else { return }
+
+        var override = overrides[groupID] ?? GroupOverride()
+        override.keeperID = id == decision.keeperID ? nil : id
+        // A group cannot be both "keep this one" and "delete all of it".
+        override.deleteEverything = false
+        overrides[groupID] = override.isEmpty ? nil : override
+
+        pruneSelection()
+    }
+
+    /// What the user has chosen to keep in this group, which is the scored survivor until they
+    /// say otherwise.
+    func keeperID(inGroup groupID: String) -> String? {
+        decisions.first(where: { $0.id == groupID })?.keeperID
+    }
+
+    /// Members no longer offered because the user kept something they were never compared with.
+    func droppedMembers(inGroup groupID: String) -> [String] {
+        guard
+            let override = overrides[groupID],
+            let decision = result.decisions.first(where: { $0.id == groupID })
+        else { return [] }
+        return GroupRevision.droppedMembers(override, of: decision)
+    }
+
+    func isClearingEverything(inGroup groupID: String) -> Bool {
+        overrides[groupID]?.deleteEverything ?? false
+    }
+
+    /// Deletes every copy in a group, survivor included.
+    ///
+    /// Deliberately awkward to reach and impossible to arrive at by accident: no pre-selection,
+    /// no budget plan and no "select all" can turn this on, and it is the only thing in the app
+    /// that may leave a group with nothing.
+    func setClearingEverything(_ isClearing: Bool, inGroup groupID: String) {
+        guard let decision = result.decisions.first(where: { $0.id == groupID }) else { return }
+
+        var override = overrides[groupID] ?? GroupOverride()
+        override.deleteEverything = isClearing
+        overrides[groupID] = override.isEmpty ? nil : override
+
+        let members = GroupRevision.members(of: GroupRevision.apply(override, to: decision))
+        if isClearing {
+            selection.setSelected(true, for: members)
+        } else {
+            selection.setSelected(false, for: [decisions.first(where: { $0.id == groupID })?.keeperID].compactMap { $0 })
+        }
+        pruneSelection()
+    }
+
+    /// Drops ticks for anything that is no longer on offer, so a selection can never outlive the
+    /// decision that justified it.
+    private func pruneSelection() {
+        let offered = Set(liveCandidates.map(\.id))
+        let stale = selection.selectedIDs.subtracting(offered)
+        if !stale.isEmpty {
+            selection.setSelected(false, for: Array(stale))
+        }
+    }
+
     func applyBudgetPlan() {
         selection.replace(with: budgetPlan.selectedIDs)
     }
@@ -126,8 +250,9 @@ final class ReviewViewModel: ObservableObject {
         // passed through UI state to get here.
         let blocking = CleanupValidator.validate(
             selection: Set(ids),
-            decisions: result.decisions,
-            knownItemIDs: Set(result.items.keys)
+            decisions: decisions,
+            knownItemIDs: Set(result.items.keys),
+            clearedGroupIDs: clearedGroupIDs
         )
         guard blocking.isEmpty else {
             failure = DeletionError.unsafeSelection(blocking.map(\.description)).localizedDescription
@@ -161,7 +286,8 @@ final class ReviewViewModel: ObservableObject {
                         deletedIDs: completed.deletedIDs,
                         result: result,
                         savings: sentSavings,
-                        performedAt: Date()
+                        performedAt: Date(),
+                        candidates: liveCandidates
                     )
                 )
             }
