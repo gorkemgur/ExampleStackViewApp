@@ -118,6 +118,23 @@ def scroll_to(identifier, attempts=10):
     return None
 
 
+def dump_tree(reason):
+    """Print what is actually on the screen.
+
+    A failure that says only "this identifier was not there" costs a whole round trip to find
+    out which screen it was looking at, and the artifact holding the screenshot is not always
+    reachable. The log always is.
+    """
+    tree = describe()
+    print(f"--- what was on the screen at {reason}: {len(tree)} elements")
+    for element in tree:
+        identifier = element.get("AXUniqueId")
+        label = element.get("AXLabel")
+        if identifier or label:
+            print(f"    {element.get('type')}: id={identifier!r} label={label!r}")
+    print("--- end")
+
+
 def stage(name):
     print(f"\n=== {name}")
 
@@ -144,19 +161,43 @@ def main():
     # Without this the app draws its permission wall and every screen past it is unreachable —
     # which is the real reason none of this code had ever run.
     granted = run(["xcrun", "simctl", "privacy", UDID, "grant", "photos", BUNDLE_ID])
+    # Printed either way. A silent success and a silent no-op look identical from here, and
+    # which of the two it was decides whether a missing overview is a slow read or a wall.
+    print(f"privacy grant exited {granted.returncode}: "
+          f"{(granted.stdout + granted.stderr).strip()[:200] or '(nothing said)'}")
     if granted.returncode != 0:
-        notes.append(f"privacy grant said: {granted.stderr.strip()[:200]}")
+        notes.append(f"privacy grant exited {granted.returncode}")
 
     stage("launching with no fixtures at all")
     run(["xcrun", "simctl", "terminate", UDID, BUNDLE_ID])
     time.sleep(1)
     # No `-ui-testing`: PhotoKitMediaLibrary, PhotoKitAssetAnalyzer, PhotoKitDeleter.
     run(["xcrun", "simctl", "launch", UDID, BUNDLE_ID])
-    time.sleep(6)
+    time.sleep(4)
 
-    if find(describe(), "storage.headline") is None:
+    # Polled, not looked at once. Every other walk in this repository polls its first look at a
+    # cold simulator and this one did not — it slept six seconds, checked, and called a library
+    # that was still being read "the app did not get past launch". A real PhotoKit fetch and
+    # the inventory behind it take longer than a stub, which is the entire point of this job.
+    #
+    # `access.headline` is in the list because the two outcomes need different answers: a slow
+    # read is worth waiting for, a permission wall means the grant did not take and waiting
+    # will never help.
+    which, _ = wait_for_any(["storage.headline", "access.headline", "library.loading"], timeout=120)
+    if which in (None, "library.loading"):
         shot("00-launch.png")
-        failures.append("the overview never appeared — the app did not get past launch")
+        dump_tree("launch")
+        failures.append(
+            "the overview never appeared — the app did not get past launch"
+            if which is None else
+            "the library was still being read after two minutes"
+        )
+        return report()
+    if which == "access.headline":
+        shot("00-permission-wall.png")
+        failures.append(
+            "the app is showing its permission wall: `simctl privacy grant photos` did not take"
+        )
         return report()
     shot("01-overview.png")
 
