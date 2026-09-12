@@ -172,3 +172,77 @@ final class FileHistoryStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.isEmpty)
     }
 }
+
+final class FileFingerprintCacheTests: XCTestCase {
+
+    private func temporaryURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("fingerprints-\(UUID().uuidString).json")
+    }
+
+    func testWhatWasLearnedSurvivesARelaunch() async {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let first = FileFingerprintCache(fileURL: url)
+        await first.store(digest: ContentDigest(bytes: [1, 2, 3]), for: "a", contentVersion: "v1")
+        await first.store(hashes: PerceptualHashes(dHash: 5, pHash: 6), for: "a", contentVersion: "v1")
+        await first.flush()
+
+        let second = FileFingerprintCache(fileURL: url)
+        let record = await second.record(for: "a")
+
+        XCTAssertEqual(record?.contentVersion, "v1")
+        XCTAssertEqual(record?.digest, ContentDigest(bytes: [1, 2, 3]))
+        XCTAssertEqual(record?.hashes, PerceptualHashes(dHash: 5, pHash: 6))
+    }
+
+    func testNothingIsWrittenUntilItIsFlushed() async {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let cache = FileFingerprintCache(fileURL: url)
+        await cache.store(digest: ContentDigest(bytes: [9]), for: "a", contentVersion: "v1")
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: url.path),
+            "writing the whole file once per fingerprint would cost more than the cache saves"
+        )
+
+        await cache.flush()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testPruningIsPersistedToo() async {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let first = FileFingerprintCache(fileURL: url)
+        await first.store(digest: ContentDigest(bytes: [1]), for: "stays", contentVersion: "v")
+        await first.store(digest: ContentDigest(bytes: [2]), for: "goes", contentVersion: "v")
+        await first.prune(keeping: ["stays"])
+        await first.flush()
+
+        let second = FileFingerprintCache(fileURL: url)
+        let gone = await second.record(for: "goes")
+        let kept = await second.record(for: "stays")
+        XCTAssertNil(gone)
+        XCTAssertNotNil(kept)
+    }
+
+    /// One slow scan is a far better outcome than refusing to scan.
+    func testACorruptFileIsAnEmptyCacheRatherThanAFailure() async {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        try? Data("not json".utf8).write(to: url)
+
+        let cache = FileFingerprintCache(fileURL: url)
+        let record = await cache.record(for: "anything")
+        XCTAssertNil(record)
+
+        await cache.store(digest: ContentDigest(bytes: [1]), for: "a", contentVersion: "v")
+        await cache.flush()
+        let stored = await cache.record(for: "a")
+        XCTAssertNotNil(stored, "a bad file must not leave the cache permanently broken")
+    }
+}

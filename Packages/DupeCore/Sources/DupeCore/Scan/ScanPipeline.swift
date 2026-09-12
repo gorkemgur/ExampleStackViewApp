@@ -111,15 +111,18 @@ public struct ScanPipeline: Sendable {
     private let analyzer: any AssetAnalyzing
     private let configuration: ScanConfiguration
     private let throttle: any ScanThrottling
+    private let pause: any ScanPausing
 
     public init(
         analyzer: any AssetAnalyzing,
         configuration: ScanConfiguration = .default,
-        throttle: any ScanThrottling = SystemThrottle()
+        throttle: any ScanThrottling = SystemThrottle(),
+        pause: any ScanPausing = NeverPaused()
     ) {
         self.analyzer = analyzer
         self.configuration = configuration
         self.throttle = throttle
+        self.pause = pause
     }
 
     public func run(
@@ -429,6 +432,7 @@ public struct ScanPipeline: Sendable {
         guard !elements.isEmpty else { return [] }
         progress(0)
 
+        let pause = self.pause
         var results = [Output?](repeating: nil, count: elements.count)
         let window = max(1, min(limit, elements.count))
 
@@ -440,6 +444,7 @@ public struct ScanPipeline: Sendable {
                 let index = next
                 let element = elements[index]
                 group.addTask {
+                    await pause.waitUntilResumed()
                     let output = await transform(element)
                     return (index, output)
                 }
@@ -457,6 +462,7 @@ public struct ScanPipeline: Sendable {
                     let index = next
                     let element = elements[index]
                     group.addTask {
+                        await pause.waitUntilResumed()
                         let output = await transform(element)
                         return (index, output)
                     }

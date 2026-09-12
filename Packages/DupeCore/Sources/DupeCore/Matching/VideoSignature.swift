@@ -1,7 +1,7 @@
 import Foundation
 
 /// Perceptual hashes of frames sampled at fixed relative positions in a video.
-public struct VideoSignature: Sendable, Hashable {
+public struct VideoSignature: Sendable, Hashable, Codable {
 
     /// Normalised timestamps the frames were taken from, e.g. 0.05, 0.15 ... 0.95.
     /// Spelled out rather than derived with `stride`, whose floating-point accumulation

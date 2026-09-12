@@ -12,7 +12,11 @@ struct ScanView: View {
         self.items = items
         self.history = history
         _model = StateObject(
-            wrappedValue: ScanViewModel(analyzer: AppEnvironment.makeAnalyzer(), history: history)
+            wrappedValue: ScanViewModel(
+                analyzer: AppEnvironment.makeAnalyzer(),
+                history: history,
+                cache: AppEnvironment.fingerprintCache
+            )
         )
     }
 
@@ -101,24 +105,46 @@ struct ScanView: View {
                 ProgressView(value: model.progress?.fraction ?? 0)
                     .animation(.smooth(duration: 0.3), value: model.progress?.fraction)
 
-                Text(countsText)
+                Text(model.isPaused ? "Paused — nothing read so far is lost" : countsText)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(model.isPaused ? Color.orange : Color.secondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("scan.counts")
             }
             .animation(.snappy(duration: 0.3), value: model.progress?.stage)
+            .animation(.snappy(duration: 0.25), value: model.isPaused)
 
-            Button(role: .destructive) {
-                model.cancel()
-            } label: {
-                Text("Cancel")
+            HStack(spacing: 10) {
+                // Pausing keeps everything read so far. Cancelling throws it away, which is
+                // rarely what someone wants when the phone just got warm.
+                Button {
+                    if model.isPaused {
+                        model.resume()
+                    } else {
+                        model.pause()
+                    }
+                } label: {
+                    Label(
+                        model.isPaused ? "Resume" : "Pause",
+                        systemImage: model.isPaused ? "play.fill" : "pause.fill"
+                    )
                     .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .accessibilityIdentifier("scan.pause")
+
+                Button(role: .destructive) {
+                    model.cancel()
+                } label: {
+                    Text("Cancel")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .accessibilityIdentifier("scan.cancel")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .accessibilityIdentifier("scan.cancel")
         }
     }
 

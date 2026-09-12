@@ -4,7 +4,7 @@ import CryptoKit
 #endif
 
 /// A SHA-256 digest of file content.
-public struct ContentDigest: Hashable, Sendable, CustomStringConvertible {
+public struct ContentDigest: Hashable, Sendable, Codable, CustomStringConvertible {
 
     public let bytes: [UInt8]
 

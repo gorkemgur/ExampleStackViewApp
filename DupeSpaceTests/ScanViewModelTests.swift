@@ -118,6 +118,51 @@ final class ScanViewModelTests: XCTestCase {
         XCTAssertTrue(history.log.scans.isEmpty, "a scan that did not finish did not happen")
     }
 
+    func testAHeldScanStopsAdvancingAndThenFinishes() async {
+        let slow = StubAssetAnalyzer(digests: [:], hashes: [:], stepDelay: .milliseconds(40))
+        let model = ScanViewModel(analyzer: slow)
+        model.start(items: StubMediaLibrary.sampleItems())
+
+        model.pause()
+        XCTAssertTrue(model.isPaused)
+
+        // Two readings far enough apart that an unheld scan would certainly have moved on.
+        try? await Task.sleep(for: .milliseconds(400))
+        let first = model.progress
+        try? await Task.sleep(for: .milliseconds(500))
+        let second = model.progress
+
+        XCTAssertEqual(first, second, "a held scan must not advance")
+        XCTAssertTrue(model.isScanning, "a held scan is still a running scan")
+        XCTAssertNil(model.result)
+
+        model.resume()
+        XCTAssertFalse(model.isPaused)
+        await waitUntilFinished(model, timeout: 30)
+
+        XCTAssertNotNil(model.result, "resuming has to finish the work, not discard it")
+    }
+
+    func testCancellingAHeldScanLetsItGo() async {
+        let slow = StubAssetAnalyzer(digests: [:], hashes: [:], stepDelay: .milliseconds(30))
+        let model = ScanViewModel(analyzer: slow)
+        model.start(items: StubMediaLibrary.sampleItems())
+
+        model.pause()
+        model.cancel()
+        await waitUntilFinished(model, timeout: 20)
+
+        XCTAssertFalse(model.isPaused)
+        XCTAssertNil(model.result)
+        XCTAssertNil(model.failure)
+    }
+
+    func testPausingBeforeAnythingRunsDoesNothing() async {
+        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture())
+        model.pause()
+        XCTAssertFalse(model.isPaused, "there is nothing to hold")
+    }
+
     func testCancellingLeavesNoResultAndNoError() async {
         let slow = StubAssetAnalyzer(
             digests: [:],

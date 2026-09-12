@@ -26,12 +26,23 @@ enum AppEnvironment {
         )
     }
 
-    static func makeAnalyzer() -> any AssetAnalyzing {
-        guard !isUITesting else { return StubAssetAnalyzer.uiTestFixture() }
-        return CompositeAssetAnalyzer(
-            photos: PhotoKitAssetAnalyzer(),
-            files: FileAssetAnalyzer(registry: folderRegistry)
+    /// Kept between launches so a second scan does not re-read a library that has not changed.
+    /// UI tests get a fresh one so their assertions describe this run's work.
+    static let fingerprintCache: FileFingerprintCache = isUITesting
+        ? FileFingerprintCache(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("ui-test-fingerprints-\(UUID().uuidString).json")
         )
+        : FileFingerprintCache()
+
+    static func makeAnalyzer() -> any AssetAnalyzing {
+        let base: any AssetAnalyzing = isUITesting
+            ? StubAssetAnalyzer.uiTestFixture()
+            : CompositeAssetAnalyzer(
+                photos: PhotoKitAssetAnalyzer(),
+                files: FileAssetAnalyzer(registry: folderRegistry)
+            )
+        return CachingAnalyzer(base: base, cache: fingerprintCache)
     }
 
     static func makeDeleter() -> MediaDeleting {

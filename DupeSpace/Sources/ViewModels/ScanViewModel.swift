@@ -10,20 +10,25 @@ final class ScanViewModel: ObservableObject {
     @Published private(set) var result: ScanResult?
     @Published private(set) var failure: String?
     @Published private(set) var wasCancelled = false
+    @Published private(set) var isPaused = false
 
     private let analyzer: any AssetAnalyzing
     private let configuration: ScanConfiguration
     private weak var history: (any HistoryRecording)?
     private var task: Task<Void, Never>?
+    private var gate = ScanPauseGate()
+    private let cache: FileFingerprintCache?
 
     init(
         analyzer: any AssetAnalyzing,
         configuration: ScanConfiguration = .default,
-        history: (any HistoryRecording)? = nil
+        history: (any HistoryRecording)? = nil,
+        cache: FileFingerprintCache? = nil
     ) {
         self.analyzer = analyzer
         self.configuration = configuration
         self.history = history
+        self.cache = cache
     }
 
     var hasFinished: Bool { result != nil }
@@ -33,11 +38,13 @@ final class ScanViewModel: ObservableObject {
 
         isScanning = true
         wasCancelled = false
+        isPaused = false
         failure = nil
         result = nil
         progress = ScanProgress(stage: .bucketing, completed: 0, total: items.count)
 
-        let pipeline = ScanPipeline(analyzer: analyzer, configuration: configuration)
+        gate = ScanPauseGate()
+        let pipeline = ScanPipeline(analyzer: analyzer, configuration: configuration, pause: gate)
         let onProgress: @Sendable (ScanProgress) -> Void = { [weak self] update in
             Task { @MainActor in self?.progress = update }
         }
@@ -56,6 +63,14 @@ final class ScanViewModel: ObservableObject {
                         finishedAt: Date()
                     )
                 )
+
+                // Written once the work is done rather than after every fingerprint: fifty
+                // thousand writes of the same file would cost more than the cache saves. The
+                // library's own ids bound it, so items that have gone are forgotten.
+                if let cache = self.cache {
+                    await cache.prune(keeping: Set(items.map(\.id)))
+                    await cache.flush()
+                }
             } catch is CancellationError {
                 self.wasCancelled = true
             } catch {
@@ -65,7 +80,25 @@ final class ScanViewModel: ObservableObject {
         }
     }
 
+    func pause() {
+        guard isScanning, !isPaused else { return }
+        isPaused = true
+        let gate = self.gate
+        Task { await gate.pause() }
+    }
+
+    func resume() {
+        guard isPaused else { return }
+        isPaused = false
+        let gate = self.gate
+        Task { await gate.resume() }
+    }
+
     func cancel() {
+        // Released first: a held scan that is cancelled has to be let go before it can notice.
+        let gate = self.gate
+        Task { await gate.resume() }
+        isPaused = false
         task?.cancel()
         task = nil
     }

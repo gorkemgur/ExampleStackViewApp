@@ -104,6 +104,14 @@ public struct MediaItem: Sendable, Hashable, Identifiable {
     /// True when the user has signalled they care about this item.
     public var isProtected: Bool { isFavorite || albumCount > 0 }
 
+    /// Changes whenever the item's bytes could have. Cheap to compute from metadata the
+    /// library already handed over, which is the point: it decides whether a stored
+    /// fingerprint can be trusted without opening the file to find out.
+    public var contentVersion: String {
+        let modified = Int((modificationDate?.timeIntervalSince1970 ?? 0).rounded())
+        return "\(byteSize)-\(pairedVideoByteSize)-\(pixelWidth)x\(pixelHeight)-\(modified)"
+    }
+
     public var aspectRatio: Double {
         guard pixelHeight > 0 else { return 0 }
         return Double(pixelWidth) / Double(pixelHeight)

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The two 64-bit fingerprints computed for one image.
-public struct PerceptualHashes: Sendable, Hashable {
+public struct PerceptualHashes: Sendable, Hashable, Codable {
 
     public let dHash: UInt64
     public let pHash: UInt64
