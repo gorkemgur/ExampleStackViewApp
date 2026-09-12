@@ -201,7 +201,7 @@ struct StorageWidgetView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(ByteText.compact(entry.snapshot.reclaimableBytes))
                     .font(.headline)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(DS.deep)
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
                 Text(entry.snapshot.losslessBytes > 0 ? "to reclaim, no loss" : "to reclaim")
@@ -223,9 +223,9 @@ struct StorageWidgetView: View {
 
     private var legend: some View {
         HStack(spacing: 10) {
-            legendDot(color: .accentColor, title: "Photos")
-            legendDot(color: Color.secondary.opacity(0.5), title: "Other")
-            legendDot(color: Color(uiColor: .systemGray4), title: "Free")
+            legendDot(color: DS.deep, title: "Photos")
+            legendDot(color: DS.neutral, title: "Other")
+            legendDot(color: DS.well, title: "Free")
         }
     }
 
@@ -240,42 +240,34 @@ struct StorageWidgetView: View {
 }
 
 /// The same proportional bar the app shows, at widget scale.
+///
+/// Literally the same one now. This used to be a second implementation — its own widths, its
+/// own 1.5pt gaps, `.accentColor` and two greys — drawing the identical measurement in a
+/// different shape and different colours from the app's, because `MeterTrack` lived in the app
+/// target and the extension could not see it. The design system moved to `Shared/`; this is a
+/// call site.
 struct CapacityTrack: View {
 
     let snapshot: WidgetSnapshot
     var height: CGFloat = 8
 
     var body: some View {
-        GeometryReader { proxy in
-            HStack(spacing: 1.5) {
-                segment(bytes: min(snapshot.libraryBytes, snapshot.usedCapacity),
-                        total: proxy.size.width,
-                        color: .accentColor)
-                segment(bytes: otherBytes,
-                        total: proxy.size.width,
-                        color: Color.secondary.opacity(0.5))
-                Rectangle().fill(Color.secondary.opacity(0.18))
-            }
-        }
-        .frame(height: height)
-        .clipShape(Capsule())
+        MeterTrack(
+            segments: [
+                MeterTrack.Segment(
+                    id: "library",
+                    value: Double(min(snapshot.libraryBytes, snapshot.usedCapacity)),
+                    color: DS.deep
+                ),
+                MeterTrack.Segment(id: "other", value: Double(otherBytes), color: DS.neutral)
+            ],
+            total: Double(max(snapshot.totalCapacity, 1)),
+            height: height,
+            motion: nil
+        )
     }
 
     private var otherBytes: Int64 {
         max(snapshot.usedCapacity - snapshot.libraryBytes, 0)
-    }
-
-    @ViewBuilder
-    private func segment(bytes: Int64, total: CGFloat, color: Color) -> some View {
-        Rectangle()
-            .fill(color)
-            .frame(width: width(for: bytes, in: total))
-    }
-
-    private func width(for bytes: Int64, in available: CGFloat) -> CGFloat {
-        guard snapshot.totalCapacity > 0, bytes > 0 else { return 0 }
-        let fraction = min(Double(bytes) / Double(snapshot.totalCapacity), 1)
-        // A hairline for something real but tiny, so "40 MB of duplicates" is not nothing.
-        return max(available * fraction, 2)
     }
 }

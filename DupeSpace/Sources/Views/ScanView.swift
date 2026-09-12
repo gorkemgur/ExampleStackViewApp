@@ -38,7 +38,7 @@ struct ScanView: View {
                 }
 
                 if let failure = model.failure {
-                    Card("Scan failed", symbolName: "exclamationmark.triangle", identifier: "scan.failure", rail: DS.tier(.similar)) {
+                    Card("Scan failed", symbolName: "exclamationmark.triangle", identifier: "scan.failure", rail: DS.neutral) {
                         Text(failure)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -74,32 +74,46 @@ struct ScanView: View {
 
     // MARK: - States
 
+    /// The invitation to scan, on the slab.
+    ///
+    /// It was a white card on the pale page, alone above six hundred points of nothing — and it
+    /// offers the same action, with the same two controls, as the panel on the overview, which
+    /// is drawn on the slab. The same act on two adjacent screens was made of two different
+    /// materials.
     private var introCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                Eyebrow("About to read", tint: DS.aqua)
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                Eyebrow("About to read", tint: DS.onSlabAccent)
 
                 Text("Scan \(Counting.items(items.count))")
                     .font(.system(.title2, design: .rounded).weight(.bold))
+                    .foregroundStyle(DS.onSlab)
 
                 Text("Metadata is compared first, so only the handful of items that could possibly match ever get read. Nothing is downloaded from iCloud and nothing is deleted without you saying so.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.onSlab.opacity(0.68))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Picker("How alike counts as a copy", selection: $model.strictness) {
-                    ForEach(ScanStrictness.allCases, id: \.self) { level in
-                        Text(level.title).tag(level)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("scan.strictness")
+                // Strict → Balanced → Loose is a scale too, and the direction matters: each
+                // step further along accepts more as a copy. The track says how far.
+                ReachPicker<ScanStrictness>(
+                    selection: $model.strictness,
+                    options: ScanStrictness.allCases.map { level in
+                        ReachPicker<ScanStrictness>.Option(
+                            value: level,
+                            title: level.title,
+                            color: DS.tierVivid(level.reach)
+                        )
+                    },
+                    identifier: "scan.strictness",
+                    onSlab: true
+                )
 
                 Text(model.strictness.explanation)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.onSlab.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
                     .id(model.strictness)
                     .transition(.opacity)
@@ -115,6 +129,7 @@ struct ScanView: View {
             .buttonStyle(.key)
             .accessibilityIdentifier("scan.start")
         }
+        .dsSlab()
     }
 
     private var progressCard: some View {
@@ -123,7 +138,10 @@ struct ScanView: View {
                 Text(ScanCopy.title(for: model.progress?.stage ?? .bucketing))
                     .font(.system(.headline, design: .rounded))
                     .fixedSize(horizontal: false, vertical: true)
-                    .transition(.blurReplace)
+                    // Not `.blurReplace`. `Card` argues two files away that a blurred card
+                    // reads as a rendering fault rather than as a transition, and that applies
+                    // just as well to the line telling you what the scan is doing.
+                    .transition(.opacity)
                     .id(model.progress?.stage ?? .bucketing)
                     .accessibilityIdentifier("scan.stage")
 
@@ -134,11 +152,12 @@ struct ScanView: View {
                         MeterTrack.Segment(
                             id: "progress",
                             value: model.progress?.fraction ?? 0,
-                            color: model.isPaused ? DS.tier(.burstLeftover) : DS.aqua
+                            color: model.isPaused ? DS.tier(.burstLeftover) : DS.brandBottom
                         )
                     ],
                     total: 1,
-                    height: 8
+                    height: 8,
+                    motion: Motion.readout
                 )
                 .accessibilityElement()
                 .accessibilityLabel("Scan progress")
@@ -193,11 +212,11 @@ struct ScanView: View {
         let summaries = result.tierSummaries
 
         if summaries.isEmpty {
-            Card(rail: DS.tier(.inferiorCopy)) {
+            Card(rail: DS.deep) {
                 VStack(alignment: .leading, spacing: 8) {
                     Image(systemName: "checkmark.seal")
                         .font(.title)
-                        .foregroundStyle(DS.tier(.inferiorCopy))
+                        .foregroundStyle(DS.deep)
                         .symbolEffect(.bounce, value: hasSettled)
                         .onAppear { hasSettled = true }
                     Text("No duplicates found")
@@ -241,9 +260,9 @@ struct ScanView: View {
     private func resultsHeadline(_ result: ScanResult) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Eyebrow("What the scan found", tint: DS.brandBottom)
+                Eyebrow("What the scan found", tint: DS.onSlabAccent)
 
-                Readout.bytes(result.reclaimableBytes, tint: DS.brandBottom)
+                Readout.bytes(result.reclaimableBytes, tint: DS.onSlabAccent)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .accessibilityIdentifier("scan.total")
@@ -275,16 +294,7 @@ struct ScanView: View {
             .buttonStyle(.key)
             .accessibilityIdentifier("scan.review")
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(DS.slab)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .environment(\.colorScheme, .dark)
+        .dsSlab()
     }
 
     /// Files whose names say "copy" but whose contents do not match.

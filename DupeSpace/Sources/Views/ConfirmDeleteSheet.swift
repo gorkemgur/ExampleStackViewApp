@@ -35,7 +35,7 @@ struct ConfirmDeleteSheet: View {
                             "Nothing was deleted",
                             symbolName: "exclamationmark.triangle",
                             identifier: "confirm.failure",
-                            rail: DS.tier(.similar)
+                            rail: DS.neutral
                         ) {
                             Text(failure)
                                 .font(.footnote)
@@ -83,7 +83,7 @@ struct ConfirmDeleteSheet: View {
                 Text("Delete \(Counting.items(model.selection.count))")
             }
         }
-        .buttonStyle(.key(.red, enabled: model.canDelete))
+        .buttonStyle(.key(DS.destructive, enabled: model.canDelete))
         .disabled(!model.canDelete)
         .padding(16)
         .background(.regularMaterial, ignoresSafeAreaEdges: .bottom)
@@ -95,9 +95,9 @@ struct ConfirmDeleteSheet: View {
     /// as measurements of the same thing.
     private var headline: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Eyebrow("Comes back to this device", tint: DS.aqua)
+            Eyebrow("Comes back to this device", tint: DS.deep)
 
-            Readout.bytes(model.savings.onDeviceBytes, tint: DS.aqua)
+            Readout.bytes(model.savings.onDeviceBytes, tint: DS.deep)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .contentTransition(.numericText())

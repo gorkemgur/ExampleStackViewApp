@@ -36,7 +36,7 @@ struct HistoryView: View {
                     Button("Clear", role: .destructive) {
                         confirmingClear = true
                     }
-                    .tint(.red)
+                    .tint(DS.deep)
                     .accessibilityIdentifier("history.clear")
                 }
             }
@@ -82,9 +82,9 @@ struct HistoryView: View {
     /// page for the same reason: it is the headline of the screen, not one section of it.
     private var lifetimeCard: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Eyebrow("Reclaimed with DupeSpace", tint: DS.aqua)
+            Eyebrow("Reclaimed with DupeSpace", tint: DS.deep)
 
-            Readout.bytes(history.totalReclaimedBytes, tint: DS.aqua)
+            Readout.bytes(history.totalReclaimedBytes, tint: DS.deep)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .contentTransition(.numericText())
@@ -160,7 +160,7 @@ struct HistoryView: View {
     }
 
     private func deletionCard(_ record: DeletionRecord, entryID: String) -> some View {
-        Card(rail: DS.aqua) {
+        Card(rail: DS.deep) {
             VStack(alignment: .leading, spacing: 12) {
                 Button {
                     withAnimation(Motion.content) {
@@ -172,7 +172,7 @@ struct HistoryView: View {
                     }
                 } label: {
                     HStack(alignment: .top, spacing: 12) {
-                        badge(symbol: "trash", tint: DS.aqua)
+                        badge(symbol: "trash", tint: DS.deep)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Removed \(Counting.items(record.itemCount)) · \(ByteFormatting.string(record.reclaimedBytes))")

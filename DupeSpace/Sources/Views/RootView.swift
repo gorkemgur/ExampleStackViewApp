@@ -182,7 +182,7 @@ struct RootView: View {
     private var scanEntryPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 7) {
-                Eyebrow("The regret ladder", tint: DS.brandBottom)
+                Eyebrow("The regret ladder", tint: DS.onSlabAccent)
 
                 Text("Find what you can lose least")
                     .font(.system(.title2, design: .rounded).weight(.bold))
@@ -205,16 +205,7 @@ struct RootView: View {
             .buttonStyle(.key)
             .accessibilityIdentifier("root.scan")
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(DS.slab)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .environment(\.colorScheme, .dark)
+        .dsSlab()
     }
 
     /// Four rungs, cheapest at the bottom of the cost scale and dearest at the top. The colours
@@ -262,7 +253,7 @@ struct RootView: View {
             "Could not read the library",
             symbolName: "exclamationmark.triangle",
             identifier: "library.failure",
-            rail: DS.tier(.similar)
+            rail: DS.neutral
         ) {
             Text(message)
                 .font(.footnote)

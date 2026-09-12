@@ -66,9 +66,9 @@ struct CompareSliderView: View {
             }
 
             HStack(spacing: 8) {
-                chip("Keeping", tint: DS.tier(.inferiorCopy))
+                chip("Keeping", tint: DS.deep)
                 Spacer(minLength: 0)
-                chip("This copy", tint: DS.tier(.burstLeftover))
+                chip("This copy", tint: DS.neutral)
             }
             .accessibilityHidden(true)
         }

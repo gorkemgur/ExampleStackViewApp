@@ -97,10 +97,10 @@ struct RunningTotal: View {
                 .monospacedDigit()
         }
         .font(.caption2.weight(.semibold))
-        .foregroundStyle(.green)
+        .foregroundStyle(DS.brandBottom)
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
-        .background(Color.green.opacity(0.15), in: Capsule())
+        .background(DS.brandBottom.opacity(0.15), in: Capsule())
     }
 }
 
@@ -132,29 +132,44 @@ struct ScanProgressTrack: View {
             }
         }
         .frame(height: height)
-        .animation(Motion.content, value: state.fraction)
+        // `Motion.readout`, not `content`: this is pushed from a throttled Live Activity
+        // update, and a 0.32s spring given a new value on every push never settles.
+        .animation(Motion.readout, value: state.fraction)
     }
 }
 
+/// The live surfaces, in the app's own colours.
+///
+/// These were nine stock SwiftUI colours — cyan, blue, orange, yellow, green, mint, teal, red,
+/// gray — on the two surfaces a person sees most often and least closely: a Lock Screen at
+/// arm's length and a Dynamic Island the size of a thumbnail. Worse, `scanning` was
+/// `[.cyan, .blue]`: the icon's gradient reversed and desaturated, so the activity under the
+/// clock was a different blue-to-teal from the icon on the Home Screen above it.
+///
+/// Four states, four meanings, and each one already has a colour in this app.
 enum ScanPalette {
 
     static func tint(for state: LiveScanState) -> Color {
         switch state.phase {
-        case .scanning: return .cyan
-        case .paused: return .orange
-        case .finished: return state.foundSomething ? .green : .mint
-        case .cancelled: return .secondary
-        case .failed: return .red
+        case .scanning: return DS.brandBottom
+        case .paused: return DS.tier(.burstLeftover)
+        case .finished: return state.foundSomething ? DS.brandBottom : DS.onSlabAccent
+        case .cancelled: return DS.neutral
+        case .failed: return DS.destructive
         }
     }
 
     static func gradient(for state: LiveScanState) -> [Color] {
         switch state.phase {
-        case .scanning: return [.cyan, .blue]
-        case .paused: return [.orange, .yellow]
-        case .finished: return state.foundSomething ? [.green, .mint] : [.mint, .teal]
-        case .cancelled: return [.gray, .gray]
-        case .failed: return [.red, .orange]
+        // The icon's own order, top stop first. Not reversed.
+        case .scanning: return [DS.brandTop, DS.brandBottom]
+        case .paused: return [DS.tier(.burstLeftover), DS.tier(.burstLeftover).opacity(0.7)]
+        case .finished:
+            return state.foundSomething
+                ? [DS.brandTop, DS.brandBottom]
+                : [DS.onSlabAccent, DS.brandBottom]
+        case .cancelled: return [DS.neutral, DS.neutral]
+        case .failed: return [DS.destructive, DS.destructive.opacity(0.7)]
         }
     }
 }

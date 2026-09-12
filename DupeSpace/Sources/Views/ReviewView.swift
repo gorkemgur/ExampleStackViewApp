@@ -35,7 +35,7 @@ struct ReviewView: View {
                 }
 
                 if let failure = model.failure, model.outcome == nil {
-                    Card("Nothing was deleted", symbolName: "exclamationmark.triangle", identifier: "review.failure.title", rail: DS.tier(.similar)) {
+                    Card("Nothing was deleted", symbolName: "exclamationmark.triangle", identifier: "review.failure.title", rail: DS.neutral) {
                         Text(failure)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -103,7 +103,7 @@ struct ReviewView: View {
             "Nothing left to review",
             symbolName: "checkmark.seal",
             identifier: "review.finished",
-            rail: DS.aqua
+            rail: DS.deep
         ) {
             Text("Everything this scan found has been dealt with. Scan again when the library has changed.")
                 .font(.footnote)
@@ -118,10 +118,10 @@ struct ReviewView: View {
     private var budgetSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Eyebrow("I need", tint: DS.brandBottom)
+                Eyebrow("I need", tint: DS.onSlabAccent)
 
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Readout.bytes(Int64(model.budgetBytes), tint: DS.brandBottom)
+                    Readout.bytes(Int64(model.budgetBytes), tint: DS.onSlabAccent)
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -145,13 +145,20 @@ struct ReviewView: View {
 
             reachRamp
 
-            Picker("How far to go", selection: $model.budgetDepth) {
-                Text("No loss").tag(RegretTier.inferiorCopy)
-                Text("+ bursts").tag(RegretTier.burstLeftover)
-                Text("+ similar").tag(RegretTier.similar)
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("budget.depth")
+            // The depth is a position on the ladder, so it is drawn as one: the track fills in
+            // the ladder's own colours up to the rung the plan is allowed to reach. Two bars on
+            // this slab used to say the same thing in two shapes — a reach ramp and a stock
+            // segmented control — and one of them was grey on grey.
+            ReachPicker<RegretTier>(
+                selection: $model.budgetDepth,
+                options: [
+                    ReachPicker<RegretTier>.Option(value: .inferiorCopy, title: "No loss", color: DS.tierVivid(.inferiorCopy)),
+                    ReachPicker<RegretTier>.Option(value: .burstLeftover, title: "+ bursts", color: DS.tierVivid(.burstLeftover)),
+                    ReachPicker<RegretTier>.Option(value: .similar, title: "+ similar", color: DS.tierVivid(.similar))
+                ],
+                identifier: "budget.depth",
+                onSlab: true
+            )
 
             Text(planSummary)
                 .font(.caption)
@@ -171,16 +178,7 @@ struct ReviewView: View {
                 .foregroundStyle(DS.onSlab.opacity(0.5))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(DS.slab)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .environment(\.colorScheme, .dark)
+        .dsSlab()
     }
 
     /// What each rung of the ladder is worth, and how far the current setting is allowed to
@@ -338,10 +336,13 @@ struct ReviewView: View {
                     model.setSelected(selected < all, in: group)
                 }
             } label: {
+                // No bounce. It fired on every checkbox, so ticking thirty groups was thirty
+                // pieces of decoration on a screen about choices that cannot be taken back.
+                // The symbol changing is the feedback.
                 Image(systemName: boxSymbol(selected: selected, of: all))
                     .font(.title3)
                     .foregroundStyle(selected > 0 ? tint : Color.secondary)
-                    .symbolEffect(.bounce, value: selected)
+                    .contentTransition(.symbolEffect(.replace))
                     .frame(width: 46, height: 46)
                     .contentShape(Rectangle())
             }
@@ -397,13 +398,13 @@ struct ReviewView: View {
 
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Eyebrow("You get back", tint: model.canDelete ? actionTint : Color.secondary)
+                    Eyebrow("You get back", tint: model.canDelete ? DS.deep : Color.secondary)
 
                     Readout.bytes(
                         model.savings.onDeviceBytes,
                         scale: .title,
                         unitScale: .subheadline,
-                        tint: model.canDelete ? actionTint : Color.secondary
+                        tint: model.canDelete ? DS.deep : Color.secondary
                     )
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -431,7 +432,15 @@ struct ReviewView: View {
                     }
                     .padding(.horizontal, 16)
                 }
-                .buttonStyle(.key(actionTint, enabled: model.canDelete, expands: false))
+                // The app's own action, in the app's own colour.
+                //
+                // This used to be `actionTint` — the deepest selected tier — so the most
+                // consequential button in the product was green on the review screen and red
+                // one tap later on the confirmation, and neither hue was the colour of
+                // anything else this app does. What the selection costs is already said three
+                // times in this dock; it is said once now, on the meter above, where a
+                // proportion belongs.
+                .buttonStyle(.key(enabled: model.canDelete, expands: false))
                 .disabled(!model.canDelete)
                 .accessibilityIdentifier("review.delete")
             }
@@ -444,8 +453,8 @@ struct ReviewView: View {
         .background(.regularMaterial, ignoresSafeAreaEdges: .bottom)
     }
 
-    /// The dearest rung the selection reaches into. Nothing selected reads as the brand's teal —
-    /// the colour of a deletion that costs nothing, which is where the app always starts.
+    /// The dearest rung the selection reaches into. Drawn on the meter and nowhere else: it is
+    /// a reading about the selection, not the identity of the button beside it.
     private var actionTint: Color {
         DS.tier(model.deepestSelectedTier ?? .identical)
     }
@@ -453,13 +462,16 @@ struct ReviewView: View {
     // MARK: - Outcome
 
     private func outcomeSection(_ outcome: DeletionOutcome) -> some View {
-        Card(rail: DS.tier(.inferiorCopy)) {
+        // Not `tier(.inferiorCopy)`. Green was doing three jobs in this app — a rung of the
+        // ladder, "it worked", and "this is the copy that stays" — and a hue that means three
+        // things means none of them.
+        Card(rail: DS.deep) {
             VStack(alignment: .leading, spacing: 8) {
                 Label {
                     Text("\(Counting.items(outcome.deletedCount)) removed")
                 } icon: {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(DS.tier(.inferiorCopy))
+                        .foregroundStyle(DS.deep)
                 }
                 .font(.system(.headline, design: .rounded))
                 .accessibilityIdentifier("review.result")

@@ -49,6 +49,20 @@ public enum ScanStrictness: Int, Sendable, Hashable, Codable, CaseIterable {
         }
     }
 
+    /// The rung of the regret ladder this level reaches to.
+    ///
+    /// Not a cosmetic mapping: a strict scan only offers what it can class as an all-but-exact
+    /// copy, and each step out accepts pairs that cost the user more judgement. It lets the
+    /// control that sets this be drawn in the same colours as the one that spends it, so the
+    /// two scales on two screens are visibly the same scale.
+    public var reach: RegretTier {
+        switch self {
+        case .strict: return .identical
+        case .balanced: return .burstLeftover
+        case .loose: return .similar
+        }
+    }
+
     public var explanation: String {
         switch self {
         case .strict:

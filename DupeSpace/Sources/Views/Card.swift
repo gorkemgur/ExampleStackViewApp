@@ -46,11 +46,11 @@ struct Card<Content: View>: View {
                         if let symbolName {
                             Image(systemName: symbolName)
                                 .font(.caption2.weight(.bold))
-                                .foregroundStyle(rail ?? DS.aqua)
+                                .foregroundStyle(rail ?? DS.deep)
                                 .frame(width: 22, height: 22)
                                 .background(
                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .fill((rail ?? DS.aqua).opacity(0.14))
+                                        .fill((rail ?? DS.deep).opacity(0.14))
                                 )
                         }
                         Text(title)

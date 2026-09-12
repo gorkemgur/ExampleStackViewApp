@@ -8,7 +8,7 @@ struct GroupRowView: View {
     let group: ReviewGroup
     let selectedCount: Int
     /// The rung's colour, so a row never has to explain which tier it belongs to.
-    var tint: Color = DS.aqua
+    var tint: Color = DS.deep
     let loader: any ThumbnailLoading
 
     var body: some View {
@@ -20,7 +20,7 @@ struct GroupRowView: View {
                 // copy that stays, and the row is otherwise about what goes.
                 Image(systemName: "checkmark.seal.fill")
                     .font(.caption2)
-                    .foregroundStyle(.white, DS.tier(.inferiorCopy))
+                    .foregroundStyle(.white, DS.deep)
                     .padding(3)
             }
 

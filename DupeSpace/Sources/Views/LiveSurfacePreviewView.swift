@@ -85,7 +85,7 @@ struct LiveSurfacePreviewView: View {
                 VStack(spacing: 28) {
                     ForEach(Array(states.enumerated()), id: \.offset) { _, entry in
                         VStack(alignment: .leading, spacing: 10) {
-                            Eyebrow(entry.0, tint: DS.aqua)
+                            Eyebrow(entry.0, tint: DS.deep)
 
                             LockScreenMock(state: entry.1)
 

@@ -71,7 +71,7 @@ struct FoldersCardView: View {
                 // Removing a grant is destructive and was drawn as decoration: a grey glyph in
                 // a 22pt box. Red, and a finger wide.
                 Image(systemName: "minus.circle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(DS.deep)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }

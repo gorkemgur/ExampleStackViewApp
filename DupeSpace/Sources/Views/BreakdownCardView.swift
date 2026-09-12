@@ -6,15 +6,26 @@ struct BreakdownCardView: View {
     let breakdown: [CategoryBreakdown]
     let totalBytes: Int64
 
-    /// Five hues walked round from the brand's blue rather than five system colours: this is
-    /// a categorical scale, so what matters is that no two neighbours collide at a glance.
-    private static let categoryColors: [CategoryBreakdown.Category: Color] = [
-        .photos: DS.deep,
-        .videos: Color(dsRGB: 0x7A5CF0),
-        .screenshots: Color(dsRGB: 0xC77B12),
-        .livePhotos: DS.aqua,
-        .documents: Color(dsRGB: 0x8A7A6B)
-    ]
+    /// One hue, five steps.
+    ///
+    /// This used to claim to be "five hues walked round from the brand's blue". A violet at
+    /// 258 degrees and a twelve-per-cent-saturation taupe are not walked round from 210, and
+    /// the ochre landed within eight degrees of `tier(.burstLeftover)` — so a chip for
+    /// screenshots and a rail meaning "a burst you probably do not want" were the same colour
+    /// saying different things. That violet bar was the loudest arbitrary colour in the app.
+    ///
+    /// The bar is sorted, so this is an ordered quantity rather than five unrelated
+    /// categories, and an ordered quantity is a ramp. The card now reads as one library split
+    /// five ways instead of as five apps' icons in a row.
+    private static func color(for category: CategoryBreakdown.Category) -> Color {
+        switch category {
+        case .photos: return DS.adaptive(light: 0x0A6FE0, dark: 0x3DA1FF)
+        case .videos: return DS.adaptive(light: 0x3D91E8, dark: 0x6FB8FF)
+        case .screenshots: return DS.adaptive(light: 0x6FAEEF, dark: 0x96CBFF)
+        case .livePhotos: return DS.adaptive(light: 0xA0CAF5, dark: 0xBCDDFF)
+        case .documents: return DS.adaptive(light: 0xCFE3FA, dark: 0xDCEEFF)
+        }
+    }
 
     var body: some View {
         Card("What it is made of", symbolName: "chart.pie", identifier: "breakdown.title") {
@@ -36,7 +47,7 @@ struct BreakdownCardView: View {
             CapacityBar.Segment(
                 id: $0.id,
                 bytes: $0.bytes,
-                color: Self.categoryColors[$0.category] ?? .gray
+                color: Self.color(for: $0.category)
             )
         }
     }
@@ -50,7 +61,7 @@ struct BreakdownCardView: View {
                 .frame(width: 28, height: 28)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Self.categoryColors[entry.category] ?? .gray)
+                        .fill(Self.color(for: entry.category))
                 )
 
             VStack(alignment: .leading, spacing: 2) {

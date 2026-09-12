@@ -135,7 +135,10 @@ struct GroupDetailView: View {
 
     @ViewBuilder
     private func clearEverythingSection(_ groupID: String) -> some View {
-        Card(rail: DS.tier(.similar)) {
+        // The one card in the app that carries the destructive colour without destroying
+        // anything: it arms the choice, and the red key that acts on it is still two screens
+        // away. The rail says what this is about; the fill does not pretend to be the act.
+        Card(rail: DS.destructive) {
             if model.isClearingEverything(inGroup: groupID) {
                 Label("Every copy in this group is selected, including the one that was staying.", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
@@ -153,7 +156,7 @@ struct GroupDetailView: View {
                 } label: {
                     Label("Delete every copy in this group", systemImage: "trash")
                 }
-                .buttonStyle(KeyButtonStyle(fill: AnyShapeStyle(DS.well), foreground: .red))
+                .buttonStyle(KeyButtonStyle(fill: AnyShapeStyle(DS.well), foreground: DS.destructive))
                 .accessibilityIdentifier("group.deleteall")
             }
 
