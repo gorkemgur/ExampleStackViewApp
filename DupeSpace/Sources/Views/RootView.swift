@@ -4,6 +4,9 @@ import DupeCore
 
 struct RootView: View {
 
+    /// Set by a link from the Live Activity or the widget. Consumed once, then cleared.
+    @Binding var pendingLink: DeepLink?
+
     @EnvironmentObject private var history: HistoryViewModel
     @StateObject private var model = OverviewViewModel(
         library: AppEnvironment.makeLibrary(),
@@ -12,9 +15,14 @@ struct RootView: View {
     )
     @State private var pickingFolder = false
     @State private var showingLiveSurfaces = false
+    @State private var path = NavigationPath()
+
+    init(pendingLink: Binding<DeepLink?> = .constant(nil)) {
+        _pendingLink = pendingLink
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: 16) {
                     if let snapshot = model.storage {
@@ -77,6 +85,11 @@ struct RootView: View {
             .refreshable {
                 await model.refresh()
             }
+            .navigationDestination(for: DeepLink.self) { link in
+                switch link {
+                case .scan: ScanView(items: model.items, history: history)
+                }
+            }
             .toolbar {
                 // The Lock Screen and the Dynamic Island cannot be walked to on a simulator, so
                 // under test the app renders those same views itself and the walk photographs
@@ -95,6 +108,14 @@ struct RootView: View {
         .task {
             await model.refresh()
             model.beginObservingLibrary()
+        }
+        .onChange(of: pendingLink) { _, link in
+            guard let link else { return }
+            // Replace rather than stack: two taps on the Live Activity must not leave two scan
+            // screens on top of each other.
+            path = NavigationPath()
+            path.append(link)
+            pendingLink = nil
         }
         .fileImporter(
             isPresented: $pickingFolder,

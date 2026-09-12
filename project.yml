@@ -41,6 +41,10 @@ targets:
         CFBundleShortVersionString: "0.1"
         CFBundleVersion: "1"
         UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.gorkemgur.dupespace
+            CFBundleURLSchemes:
+              - dupespace
         NSSupportsLiveActivities: true
         NSSupportsLiveActivitiesFrequentUpdates: false
         UISupportedInterfaceOrientations:

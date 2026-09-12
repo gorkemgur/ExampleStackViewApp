@@ -78,6 +78,21 @@ final class LaunchUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["DupeSpace"].waitForExistence(timeout: 10))
     }
 
+    /// The Live Activity and the widget both link here. A link that opens the app and then
+    /// leaves you on whatever screen you left is worse than no link at all.
+    func testTheScanLinkOpensTheScanScreen() {
+        XCTAssertTrue(app.staticTexts["storage.headline"].waitForExistence(timeout: 30))
+
+        // The system opens it, exactly as the Lock Screen would: this exercises the real
+        // scheme registration, not an internal shortcut.
+        XCUIDevice.shared.system.open(URL(string: "dupespace://scan")!)
+
+        XCTAssertTrue(
+            app.buttons["scan.start"].waitForExistence(timeout: 20),
+            "the scan link did not reach the scan screen"
+        )
+    }
+
     /// One scroll to the bottom, checking everything that lives below the fold on the way.
     func testEverythingBelowTheFoldIsReachable() {
         XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))

@@ -12,6 +12,12 @@ protocol ScanActivityPresenting: AnyObject {
     func start(libraryItemCount: Int, state: LiveScanState)
     func update(_ state: LiveScanState)
     func finish(_ state: LiveScanState)
+    /// Clears anything left behind by a previous run of the app.
+    func clearOrphans()
+}
+
+extension ScanActivityPresenting {
+    func clearOrphans() {}
 }
 
 /// The Lock Screen and Dynamic Island presentation of a running scan.
@@ -47,7 +53,11 @@ final class LiveScanActivityController: ScanActivityPresenting {
         do {
             activity = try Activity.request(
                 attributes: ScanActivityAttributes(libraryItemCount: libraryItemCount),
-                content: ActivityContent(state: .init(state), staleDate: nil),
+                // A stale date from the first moment. The app is suspended the instant it goes
+                // to the background, so a scan that is never returned to stops being updated
+                // with no chance to say so; the system then dims the activity rather than
+                // presenting a frozen percentage as live.
+                content: ActivityContent(state: .init(state), staleDate: staleDate(from: clock())),
                 pushType: nil
             )
             lastPublished = state
@@ -71,8 +81,38 @@ final class LiveScanActivityController: ScanActivityPresenting {
 
         Task {
             await activity.update(
-                ActivityContent(state: .init(state), staleDate: now.addingTimeInterval(60 * 5))
+                ActivityContent(state: .init(state), staleDate: staleDate(from: now))
             )
+        }
+    }
+
+    /// How long a figure on the Lock Screen may be presented as current before the system
+    /// should treat it as out of date.
+    private func staleDate(from now: Date) -> Date {
+        now.addingTimeInterval(5 * 60)
+    }
+
+    /// Ends any activity left over from a previous launch.
+    ///
+    /// If the app is force-quit mid-scan, its Live Activity survives the process that owned it
+    /// and sits on the Lock Screen reporting a scan that is no longer running. Nothing else
+    /// will ever clear it, so the next launch does.
+    func clearOrphans() {
+        for orphan in Activity<ScanActivityAttributes>.activities where orphan.id != activity?.id {
+            let last = orphan.content.state.scan
+            let stopped = LiveScanState(
+                phase: .cancelled,
+                stage: last.stage,
+                completed: last.completed,
+                total: last.total,
+                startedAt: last.startedAt
+            )
+            Task {
+                await orphan.end(
+                    ActivityContent(state: .init(stopped), staleDate: nil),
+                    dismissalPolicy: .immediate
+                )
+            }
         }
     }
 

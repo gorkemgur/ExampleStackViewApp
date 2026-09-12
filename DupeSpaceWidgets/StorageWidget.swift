@@ -44,6 +44,7 @@ struct StorageWidget: Widget {
         StaticConfiguration(kind: "DupeSpaceStorage", provider: StorageProvider()) { entry in
             StorageWidgetView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
+                .widgetURL(DeepLink.scan.url)
         }
         .configurationDisplayName("Space")
         .description("What your storage looks like, and what the last scan found you could remove.")

@@ -92,7 +92,7 @@ struct ScanLiveActivity: Widget {
                 .animation(Motion.content, value: scan.fraction)
                 .accessibilityLabel(scan.accessibilityDescription)
             }
-            .widgetURL(URL(string: "dupespace://scan"))
+            .widgetURL(DeepLink.scan.url)
             .keylineTint(ScanPalette.tint(for: scan))
         }
     }

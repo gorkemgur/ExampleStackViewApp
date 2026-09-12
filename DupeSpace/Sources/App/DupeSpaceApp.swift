@@ -9,6 +9,12 @@ struct DupeSpaceApp: App {
         WindowGroup {
             AppShell()
                 .environmentObject(history)
+                .task {
+                    // A scan whose app was force-quit leaves its Live Activity on the Lock
+                    // Screen, reporting progress that will never move again. Nothing else will
+                    // clear it, so the next launch does.
+                    AppEnvironment.makeScanActivity()?.clearOrphans()
+                }
         }
     }
 }
