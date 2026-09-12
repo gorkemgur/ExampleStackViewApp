@@ -277,8 +277,13 @@ final class ReviewViewModel: ObservableObject {
         failure = nil
 
         // Captured before the selection is cleared: the receipt describes what was sent,
-        // not what is left.
+        // not what is left. The candidate list has to be captured here too — `liveCandidates`
+        // excludes everything already deleted, and by the time the receipt is written that is
+        // exactly the items it needs to describe. Reading it afterwards left every line with no
+        // candidate to look up: no keeper name, and a tier defaulting to the riskiest one, so a
+        // receipt for three identical copies claimed three judgement calls.
         let sentSavings = SavingsCalculator.breakdown(for: Set(ids), items: result.items)
+        let sentCandidates = liveCandidates
 
         // What each file looked like when it was scanned. The deleter refuses anything that no
         // longer matches, because a file can be replaced between the scan and the tap and
@@ -301,7 +306,7 @@ final class ReviewViewModel: ObservableObject {
                         result: result,
                         savings: sentSavings,
                         performedAt: Date(),
-                        candidates: liveCandidates
+                        candidates: sentCandidates
                     )
                 )
             }

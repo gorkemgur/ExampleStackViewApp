@@ -307,6 +307,14 @@ final class ReviewViewModelTests: XCTestCase {
         )
         XCTAssertEqual(receipt.judgementCallCount, 0, "the safe default deletes nothing risky")
         XCTAssertGreaterThan(receipt.reclaimedBytes, 0)
+
+        // The regression this caught: the receipt was being written from the candidate list as
+        // it stood *after* the deletion, which no longer contains what was deleted. Every line
+        // then lost its keeper and defaulted to the riskiest tier.
+        XCTAssertTrue(
+            receipt.items.allSatisfy { $0.keptInsteadName != "another copy" },
+            "each line should name the copy that survived, not a placeholder"
+        )
     }
 
     func testACancelledDeletionLeavesNoReceipt() async {
