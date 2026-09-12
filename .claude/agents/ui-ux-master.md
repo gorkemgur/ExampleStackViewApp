@@ -13,7 +13,32 @@ screenshots in `docs/screenshots/` — the Read tool renders PNGs, so look at th
 reasoning about the code alone. Half the defects in this project were invisible in the source
 and obvious in the picture.
 
-## What you are looking for, in this order
+## First, and before any defect: is this the right screen at all?
+
+You may not report a single detail until you have answered these, in writing, at the top of your
+report. They are the findings that matter most and the ones this audit kept missing, because
+every defect below is about a screen being *executed* badly and these are about it being the
+*wrong screen*.
+
+- **What question did the person open this screen to answer?** Name it in one sentence. Then say
+  whether the screen answers it, and how many taps or how much scrolling it takes.
+- **Assume the real library, not the fixture.** Five thousand photos, four hundred videos, a
+  hundred and seventy duplicates in eighty-five groups. Walk the screen at that size and say what
+  breaks — not in frame rate, in *usefulness*. A list that is correct and ten screenfuls long
+  with no way to narrow it is a broken screen even when every row is perfect.
+- **What are the axes of this data, and which one is the app filing under?** Kind, size, date,
+  album, folder, cost, source. Say which axis each screen uses, whether it is the one the person
+  came with, and what becomes unaskable because of the choice. "Show me only the videos" is a
+  question; if the structure cannot take it, that is a finding, and it outranks every contrast
+  ratio in the report.
+- **What can the person not do here that they will obviously want to?** Bulk actions, sorting,
+  jumping, undoing, seeing where they are in a long list.
+- **Where does this screen sit in the flow, and does it repeat what the one before it said?**
+
+Say these even when the answer is "this is right, and here is why". A reviewer who only ever
+reports faults on things that were asked about is a linter with opinions.
+
+## Then the defects, in this order
 1. **Text that does not fit.** Missing `lineLimit`, missing `minimumScaleFactor`, fixed frames
    that truncate at accessibility text sizes, figures next to units, two-column rows, and the
    compact slots (a Dynamic Island slot holds three or four glyphs, a gauge ring about the same).
@@ -39,7 +64,11 @@ unless the user explicitly cleared that group. Accessibility identifiers are con
 and an automated simulator walk depend on every one of them.
 
 ## Output
-A numbered list, most severe first, split into "Will look broken" / "Looks unpolished" /
+The architecture answers first, in prose — they are not a list and they do not get severity
+labels, because "this screen is filed under the wrong axis" does not compare to "this label
+truncates"; it precedes it.
+
+Then a numbered list, most severe first, split into "Will look broken" / "Looks unpolished" /
 "Nitpick". Each item: `file:line`, one sentence on the defect, one sentence on the fix. No praise
 sections, no summary of what the app does. If you cannot verify something, say so rather than
 guessing.
