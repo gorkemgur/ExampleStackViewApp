@@ -9,6 +9,10 @@ struct ScanView: View {
     @StateObject private var model: ScanViewModel
     /// Set once the results have appeared, so the seal bounces on arrival rather than never.
     @State private var hasSettled = false
+    /// What the scan is about to do, worked out from metadata alone. Off the main actor and
+    /// once per appearance: it sorts and windows the whole library, which is nothing at
+    /// twenty-eight items and is not nothing at fifty thousand.
+    @State private var plan: ScanPlan?
 
     init(items: [MediaItem], history: HistoryViewModel) {
         self.items = items
@@ -60,11 +64,18 @@ struct ScanView: View {
             .padding(.bottom, 28)
             .animation(Motion.content, value: model.isScanning)
             .animation(Motion.content, value: model.result?.candidates.count)
+            .animation(Motion.content, value: plan)
         }
         .background(DS.ink, ignoresSafeAreaEdges: .all)
         .sensoryFeedback(.success, trigger: model.result != nil) { _, hasResult in hasResult }
         .navigationTitle("Find duplicates")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: items.count) {
+            let snapshot = items
+            plan = await Task.detached(priority: .userInitiated) {
+                ScanPlan.of(snapshot)
+            }.value
+        }
         .onDisappear {
             // Leaving the screen must stop the work, not leave it reading the library in the
             // background with nowhere to report to.
@@ -89,10 +100,21 @@ struct ScanView: View {
                     .font(.system(.title2, design: .rounded).weight(.bold))
                     .foregroundStyle(DS.onSlab)
 
-                Text("Metadata is compared first, so only the handful of items that could possibly match ever get read. Nothing is downloaded from iCloud and nothing is deleted without you saying so.")
+                // This said "only the handful of items that could possibly match ever get
+                // read", which was a comforting sentence the pipeline contradicts eighty lines
+                // later: every photograph on the device is opened and fingerprinted, because
+                // two shots of the same moment share no byte and no file size. An app that
+                // asks to be trusted with someone's photographs does not get to round that
+                // off, so it now says what happens and then shows the count.
+                Text("Every photo is opened once and fingerprinted — two pictures of the same moment share no byte and no file size, so there is no cheaper way to find them. A video is only opened when another is nearly the same length. Nothing is downloaded from iCloud, and nothing is deleted without you saying so.")
                     .font(.subheadline)
                     .foregroundStyle(DS.onSlab.opacity(0.68))
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let plan, !plan.isEmpty {
+                ledger(plan)
+                    .transition(.opacity)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -130,6 +152,96 @@ struct ScanView: View {
             .accessibilityIdentifier("scan.start")
         }
         .dsSlab()
+    }
+
+    /// What is about to be opened, kind by kind.
+    ///
+    /// The screen used to be one card of prose above six hundred points of nothing, on top of
+    /// a screen whose only other content was a button the previous screen already had. This is
+    /// what it was missing: the reading itself, stated before it happens, in numbers the
+    /// person can check afterwards against the result.
+    private func ledger(_ plan: ScanPlan) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            Text("\(plan.read) of \(plan.indexed) will be opened")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(DS.onSlabAccent)
+                .accessibilityIdentifier("scan.plan.summary")
+
+            VStack(spacing: 0) {
+                ForEach(Array(plan.lines.enumerated()), id: \.element.id) { index, line in
+                    if index > 0 {
+                        Divider().overlay(DS.onSlab.opacity(0.12))
+                    }
+                    ledgerRow(line)
+                }
+            }
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(DS.onSlab.opacity(0.06))
+            )
+
+            ForEach(caveats(plan), id: \.self) { caveat in
+                Text(caveat)
+                    .font(.caption)
+                    .foregroundStyle(DS.onSlab.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("scan.plan")
+    }
+
+    private func ledgerRow(_ line: ScanPlan.Line) -> some View {
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: KindCopy.symbolName(for: line.kind))
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(DS.onSlabAccent)
+                .frame(width: 20)
+
+            Text(KindCopy.title(for: line.kind))
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(DS.onSlab)
+
+            Spacer(minLength: DS.Space.s)
+
+            VStack(alignment: .trailing, spacing: 1) {
+                Text("\(line.indexed) · \(ByteFormatting.string(line.bytes))")
+                    .font(.footnote)
+                    .monospacedDigit()
+                    .foregroundStyle(DS.onSlab.opacity(0.85))
+
+                Text(Self.readPhrase(line))
+                    .font(.caption2)
+                    .foregroundStyle(DS.onSlab.opacity(0.55))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+    }
+
+    /// Said in words rather than as a second pair of numbers, because "12 · 12" reads as a
+    /// typo and "all of them opened" reads as a fact.
+    private static func readPhrase(_ line: ScanPlan.Line) -> String {
+        if line.read == 0 { return "none opened" }
+        if line.read == line.indexed { return "all opened" }
+        return "\(line.read) opened"
+    }
+
+    private func caveats(_ plan: ScanPlan) -> [String] {
+        var lines: [String] = []
+        if plan.cloudOnly > 0 {
+            lines.append(
+                "\(Counting.items(plan.cloudOnly)) only exist in iCloud. They are set aside before "
+                + "anything is read — opening one would mean downloading it."
+            )
+        }
+        if plan.fromFolders > 0 {
+            lines.append(
+                "\(Counting.items(plan.fromFolders)) come from folders you handed over. Deleting "
+                + "one of those is immediate; there is no Recently Deleted for them."
+            )
+        }
+        return lines
     }
 
     private var progressCard: some View {

@@ -46,4 +46,39 @@ final class ScanUITests: XCTestCase {
         }
         XCTAssertTrue(cloud.exists, "items left in iCloud must be reported, not silently skipped")
     }
+
+    /// The screen's whole reason to exist as a separate step.
+    ///
+    /// The overview already carries a "Scan for duplicates" key, so if this screen only
+    /// repeats it then it is chrome. It earns the tap by saying what is about to be opened
+    /// before it is opened — and the numbers have to be there before the button is pressed,
+    /// not after, which is what this asserts.
+    func testTheScanScreenSaysWhatItIsAboutToOpenBeforeItOpensAnything() {
+        let entry = app.buttons["root.scan"]
+        for _ in 0..<8 where !entry.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(entry.waitForExistence(timeout: 30))
+        entry.tap()
+
+        XCTAssertTrue(app.buttons["scan.start"].waitForExistence(timeout: 20))
+
+        let summary = app.staticTexts["scan.plan.summary"]
+        XCTAssertTrue(
+            summary.waitForExistence(timeout: 20),
+            "the scan screen never said how much of the library it would read"
+        )
+        XCTAssertTrue(
+            summary.label.contains("will be opened"),
+            "the plan summary read \(summary.label)"
+        )
+        XCTAssertTrue(
+            app.otherElements["scan.plan"].exists || app.staticTexts["scan.plan"].exists,
+            "the per-kind ledger was not on the screen"
+        )
+        XCTAssertTrue(
+            app.buttons["scan.start"].isHittable,
+            "the ledger must not push the start key off the screen"
+        )
+    }
 }
