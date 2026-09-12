@@ -212,6 +212,55 @@ final class FileScanningTests: XCTestCase {
         XCTAssertEqual(items().map(\.displayName), ["safe.txt"])
     }
 
+    /// The heart of it: a scan decides, the user acts later, and in between the file changed.
+    func testAFileThatChangedAfterTheScanIsLeftAlone() async throws {
+        let url = try write("notes.txt", "the bytes that were scanned")
+        let target = try XCTUnwrap(items().first)
+        let stamp = FileStamp(target)
+
+        // Someone replaces it — same name, same identifier, different content.
+        try "something else entirely, written later".write(to: url, atomically: true, encoding: .utf8)
+
+        let outcome = try await FileDeleter(registry: registry)
+            .delete(ids: [target.id], expecting: [target.id: stamp])
+
+        XCTAssertTrue(outcome.deletedIDs.isEmpty, "this is no longer the file that was checked")
+        XCTAssertEqual(outcome.skippedIDs, [target.id])
+        XCTAssertEqual(outcome.missingCount, 0, "refused is not the same as already gone")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testAFileThatIsStillWhatItWasIsDeleted() async throws {
+        let url = try write("steady.txt", "unchanged")
+        let target = try XCTUnwrap(items().first)
+
+        let outcome = try await FileDeleter(registry: registry)
+            .delete(ids: [target.id], expecting: [target.id: FileStamp(target)])
+
+        XCTAssertEqual(outcome.deletedIDs, [target.id])
+        XCTAssertTrue(outcome.skippedIDs.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    /// Identifiers are written to disk in the cache and the history and read back later. A path
+    /// that climbs out of the granted folder is not a file this app may touch, whatever wrote it.
+    func testAnIdentifierThatPointsOutsideTheGrantReachesNothing() async throws {
+        let outside = root.deletingLastPathComponent().appendingPathComponent("outside.txt")
+        try "not yours".write(to: outside, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: outside) }
+
+        let folderID = try XCTUnwrap(registry.folders().first?.id)
+        let escaping = FileItemID.make(folderID: folderID, relativePath: "../outside.txt")
+
+        let outcome = try await FileDeleter(registry: registry).delete(ids: [escaping])
+
+        XCTAssertTrue(outcome.deletedIDs.isEmpty)
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: outside.path),
+            "a path outside the granted folder must never be deleted"
+        )
+    }
+
     func testAnIdentifierFromAnUnknownGrantDeletesNothing() async throws {
         try write("safe.txt", "a")
         let strayID = FileItemID.make(folderID: UUID(), relativePath: "safe.txt")

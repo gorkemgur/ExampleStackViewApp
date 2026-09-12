@@ -141,8 +141,16 @@ final class ReviewViewModel: ObservableObject {
         // not what is left.
         let sentSavings = SavingsCalculator.breakdown(for: Set(ids), items: result.items)
 
+        // What each file looked like when it was scanned. The deleter refuses anything that no
+        // longer matches, because a file can be replaced between the scan and the tap and
+        // nothing in its identifier would say so.
+        let stamps = ids.reduce(into: [String: FileStamp]()) { stamps, id in
+            guard let item = result.items[id], item.source == .fileFolder else { return }
+            stamps[id] = FileStamp(item)
+        }
+
         do {
-            let completed = try await deleter.delete(ids: ids)
+            let completed = try await deleter.delete(ids: ids, expecting: stamps)
             outcome = completed
             deletedIDs.formUnion(completed.deletedIDs)
             selection.clear()

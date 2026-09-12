@@ -130,8 +130,19 @@ final class FileMediaLibrary: MediaLibrary {
             return nil
         }
 
-        return try FolderAccess.withFolder(folder) { root in
-            try body(root.appendingPathComponent(parsed.relativePath))
+        // The nested optional is flattened: "the grant would not resolve" and "the path was
+        // not inside it" are the same answer to the caller — there is no file here for you.
+        let resolved: T?? = try FolderAccess.withFolder(folder) { root -> T? in
+            let target = root.appendingPathComponent(parsed.relativePath).standardizedFileURL
+
+            // The relative path comes from this app's own enumeration, but it is also written
+            // to disk in the cache and the history and read back later. Before a deletion the
+            // cheap check is worth making: a path that resolves outside the folder the user
+            // granted is not a file this app may touch, whatever produced it.
+            guard target.path.hasPrefix(root.standardizedFileURL.path + "/") else { return nil }
+
+            return try body(target)
         }
+        return resolved ?? nil
     }
 }

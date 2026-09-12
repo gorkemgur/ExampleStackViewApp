@@ -228,6 +228,16 @@ struct ReviewView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                if outcome.skippedCount > 0 {
+                    // Not a failure, a refusal — and the difference matters to someone deciding
+                    // whether to trust this app with the rest of their library.
+                    Text("\(Counting.items(outcome.skippedCount)) \(outcome.skippedCount == 1 ? "was" : "were") left alone: the file changed after the scan read it, so it is no longer the copy that was checked.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("review.skipped")
+                }
+
                 if outcome.missingCount > 0 {
                     Text("\(Counting.items(outcome.missingCount)) \(outcome.missingCount == 1 ? "was" : "were") already gone.")
                         .font(.caption)

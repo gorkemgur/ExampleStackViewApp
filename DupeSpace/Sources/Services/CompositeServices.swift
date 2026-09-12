@@ -69,22 +69,28 @@ final class CompositeDeleter: MediaDeleting {
         self.files = files
     }
 
-    func delete(ids: [String]) async throws -> DeletionOutcome {
+    func delete(ids: [String], expecting stamps: [String: FileStamp]) async throws -> DeletionOutcome {
         let fileIDs = ids.filter { FileItemID.isFile($0) }
         let photoIDs = ids.filter { !FileItemID.isFile($0) }
 
         var deleted: [String] = []
+        var skipped: [String] = []
 
         // Photos first. PhotoKit puts a system prompt in front of its deletion, and file
         // deletions are the half that cannot be undone: dismissing that prompt must not
         // arrive after files have already been removed for good.
         if !photoIDs.isEmpty {
-            deleted += try await photos.delete(ids: photoIDs).deletedIDs
+            deleted += try await photos.delete(ids: photoIDs, expecting: [:]).deletedIDs
         }
         if !fileIDs.isEmpty {
-            deleted += try await files.delete(ids: fileIDs).deletedIDs
+            let outcome = try await files.delete(
+                ids: fileIDs,
+                expecting: stamps.filter { FileItemID.isFile($0.key) }
+            )
+            deleted += outcome.deletedIDs
+            skipped += outcome.skippedIDs
         }
 
-        return DeletionOutcome(requestedIDs: ids, deletedIDs: deleted)
+        return DeletionOutcome(requestedIDs: ids, deletedIDs: deleted, skippedIDs: skipped)
     }
 }

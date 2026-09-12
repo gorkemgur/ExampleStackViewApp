@@ -106,13 +106,21 @@ final class FileDeleter: MediaDeleting {
         self.registry = registry
     }
 
-    func delete(ids: [String]) async throws -> DeletionOutcome {
+    func delete(ids: [String], expecting stamps: [String: FileStamp]) async throws -> DeletionOutcome {
         let registry = self.registry
 
-        let deleted: [String] = await Task.detached(priority: .userInitiated) {
+        let result: (deleted: [String], skipped: [String]) = await Task.detached(priority: .userInitiated) {
             var removed: [String] = []
+            var refused: [String] = []
+
             for id in ids {
-                let didRemove = FileMediaLibrary.withFile(itemID: id, registry: registry) { url -> Bool in
+                let outcome = FileMediaLibrary.withFile(itemID: id, registry: registry) { url -> Bool? in
+                    // `nil` means "not this file": the deletion is refused rather than failing,
+                    // and the caller is told so it can say which.
+                    if let expected = stamps[id], !Self.stillMatches(expected, at: url) {
+                        return nil
+                    }
+
                     var success = false
                     var coordinationError: NSError?
 
@@ -126,11 +134,38 @@ final class FileDeleter: MediaDeleting {
 
                     return success && coordinationError == nil
                 }
-                if didRemove == true { removed.append(id) }
+
+                switch outcome {
+                case .some(.some(true)): removed.append(id)
+                case .some(.none): refused.append(id)
+                default: break
+                }
             }
-            return removed
+            return (removed, refused)
         }.value
 
-        return DeletionOutcome(requestedIDs: ids, deletedIDs: deleted)
+        return DeletionOutcome(
+            requestedIDs: ids,
+            deletedIDs: result.deleted,
+            skippedIDs: result.skipped
+        )
+    }
+
+    /// Whether the file on disk is still the one the scan read.
+    ///
+    /// A scan decides; the user acts later. In between a file can be replaced by something else
+    /// with the same name, and nothing in the identifier would change. Size and modification
+    /// date are what a stat can answer, and between them they catch a rewritten file.
+    private static func stillMatches(_ expected: FileStamp, at url: URL) -> Bool {
+        guard
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+            let size = values.fileSize
+        else {
+            return false
+        }
+        return expected.matches(
+            byteSize: Int64(size),
+            modificationDate: values.contentModificationDate
+        )
     }
 }

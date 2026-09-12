@@ -5,10 +5,22 @@ import DupeCore
 struct DeletionOutcome: Sendable, Equatable {
     let requestedIDs: [String]
     let deletedIDs: [String]
+    /// Files that were deliberately left alone because they no longer matched what the scan
+    /// read. Not a failure — a refusal.
+    let skippedIDs: [String]
+
+    init(requestedIDs: [String], deletedIDs: [String], skippedIDs: [String] = []) {
+        self.requestedIDs = requestedIDs
+        self.deletedIDs = deletedIDs
+        self.skippedIDs = skippedIDs
+    }
 
     var deletedCount: Int { deletedIDs.count }
+    var skippedCount: Int { skippedIDs.count }
     /// Items that were asked for but were already gone by the time the change ran.
-    var missingCount: Int { max(requestedIDs.count - deletedIDs.count, 0) }
+    var missingCount: Int {
+        max(requestedIDs.count - deletedIDs.count - skippedIDs.count, 0)
+    }
 }
 
 enum DeletionError: LocalizedError, Equatable {
@@ -30,7 +42,16 @@ enum DeletionError: LocalizedError, Equatable {
 }
 
 protocol MediaDeleting: Sendable {
-    func delete(ids: [String]) async throws -> DeletionOutcome
+    /// `stamps` says what each file looked like when it was scanned. A deleter that can check
+    /// must refuse anything that no longer matches; one whose items carry their own identity
+    /// through the system — the photo library — can ignore it.
+    func delete(ids: [String], expecting stamps: [String: FileStamp]) async throws -> DeletionOutcome
+}
+
+extension MediaDeleting {
+    func delete(ids: [String]) async throws -> DeletionOutcome {
+        try await delete(ids: ids, expecting: [:])
+    }
 }
 
 /// Deletes through PhotoKit, which puts a system confirmation in front of the user and moves
@@ -42,7 +63,10 @@ final class PhotoKitDeleter: MediaDeleting {
     /// availability window.
     private static let userCancelledCode = 3072
 
-    func delete(ids: [String]) async throws -> DeletionOutcome {
+    /// Stamps are ignored here, and deliberately: a `PHAsset` identifier follows the asset
+    /// through edits and moves, Photos puts its own confirmation in front of the deletion, and
+    /// what it removes stays in Recently Deleted for thirty days.
+    func delete(ids: [String], expecting _: [String: FileStamp]) async throws -> DeletionOutcome {
         guard !ids.isEmpty else {
             return DeletionOutcome(requestedIDs: [], deletedIDs: [])
         }
@@ -78,6 +102,7 @@ final class StubDeleter: MediaDeleting, @unchecked Sendable {
 
     private let lock = NSLock()
     private var _received: [[String]] = []
+    private var _expectations: [[String: FileStamp]] = []
     private let behaviour: Behaviour
 
     enum Behaviour: Sendable {
@@ -95,9 +120,17 @@ final class StubDeleter: MediaDeleting, @unchecked Sendable {
         return _received
     }
 
-    func delete(ids: [String]) async throws -> DeletionOutcome {
+    /// What each call was told to expect, so a test can prove the expectations were passed on
+    /// rather than dropped somewhere in the middle.
+    var expectations: [[String: FileStamp]] {
+        lock.lock(); defer { lock.unlock() }
+        return _expectations
+    }
+
+    func delete(ids: [String], expecting stamps: [String: FileStamp]) async throws -> DeletionOutcome {
         lock.lock()
         _received.append(ids)
+        _expectations.append(stamps)
         lock.unlock()
 
         switch behaviour {
