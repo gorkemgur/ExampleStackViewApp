@@ -57,7 +57,6 @@ jobs:
             -scheme DupeSpace \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath .derived-compile \
-            -enableCodeCoverage NO \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
@@ -66,7 +65,17 @@ jobs:
 
       - name: What did not compile
         if: failure()
-        run: grep -nE "error:" compile.log | sort -u | head -40 || echo "none"
+        run: |
+          # Both, deliberately. A grep for `error:` alone printed nothing the first time this
+          # job ran red, because the failure was xcodebuild refusing a flag rather than the
+          # compiler refusing a line — and a job that fails while reporting "none" is worse
+          # than no job.
+          echo "::group::Compile errors"
+          grep -nE "error:" compile.log | sort -u | head -40 || echo "none"
+          echo "::endgroup::"
+          echo "::group::Last lines"
+          tail -20 compile.log
+          echo "::endgroup::"
 
   core:
     name: DupeCore unit tests
@@ -160,7 +169,6 @@ jobs:
             -scheme DupeSpace \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath .derived \
-            -enableCodeCoverage NO \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
