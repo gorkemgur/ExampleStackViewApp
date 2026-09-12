@@ -38,6 +38,61 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertFalse(model.budgetPlan.selected.isEmpty)
     }
 
+    // MARK: - Keeping a copy before deleting
+
+    func testExportingWritesEverySelectedCopy() async {
+        let model = ReviewViewModel(
+            result: await makeResult(),
+            deleter: StubDeleter(),
+            exporter: StubOriginalExporter()
+        )
+
+        await model.exportOriginals(to: URL(fileURLWithPath: "/tmp"))
+
+        let receipt = model.exportReceipt
+        XCTAssertNotNil(receipt)
+        XCTAssertEqual(Set(receipt?.exportedIDs ?? []), model.selection.selectedIDs)
+        XCTAssertTrue(model.exportCoversSelection)
+    }
+
+    /// A green tick above a red key, covering a selection it no longer describes, is the one
+    /// way this feature could make someone *less* safe than not having it.
+    func testTickingSomethingAfterAnExportInvalidatesIt() async {
+        let model = ReviewViewModel(
+            result: await makeResult(),
+            deleter: StubDeleter(),
+            exporter: StubOriginalExporter()
+        )
+        await model.exportOriginals(to: URL(fileURLWithPath: "/tmp"))
+        XCTAssertTrue(model.exportCoversSelection)
+
+        guard let extra = model.liveCandidates.first(where: { !model.selection.isSelected($0.id) }) else {
+            return XCTFail("fixture has nothing left to add to the selection")
+        }
+        model.toggle(extra.id)
+
+        XCTAssertFalse(model.exportCoversSelection, "the receipt no longer covers what is ticked")
+    }
+
+    /// Every row of the manifest has to name the copy that stays — that column is the whole
+    /// reason the export makes a wrong decision recoverable.
+    func testTheExportPlanNamesWhatStaysForEveryCopy() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+
+        let plan = model.exportPlan
+        XCTAssertFalse(plan.isEmpty)
+        for step in plan {
+            XCTAssertFalse(step.entry.keptItemID.isEmpty)
+            XCTAssertNotEqual(step.entry.keptItemID, step.entry.itemID, "a copy cannot be kept in its own place")
+            XCTAssertFalse(step.entry.exportedFileName.isEmpty)
+        }
+        XCTAssertEqual(
+            Set(plan.map(\.entry.exportedFileName)).count,
+            plan.count,
+            "two originals may never be written to one filename"
+        )
+    }
+
     // MARK: - The filter is a scope, not just a way of looking
 
     /// The worst thing a screen like this can do is select something the person cannot see.
