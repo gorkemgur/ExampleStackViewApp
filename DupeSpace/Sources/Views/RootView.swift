@@ -45,6 +45,7 @@ struct RootView: View {
 
                     FoldersCardView(
                         folders: model.folders,
+                        message: model.folderMessage,
                         onAdd: { pickingFolder = true },
                         onRemove: { id in Task { await model.removeFolder(id: id) } }
                     )

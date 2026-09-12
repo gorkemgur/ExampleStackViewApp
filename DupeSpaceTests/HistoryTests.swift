@@ -32,14 +32,6 @@ final class HistoryViewModelTests: XCTestCase {
         )
     }
 
-    /// The store writes on a detached task, so tests wait for it rather than guessing.
-    private func waitForSave(_ store: InMemoryHistoryStore, atLeast count: Int) async {
-        let deadline = Date().addingTimeInterval(5)
-        while store.saveCount < count && Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-    }
-
     func testStartsEmptyAndLoadsWhatWasSaved() async {
         var seeded = HistoryLog()
         seeded.record(scanRecord())
@@ -67,7 +59,7 @@ final class HistoryViewModelTests: XCTestCase {
         await model.load()
 
         model.record(deletion: deletionRecord())
-        await waitForSave(store, atLeast: 1)
+        await model.flushPendingWrites()
 
         let saved = await store.load()
         XCTAssertEqual(saved.totalItemsDeleted, 1)
@@ -87,15 +79,44 @@ final class HistoryViewModelTests: XCTestCase {
         )
     }
 
+    /// Two independent writes can land oldest-last, which would silently drop a receipt.
+    func testRapidRecordsAllReachDiskInOrder() async {
+        let store = InMemoryHistoryStore()
+        let model = HistoryViewModel(store: store)
+        await model.load()
+
+        for index in 0..<5 {
+            model.record(
+                deletion: DeletionRecord(
+                    performedAt: Date(timeIntervalSince1970: 4_000 + TimeInterval(index)),
+                    items: [
+                        DeletedItemRecord(
+                            id: "i\(index)", displayName: "i\(index)", bytes: 100,
+                            kind: .image, tier: .identical, keptInsteadName: "k"
+                        )
+                    ],
+                    deferredBytes: 100,
+                    immediateBytes: 0
+                )
+            )
+        }
+
+        await model.flushPendingWrites()
+
+        let saved = await store.load()
+        XCTAssertEqual(saved.totalItemsDeleted, 5, "every receipt has to survive to disk")
+        XCTAssertEqual(saved.totalReclaimedBytes, 500)
+    }
+
     func testClearingPersistsTheEmptyLog() async {
         let store = InMemoryHistoryStore()
         let model = HistoryViewModel(store: store)
         await model.load()
         model.record(scan: scanRecord())
-        await waitForSave(store, atLeast: 1)
+        await model.flushPendingWrites()
 
         model.clear()
-        await waitForSave(store, atLeast: 2)
+        await model.flushPendingWrites()
 
         XCTAssertTrue(model.isEmpty)
         let saved = await store.load()

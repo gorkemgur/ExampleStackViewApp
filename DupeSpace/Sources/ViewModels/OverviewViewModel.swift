@@ -18,10 +18,18 @@ final class OverviewViewModel: ObservableObject {
     @Published private(set) var items: [MediaItem] = []
     @Published private(set) var breakdown: [CategoryBreakdown] = []
     @Published private(set) var folders: [GrantedFolder] = []
+    /// Why the last folder someone picked was not taken. Cleared as soon as one is.
+    @Published private(set) var folderMessage: String?
 
     private let library: MediaLibrary
     private let folderRegistry: any FolderRegistering
     private let changeObserver: (any LibraryChangeObserving)?
+
+    /// Guards the enumeration itself. `state` drives the UI and is the wrong thing to gate on:
+    /// resetting it to re-read defeated the guard and let several full library reads run at
+    /// once, with the last — possibly oldest — result winning.
+    private var isEnumerating = false
+    private var reloadRequested = false
 
     init(
         library: MediaLibrary,
@@ -59,8 +67,7 @@ final class OverviewViewModel: ObservableObject {
     }
 
     private func reloadAfterExternalChange() async {
-        state = .idle
-        await loadInventory()
+        await loadInventory(force: true)
     }
 
     func refresh() async {
@@ -79,33 +86,59 @@ final class OverviewViewModel: ObservableObject {
     // MARK: - Folders
 
     func addFolder(at url: URL) async {
-        guard let grant = FolderAccess.makeGrant(for: url) else { return }
+        guard let grant = FolderAccess.makeGrant(for: url) else {
+            folderMessage = "That folder could not be read."
+            return
+        }
+
+        let candidate = url.standardizedFileURL.path
+        for existing in folderRegistry.folders() {
+            guard let existingPath = FolderAccess.resolvedPath(for: existing) else { continue }
+            guard FolderAccess.overlaps(candidate, existingPath) else { continue }
+
+            folderMessage = "\(existing.displayName) already covers that folder. Indexing one file through two grants would make it look like its own duplicate."
+            return
+        }
+
+        folderMessage = nil
         folderRegistry.add(grant)
         folders = folderRegistry.folders()
         await reloadInventory()
     }
 
     func removeFolder(id: UUID) async {
+        folderMessage = nil
         folderRegistry.remove(id: id)
         folders = folderRegistry.folders()
         await reloadInventory()
     }
 
     private func reloadInventory() async {
-        state = .idle
-        await loadInventory()
+        await loadInventory(force: true)
     }
 
-    private func loadInventory() async {
-        guard state != .loading else { return }
-        state = .loading
-        do {
-            let loaded = try await library.loadInventory()
-            items = loaded
-            breakdown = InventoryAnalyzer.breakdown(for: loaded)
-            state = .loaded
-        } catch {
-            state = .failed(error.localizedDescription)
+    private func loadInventory(force: Bool = false) async {
+        // A change that arrives mid-read queues exactly one more read rather than racing the
+        // one in flight.
+        if isEnumerating {
+            if force { reloadRequested = true }
+            return
         }
+
+        isEnumerating = true
+        defer { isEnumerating = false }
+
+        repeat {
+            reloadRequested = false
+            state = .loading
+            do {
+                let loaded = try await library.loadInventory()
+                items = loaded
+                breakdown = InventoryAnalyzer.breakdown(for: loaded)
+                state = .loaded
+            } catch {
+                state = .failed(error.localizedDescription)
+            }
+        } while reloadRequested
     }
 }

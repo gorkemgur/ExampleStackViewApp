@@ -3,13 +3,13 @@ import DupeCore
 
 /// The fingerprint cache, kept on disk between launches.
 ///
-/// Wraps the in-memory actor rather than reimplementing it: the interesting behaviour —
-/// when a record is stale, what a partial write does to its siblings — lives in one place and
-/// is tested there. This adds only "read it at startup, write it when it changes".
+/// Holds its records directly rather than delegating to another actor. Delegating meant the
+/// load had to await mid-flight, which let a second scan task in on a half-filled cache and
+/// let the replay overwrite freshly computed records with stale ones from disk.
 actor FileFingerprintCache: FingerprintCaching {
 
     private let fileURL: URL
-    private let inner: FingerprintCache
+    private var records: [String: FingerprintRecord] = [:]
     private var isDirty = false
     private var hasLoaded = false
 
@@ -24,80 +24,75 @@ actor FileFingerprintCache: FingerprintCaching {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             self.fileURL = directory.appendingPathComponent("fingerprints.json")
         }
-        inner = FingerprintCache()
     }
 
-    func record(for id: String) async -> FingerprintRecord? {
-        await loadIfNeeded()
-        return await inner.record(for: id)
+    func record(for id: String) -> FingerprintRecord? {
+        loadIfNeeded()
+        return records[id]
     }
 
-    func store(digest: ContentDigest, for id: String, contentVersion: String) async {
-        await loadIfNeeded()
-        await inner.store(digest: digest, for: id, contentVersion: contentVersion)
+    func store(digest: ContentDigest, for id: String, contentVersion: String) {
+        loadIfNeeded()
+        var record = FingerprintRecord.base(from: records[id], contentVersion: contentVersion)
+        record.digest = digest
+        records[id] = record
         isDirty = true
     }
 
-    func store(hashes: PerceptualHashes, for id: String, contentVersion: String) async {
-        await loadIfNeeded()
-        await inner.store(hashes: hashes, for: id, contentVersion: contentVersion)
+    func store(hashes: PerceptualHashes, for id: String, contentVersion: String) {
+        loadIfNeeded()
+        var record = FingerprintRecord.base(from: records[id], contentVersion: contentVersion)
+        record.hashes = hashes
+        records[id] = record
         isDirty = true
     }
 
-    func store(signature: VideoSignature, for id: String, contentVersion: String) async {
-        await loadIfNeeded()
-        await inner.store(signature: signature, for: id, contentVersion: contentVersion)
+    func store(signature: VideoSignature, for id: String, contentVersion: String) {
+        loadIfNeeded()
+        var record = FingerprintRecord.base(from: records[id], contentVersion: contentVersion)
+        record.signature = signature
+        records[id] = record
         isDirty = true
     }
 
-    func prune(keeping ids: Set<String>) async {
-        await loadIfNeeded()
-        await inner.prune(keeping: ids)
+    func prune(keeping ids: Set<String>) {
+        loadIfNeeded()
+        records = records.filter { ids.contains($0.key) }
         isDirty = true
     }
 
-    func snapshot() async -> [String: FingerprintRecord] {
-        await loadIfNeeded()
-        return await inner.snapshot()
+    func snapshot() -> [String: FingerprintRecord] {
+        loadIfNeeded()
+        return records
     }
 
-    /// Writes only if something changed. Called when a scan finishes rather than on every
-    /// fingerprint: fifty thousand writes to serialise the same file is not a cache, it is a
-    /// way to make scanning slower than not caching at all.
-    func flush() async {
+    /// Writes only if something changed, and only when asked. Serialising the whole file after
+    /// every fingerprint would cost more than the cache saves.
+    func flush() {
         guard isDirty else { return }
-        let records = await inner.snapshot()
-
         let encoder = JSONEncoder()
-        if let data = try? encoder.encode(records) {
-            try? data.write(to: fileURL, options: .atomic)
-            isDirty = false
-        }
+        guard let data = try? encoder.encode(records) else { return }
+        try? data.write(to: fileURL, options: .atomic)
+        isDirty = false
     }
 
-    /// A missing or corrupt file is an empty cache, not an error: the worst it costs is one
+    /// Synchronous on purpose: within an actor, code that never awaits cannot be interleaved
+    /// with, so no caller can observe a half-loaded cache.
+    ///
+    /// A missing or corrupt file is an empty cache, not an error: the worst that costs is one
     /// slow scan, and refusing to scan would be worse.
-    private func loadIfNeeded() async {
+    private func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
 
         guard
             let data = try? Data(contentsOf: fileURL),
-            let records = try? JSONDecoder().decode([String: FingerprintRecord].self, from: data)
+            let stored = try? JSONDecoder().decode([String: FingerprintRecord].self, from: data)
         else {
             return
         }
 
-        for (id, record) in records {
-            if let digest = record.digest {
-                await inner.store(digest: digest, for: id, contentVersion: record.contentVersion)
-            }
-            if let hashes = record.hashes {
-                await inner.store(hashes: hashes, for: id, contentVersion: record.contentVersion)
-            }
-            if let signature = record.signature {
-                await inner.store(signature: signature, for: id, contentVersion: record.contentVersion)
-            }
-        }
+        // Anything computed before the load wins: it describes the library as it is now.
+        records = stored.merging(records) { _, fresher in fresher }
     }
 }

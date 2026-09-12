@@ -100,6 +100,50 @@ final class CleanupPlannerTests: XCTestCase {
         XCTAssertEqual(decision.autoSelectedForDeletion, ["keeper", "plain"])
     }
 
+    /// A digest covers the original resource. A copy carrying its own edits is not
+    /// interchangeable with one that has none, and pre-ticking it would delete that work
+    /// under a label promising nothing is lost.
+    func testAnEditedCopyIsNeverPreTickedEvenWhenTheBytesMatch() {
+        let items = Fixtures.index([
+            Fixtures.item("plain", bytes: 5_000_000),
+            Fixtures.item("edited", bytes: 5_000_000, edited: true)
+        ])
+        let decision = CleanupPlanner.decide(
+            group: exactGroup(["plain", "edited"]),
+            items: items
+        )!
+
+        XCTAssertEqual(decision.keeperID, "edited", "the copy with work in it is the one to keep")
+        XCTAssertEqual(decision.autoSelectedForDeletion, ["plain"])
+
+        // And the other way round, where the edited copy is not the survivor.
+        let favouritedPlain = Fixtures.index([
+            Fixtures.item("plain", bytes: 5_000_000, favorite: true),
+            Fixtures.item("edited", bytes: 5_000_000, edited: true)
+        ])
+        let second = CleanupPlanner.decide(
+            group: exactGroup(["plain", "edited"]),
+            items: favouritedPlain
+        )!
+        XCTAssertEqual(second.keeperID, "plain")
+        XCTAssertTrue(second.autoSelectedForDeletion.isEmpty, "the edits would have gone with it")
+        XCTAssertEqual(second.manualReviewRequired, ["edited"])
+    }
+
+    func testAnExactCopyIsNotPreTickedWhenTheSurvivorIsOnlyInTheCloud() {
+        let items = Fixtures.index([
+            Fixtures.item("cloud", bytes: 5_000_000, favorite: true, local: false),
+            Fixtures.item("local", bytes: 5_000_000)
+        ])
+        let decision = CleanupPlanner.decide(group: exactGroup(["cloud", "local"]), items: items)!
+
+        XCTAssertEqual(decision.keeperID, "cloud")
+        XCTAssertTrue(
+            decision.autoSelectedForDeletion.isEmpty,
+            "deleting the only copy on the device is not a free win"
+        )
+    }
+
     func testKeeperIsNeverACandidate() {
         let items = Fixtures.index([Fixtures.item("a"), Fixtures.item("b"), Fixtures.item("c")])
         let decision = CleanupPlanner.decide(group: exactGroup(["a", "b", "c"]), items: items)!

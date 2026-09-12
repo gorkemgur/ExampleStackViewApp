@@ -251,3 +251,73 @@ final class FileScanningTests: XCTestCase {
         XCTAssertEqual(reloaded.first?.displayName, "Downloads")
     }
 }
+
+final class FolderOverlapTests: XCTestCase {
+
+    /// Granting a folder and then something inside it would index one physical file twice. The
+    /// engine would be right to call the two entries identical, and deleting the loser would
+    /// delete the survivor's own file with nothing to restore it from.
+    func testAFolderInsideAnotherIsRecognisedAsOverlapping() {
+        XCTAssertTrue(FolderAccess.overlaps("/a/b", "/a/b"))
+        XCTAssertTrue(FolderAccess.overlaps("/a/b/c", "/a/b"))
+        XCTAssertTrue(FolderAccess.overlaps("/a/b", "/a/b/c"))
+        XCTAssertTrue(FolderAccess.overlaps("/a/b/", "/a/b"))
+    }
+
+    func testSiblingFoldersDoNotOverlap() {
+        XCTAssertFalse(FolderAccess.overlaps("/a/b", "/a/c"))
+        XCTAssertFalse(FolderAccess.overlaps("/a/b", "/a/bc"), "a shared prefix is not containment")
+        XCTAssertFalse(FolderAccess.overlaps("/photos", "/photos-old"))
+    }
+}
+
+@MainActor
+final class FolderGrantTests: XCTestCase {
+
+    private func makeRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grant-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("inner"),
+            withIntermediateDirectories: true
+        )
+        return root
+    }
+
+    func testAFolderInsideAGrantedOneIsRefusedWithAReason() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = OverviewViewModel(
+            library: StubMediaLibrary.previewFixture(),
+            folderRegistry: InMemoryFolderRegistry()
+        )
+
+        await model.addFolder(at: root)
+        XCTAssertEqual(model.folders.count, 1)
+        XCTAssertNil(model.folderMessage)
+
+        await model.addFolder(at: root.appendingPathComponent("inner"))
+
+        XCTAssertEqual(model.folders.count, 1, "the nested folder must not be taken")
+        XCTAssertNotNil(model.folderMessage, "and the refusal has to say why")
+    }
+
+    func testRemovingAFolderClearsTheRefusal() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let model = OverviewViewModel(
+            library: StubMediaLibrary.previewFixture(),
+            folderRegistry: InMemoryFolderRegistry()
+        )
+
+        await model.addFolder(at: root)
+        await model.addFolder(at: root.appendingPathComponent("inner"))
+        XCTAssertNotNil(model.folderMessage)
+
+        await model.removeFolder(id: model.folders[0].id)
+        XCTAssertNil(model.folderMessage)
+        XCTAssertTrue(model.folders.isEmpty)
+    }
+}

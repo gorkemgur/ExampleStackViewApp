@@ -102,6 +102,10 @@ public enum TierClassifier {
     ) -> RegretTier {
         switch relation {
         case .exact:
+            // Byte equality covers the original resource. A copy carrying edits the survivor
+            // does not have is not interchangeable with it, so it cannot be filed under
+            // "loses nothing at all".
+            if item.isEdited && !keeper.isEdited { return .similar }
             return .identical
 
         case .nearExact:

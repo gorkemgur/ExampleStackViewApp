@@ -9,6 +9,7 @@ import DupeCore
 struct FoldersCardView: View {
 
     let folders: [GrantedFolder]
+    let message: String?
     let onAdd: () -> Void
     let onRemove: (UUID) -> Void
 
@@ -29,6 +30,14 @@ struct FoldersCardView: View {
                         row(folder)
                     }
                 }
+            }
+
+            if let message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("folders.message")
             }
 
             Button {

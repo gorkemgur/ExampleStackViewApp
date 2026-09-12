@@ -211,7 +211,8 @@ public struct ScanPipeline: Sendable {
             items.filter { !consumed.contains($0.id) && !cloudOnly.contains($0.id) },
             tolerance: configuration.videoDurationTolerance
         )
-        let videoTargets = items.filter { Set(videoPairs.flatMap { [$0.a, $0.b] }).contains($0.id) }
+        let videoPairIDs = Set(videoPairs.flatMap { [$0.a, $0.b] })
+        let videoTargets = items.filter { videoPairIDs.contains($0.id) }
 
         let signatureResults = try await mapConcurrently(
             videoTargets,

@@ -167,6 +167,21 @@ enum FolderAccess {
         return await body(url)
     }
 
+    static func resolvedPath(for folder: GrantedFolder) -> String? {
+        withFolder(folder) { $0.standardizedFileURL.path }
+    }
+
+    /// True when one path contains the other, or they are the same folder.
+    ///
+    /// Granting a folder and then something inside it would index one physical file twice, and
+    /// the engine would be right to call the two entries identical — at which point deleting
+    /// the loser deletes the survivor's own file, with nothing to restore it from.
+    static func overlaps(_ lhs: String, _ rhs: String) -> Bool {
+        let left = lhs.hasSuffix("/") ? lhs : lhs + "/"
+        let right = rhs.hasSuffix("/") ? rhs : rhs + "/"
+        return left.hasPrefix(right) || right.hasPrefix(left)
+    }
+
     static func makeGrant(for url: URL) -> GrantedFolder? {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }

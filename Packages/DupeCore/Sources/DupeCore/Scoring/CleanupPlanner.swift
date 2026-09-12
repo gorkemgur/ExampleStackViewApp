@@ -67,7 +67,16 @@ public enum CleanupPlanner {
 
             switch group.relation {
             case .exact:
-                autoSelected.append(member.id)
+                // The same two guards the re-encode branch uses, for the same reasons: the
+                // digest never saw this copy's adjustments, and a survivor that is only in
+                // iCloud is not a survivor the user still has to hand.
+                if member.isEdited && !keeper.isEdited {
+                    manual.append(member.id)
+                } else if !keeper.isLocallyAvailable {
+                    manual.append(member.id)
+                } else {
+                    autoSelected.append(member.id)
+                }
             case .nearExact:
                 // A re-encode is only safe to pre-tick when the survivor is strictly better
                 // in every way that cannot be recovered: more pixels, no edits to lose, and

@@ -34,6 +34,34 @@ final class TierClassifierTests: XCTestCase {
         XCTAssertEqual(candidates[0].keeperID, "keep")
     }
 
+    func testAnEditedCopyIsNotFiledUnderNoLossEvenWhenBytesMatch() {
+        let items = Fixtures.index([
+            Fixtures.item("keep"),
+            Fixtures.item("edited", edited: true)
+        ])
+        let candidates = TierClassifier.candidates(
+            for: decision(.exact, keeper: "keep", manual: ["edited"]),
+            group: group(.exact, seed: "keep", ids: ["keep", "edited"]),
+            items: items
+        )
+        XCTAssertEqual(candidates.map(\.tier), [.similar])
+        XCTAssertFalse(candidates[0].isPreSelected)
+    }
+
+    func testAnEditedSurvivorDoesNotDemoteAPlainCopy() {
+        let items = Fixtures.index([
+            Fixtures.item("keep", edited: true),
+            Fixtures.item("plain")
+        ])
+        let candidates = TierClassifier.candidates(
+            for: decision(.exact, keeper: "keep", auto: ["plain"]),
+            group: group(.exact, seed: "keep", ids: ["keep", "plain"]),
+            items: items
+        )
+        XCTAssertEqual(candidates.map(\.tier), [.identical], "the plain copy has nothing to lose")
+        XCTAssertTrue(candidates[0].isPreSelected)
+    }
+
     func testStrictlyWorseReEncodeIsTierOne() {
         let items = Fixtures.index([
             Fixtures.item("original", bytes: 6_000_000, width: 4032, height: 3024),

@@ -19,20 +19,40 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
     func contentDigest(for item: MediaItem) async -> ContentDigestResult {
         guard let asset = Self.asset(for: item.id) else { return .unavailable }
 
-        let resources = PHAssetResource.assetResources(for: asset)
-        guard
-            let resource = resources.first(where: { $0.type == .photo || $0.type == .video })
-                ?? resources.first
-        else {
-            return .unavailable
+        // Every resource, in a fixed order: the original, any adjustment data, the rendered
+        // edit, a Live Photo's paired movie. Hashing only the first would report two photos
+        // as byte-identical when one of them carries edits the other does not — and that
+        // equality is exactly what promotes a pair to the tier labelled "loses nothing".
+        let resources = PHAssetResource.assetResources(for: asset).sorted {
+            $0.type.rawValue == $1.type.rawValue
+                ? $0.originalFilename < $1.originalFilename
+                : $0.type.rawValue < $1.type.rawValue
         }
+        guard !resources.isEmpty else { return .unavailable }
 
         let options = PHAssetResourceRequestOptions()
         options.isNetworkAccessAllowed = false
 
         let accumulator = DigestAccumulator()
 
-        return await withCheckedContinuation { continuation in
+        for resource in resources {
+            // A header per resource so two different splits of the same bytes cannot collide.
+            accumulator.update(Data("r\(resource.type.rawValue):\(resource.originalFilename)|".utf8))
+
+            if let error = await Self.append(resource, to: accumulator, options: options) {
+                return Self.classify(error)
+            }
+        }
+
+        return .digest(accumulator.finalize())
+    }
+
+    private static func append(
+        _ resource: PHAssetResource,
+        to accumulator: DigestAccumulator,
+        options: PHAssetResourceRequestOptions
+    ) async -> Error? {
+        await withCheckedContinuation { continuation in
             let resumeGuard = ResumeGuard()
 
             PHAssetResourceManager.default().requestData(
@@ -43,11 +63,7 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
                 },
                 completionHandler: { error in
                     guard resumeGuard.claim() else { return }
-                    if let error {
-                        continuation.resume(returning: Self.classify(error))
-                    } else {
-                        continuation.resume(returning: .digest(accumulator.finalize()))
-                    }
+                    continuation.resume(returning: error)
                 }
             )
         }

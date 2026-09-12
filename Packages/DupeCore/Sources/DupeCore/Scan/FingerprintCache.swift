@@ -22,6 +22,15 @@ public struct FingerprintRecord: Sendable, Hashable, Codable {
     }
 
     public var isEmpty: Bool { digest == nil && hashes == nil && signature == nil }
+
+    /// The record to write into for `contentVersion`.
+    ///
+    /// An entry whose version no longer matches is thrown away rather than merged into: the
+    /// bytes changed, so every fingerprint held against it describes something that is gone.
+    public static func base(from existing: FingerprintRecord?, contentVersion: String) -> FingerprintRecord {
+        if let existing, existing.contentVersion == contentVersion { return existing }
+        return FingerprintRecord(contentVersion: contentVersion)
+    }
 }
 
 public protocol FingerprintCaching: Sendable {
@@ -71,13 +80,8 @@ public actor FingerprintCache: FingerprintCaching {
 
     public var count: Int { records.count }
 
-    /// An entry whose version no longer matches is thrown away rather than merged into: the
-    /// bytes changed, so every fingerprint held against it describes something that is gone.
     private func current(id: String, contentVersion: String) -> FingerprintRecord {
-        if let existing = records[id], existing.contentVersion == contentVersion {
-            return existing
-        }
-        return FingerprintRecord(contentVersion: contentVersion)
+        FingerprintRecord.base(from: records[id], contentVersion: contentVersion)
     }
 }
 
