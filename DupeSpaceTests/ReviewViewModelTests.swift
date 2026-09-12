@@ -38,6 +38,53 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertFalse(model.budgetPlan.selected.isEmpty)
     }
 
+    // MARK: - The filter is a scope, not just a way of looking
+
+    /// The worst thing a screen like this can do is select something the person cannot see.
+    ///
+    /// The plan used to be built from every live candidate regardless of the filter. Filter to
+    /// Videos, drag the fader to the end, tap the key — and the dock reported a selection full
+    /// of photo groups that the list was not showing, on the one screen in the app where the
+    /// next tap deletes things.
+    func testAPlanNeverTicksSomethingTheFilterIsHiding() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard model.availableKinds.count > 1 else {
+            return XCTFail("fixture needs more than one kind for this to mean anything")
+        }
+
+        model.kindFilter = .video
+        model.budgetDepth = .similar
+        model.budgetBytes = Double(model.plannableBytes)
+        model.applyBudgetPlan()
+
+        let onScreen = Set(model.visibleSections.flatMap(\.candidateIDs))
+        XCTAssertFalse(model.selection.isEmpty, "a full-reach plan on a kind that has copies must select something")
+        XCTAssertTrue(
+            model.selection.selectedIDs.allSatisfy(onScreen.contains),
+            "the plan ticked a copy the list was not showing"
+        )
+    }
+
+    /// And the fader has to be honest about it: its ceiling is what a plan can take, so the
+    /// ceiling moves when the scope does.
+    func testTheFadersCeilingFollowsTheFilter() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard model.availableKinds.count > 1, model.availableKinds.contains(.video) else {
+            return XCTFail("fixture needs videos alongside something else")
+        }
+
+        let whole = model.plannableBytes
+        model.budgetBytes = Double(whole)
+        model.kindFilter = .video
+
+        XCTAssertLessThan(model.plannableBytes, whole)
+        XCTAssertLessThanOrEqual(
+            Int64(model.budgetBytes),
+            model.plannableBytes,
+            "a target set against the whole scan must follow the ceiling down"
+        )
+    }
+
     // MARK: - Overruling the engine
 
     private func exactGroupID(_ model: ReviewViewModel) -> String? {

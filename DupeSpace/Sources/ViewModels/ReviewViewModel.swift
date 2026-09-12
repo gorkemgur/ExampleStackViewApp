@@ -44,6 +44,11 @@ final class ReviewViewModel: ObservableObject {
         didSet {
             cachedVisibleSections = nil
             cachedKindSections = nil
+            // The plan is made from what is on screen, so changing what is on screen changes
+            // the plan — and the fader's ceiling with it.
+            cachedPlannable = nil
+            cachedBudgetPlan = nil
+            clampBudget()
         }
     }
 
@@ -87,6 +92,7 @@ final class ReviewViewModel: ObservableObject {
     private var cachedSelectedCandidates: [DeletionCandidate]?
     private var cachedVisibleSections: [ReviewSection]?
     private var cachedKindSections: [KindSection]?
+    private var cachedPlannable: [DeletionCandidate]?
 
     init(result: ScanResult, deleter: MediaDeleting, history: (any HistoryRecording)? = nil) {
         self.result = result
@@ -118,6 +124,7 @@ final class ReviewViewModel: ObservableObject {
         cachedSelectedCandidates = nil
         cachedVisibleSections = nil
         cachedKindSections = nil
+        cachedPlannable = nil
     }
 
     var sections: [ReviewSection] {
@@ -136,10 +143,10 @@ final class ReviewViewModel: ObservableObject {
 
     /// The sections as the list shows them, which is `sections` narrowed to one kind.
     ///
-    /// Kept separate from `sections` on purpose: the budget slab's ladder and every byte figure
-    /// on it describe the whole scan, and a filter is a way of looking rather than a change to
-    /// what was found. Filtering the source would have made the fader's rungs move whenever
-    /// someone tapped "Videos".
+    /// Kept separate from `sections` on purpose: `sections` is what the scan found and never
+    /// moves, and the chip row's own tallies are read off it. What the fader and the plan work
+    /// on is this — because a control that ticks copies the list is not showing is a control
+    /// that deletes things the user never saw.
     var visibleSections: [ReviewSection] {
         if let cachedVisibleSections { return cachedVisibleSections }
         let value: [ReviewSection]
@@ -329,12 +336,36 @@ final class ReviewViewModel: ObservableObject {
         selectedCandidates.filter { !$0.tier.isLossless }.count
     }
 
+    /// What a plan is allowed to tick: everything still on offer, narrowed to the kind the
+    /// list is currently showing.
+    ///
+    /// It used to be every live candidate regardless of the filter. Filter to Videos, drag the
+    /// fader to 4 GB, tap the key — and the dock said ninety items selected on a screen showing
+    /// twenty, because the rest were photo groups the filter was hiding. On a screen whose one
+    /// job is deciding what gets deleted, no control may select something it is not showing.
+    var plannableCandidates: [DeletionCandidate] {
+        if let cachedPlannable { return cachedPlannable }
+        let value: [DeletionCandidate]
+        if kindFilter == nil {
+            value = liveCandidates
+        } else {
+            let onScreen = Set(visibleSections.flatMap(\.candidateIDs))
+            value = liveCandidates.filter { onScreen.contains($0.id) }
+        }
+        cachedPlannable = value
+        return value
+    }
+
+    /// The fader's ceiling: what a plan could take at most, which is what is plannable rather
+    /// than what the whole scan found.
+    var plannableBytes: Int64 { plannableCandidates.reduce(Int64(0)) { $0 + $1.bytes } }
+
     var budgetPlan: BudgetPlan {
         if let cachedBudgetPlan { return cachedBudgetPlan }
         let allowed = Set(RegretTier.allCases.filter { $0 <= budgetDepth })
         let value = BudgetPlanner.plan(
             target: Int64(budgetBytes),
-            candidates: liveCandidates,
+            candidates: plannableCandidates,
             allowedTiers: allowed
         )
         cachedBudgetPlan = value
@@ -447,7 +478,7 @@ final class ReviewViewModel: ObservableObject {
     /// far end of a track whose end was now 12.3 MB, under a plan that could only ever select
     /// everything. The number has to follow the ceiling down.
     private func clampBudget() {
-        let ceiling = Double(maxReclaimableBytes)
+        let ceiling = Double(plannableBytes)
         if budgetBytes > ceiling {
             budgetBytes = ceiling
         }

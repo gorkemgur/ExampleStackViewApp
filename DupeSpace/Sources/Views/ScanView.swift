@@ -222,7 +222,7 @@ struct ScanView: View {
                     Text("No duplicates found")
                         .font(.system(.title3, design: .rounded).weight(.bold))
                         .accessibilityIdentifier("scan.empty")
-                    Text("Nothing in this library is a copy of anything else.")
+                    Text("Nothing in this library is a copy of anything else at this setting.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -253,6 +253,57 @@ struct ScanView: View {
                 }
             }
         }
+
+        rescanPanel
+    }
+
+    /// The way back to a second scan.
+    ///
+    /// This screen had exactly one state after a scan finished, and it was terminal. The intro
+    /// card — which carries the strictness control and the only "Start scan" in the app — is
+    /// drawn when `result` is nil, and `result` stops being nil the moment the first scan ends.
+    /// So "No duplicates found" on Strict was the end of the road: the one thing a person
+    /// obviously wants next, try it looser, could not be reached without leaving the screen and
+    /// coming back. Worse for an empty result, where there is nothing else on the screen at all.
+    private var rescanPanel: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            Eyebrow("Try again", tint: DS.onSlabAccent)
+
+            ReachPicker<ScanStrictness>(
+                selection: $model.strictness,
+                options: ScanStrictness.allCases.map { level in
+                    ReachPicker<ScanStrictness>.Option(
+                        value: level,
+                        title: level.title,
+                        color: DS.tierVivid(level.reach)
+                    )
+                },
+                identifier: "scan.rescan.strictness",
+                onSlab: true
+            )
+
+            Text(model.strictness.explanation)
+                .font(.caption)
+                .foregroundStyle(DS.onSlab.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+                .id(model.strictness)
+                .transition(.opacity)
+
+            Button {
+                model.start(items: items)
+            } label: {
+                Text("Scan again")
+            }
+            .buttonStyle(.keyOnSlab)
+            .accessibilityIdentifier("scan.rescan")
+
+            Text("Nothing you have already deleted comes back, and nothing is deleted by scanning.")
+                .font(.caption)
+                .foregroundStyle(DS.onSlab.opacity(0.55))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(Motion.control, value: model.strictness)
+        .dsSlab()
     }
 
     /// What the scan found, on the instrument panel — the same slab the space budget uses,

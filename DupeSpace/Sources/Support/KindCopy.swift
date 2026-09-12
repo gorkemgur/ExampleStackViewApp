@@ -17,6 +17,20 @@ enum KindCopy {
         }
     }
 
+    /// The stable word for a kind in an accessibility identifier.
+    ///
+    /// `MediaKind` is an `Int` enum, so `rawValue` gives `review.kindsection.1` — a contract
+    /// the UI tests have to read the enum's declaration order to honour, and one that silently
+    /// rebinds if a case is ever inserted.
+    static func slug(for kind: MediaKind?) -> String {
+        guard let kind else { return "all" }
+        switch kind {
+        case .image: return "image"
+        case .video: return "video"
+        case .document: return "document"
+        }
+    }
+
     static func symbolName(for kind: MediaKind?) -> String {
         guard let kind else { return "square.stack" }
         switch kind {

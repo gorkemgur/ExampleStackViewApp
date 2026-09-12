@@ -408,6 +408,16 @@ extension ButtonStyle where Self == KeyButtonStyle {
     static var keyQuiet: KeyButtonStyle {
         KeyButtonStyle(fill: AnyShapeStyle(DS.well), foreground: DS.deep)
     }
+
+    /// The quiet key on the instrument panel.
+    ///
+    /// `keyQuiet` is a pale well carrying `DS.deep`, which is the right pair on the page and
+    /// close to invisible on the slab — a near-white block with a mid-blue label sitting on
+    /// dark navy. This is the same idea in the slab's own terms: the panel's own accent on a
+    /// lift of the panel itself.
+    static var keyOnSlab: KeyButtonStyle {
+        KeyButtonStyle(fill: AnyShapeStyle(Color.white.opacity(0.10)), foreground: DS.onSlabAccent)
+    }
 }
 
 /// A proportional strip of segments. Used for the disk, for the library breakdown and for the

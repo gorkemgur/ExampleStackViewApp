@@ -14,6 +14,10 @@ struct ReviewView: View {
     @State private var showingConfirm = false
     @State private var confirmingReset = false
 
+    /// Popping back to the scan is the only way to start another one, and until now this screen
+    /// had no way to say so.
+    @Environment(\.dismiss) private var dismiss
+
     private let loader: any ThumbnailLoading
 
     // Main-actor because the thumbnail loader now takes the display scale, and `UIScreen.main`
@@ -109,10 +113,27 @@ struct ReviewView: View {
             identifier: "review.finished",
             rail: DS.deep
         ) {
-            Text("Everything this scan found has been dealt with. Scan again when the library has changed.")
+            Text("Everything this scan found has been dealt with.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            // The screen used to end here, on a sentence telling the user to scan again and no
+            // control anywhere on it that could: the list below was empty, the dock was
+            // disabled, and the only way on was the back chevron.
+            HStack(spacing: DS.Space.s) {
+                Button("Scan again") { dismiss() }
+                    .buttonStyle(.key)
+                    .accessibilityIdentifier("review.scanagain")
+
+                NavigationLink {
+                    HistoryView()
+                } label: {
+                    Text("See what went")
+                }
+                .buttonStyle(.keyQuiet)
+                .accessibilityIdentifier("review.history")
+            }
         }
     }
 
@@ -139,7 +160,7 @@ struct ReviewView: View {
             // this target make me go" is answered before the drag rather than after it.
             TargetSlider(
                 value: $model.budgetBytes,
-                range: 0...Double(max(model.maxReclaimableBytes, 1)),
+                range: 0...Double(max(model.plannableBytes, 1)),
                 rungs: RegretTier.allCases.compactMap { tier in
                     let bytes = rungBytes(tier)
                     guard bytes > 0 else { return nil }
@@ -203,14 +224,23 @@ struct ReviewView: View {
             .reduce(0) { $0 + rungBytes($1) }
     }
 
+    /// Read off the sections the list is actually showing, not off the whole scan.
+    ///
+    /// The fader is the map of what a plan can take, and the plan now only takes what is on
+    /// screen. When those two disagreed, the ladder in the track promised 4 GB of video the
+    /// plan would never reach, or drew photo rungs on a screen filtered to video.
     private func rungBytes(_ tier: RegretTier) -> Double {
-        Double(model.sections.first { $0.tier == tier }?.bytes ?? 0)
+        Double(model.visibleSections.first { $0.tier == tier }?.bytes ?? 0)
     }
 
     private var planSummary: String {
         let plan = model.budgetPlan
+        // Said out loud, because the plan only ever ticks what the list is showing and a key
+        // that silently selected a hundred and fifty hidden photos would be the single worst
+        // thing this app could do.
+        let scope = model.kindFilter.map { " Within \(KindCopy.title(for: $0).lowercased()) only." } ?? ""
         guard !plan.selected.isEmpty else {
-            return "Drag to set a target. Nothing is selected by a plan of zero."
+            return "Drag to set a target. Nothing is selected by a plan of zero.\(scope)"
         }
         let reached = ByteFormatting.string(plan.reclaimedBytes)
         let deepest = plan.deepestTier.map { ScanCopy.title(for: $0).lowercased() } ?? "nothing"
@@ -218,22 +248,13 @@ struct ReviewView: View {
             // Not the count and not the bytes: the dock says both, verbatim, and the readout
             // sixty points above says the bytes again. What nothing else on the screen says is
             // how deep this plan actually had to go.
-            return "Reaches as far as \(deepest)."
+            return "Reaches as far as \(deepest).\(scope)"
         }
-        return "Only \(reached) is available at this setting (\(Counting.items(plan.selected.count))). Allow more, or accept less."
+        return "Only \(reached) is available at this setting (\(Counting.items(plan.selected.count))). Allow more, or accept less.\(scope)"
     }
 
     // MARK: - The ladder
 
-    /// Lazy, and it has to be said out loud because the outer `LazyVStack` was doing nothing
-    /// for it.
-    ///
-    /// A lazy stack only defers the children it owns directly. `ladder` is a single child of
-    /// the one at the top of this file, so the moment it came into view every section and
-    /// every group inside it was built at once — and each group row holds a `ThumbnailView`
-    /// whose `.task` fires on appear. A hundred and seventy items form about eighty-five
-    /// groups: eighty-five rows and eighty-five PhotoKit requests, all on the first frame, for
-    /// a screen showing six of them.
     /// Two levels: what kind of thing, then what deleting it costs.
     ///
     /// Kind is the outer one because it is the question people arrive with — how much of this
@@ -259,7 +280,7 @@ struct ReviewView: View {
             ForEach(model.kindSections) { kindSection in
                 Section {
                     ForEach(Array(kindSection.sections.enumerated()), id: \.element.id) { index, section in
-                        rung(section, isLast: index == kindSection.sections.count - 1)
+                        rung(section, in: kindSection.kind, isLast: index == kindSection.sections.count - 1)
                     }
                     .padding(.bottom, DS.Space.xxl)
                 } header: {
@@ -297,7 +318,7 @@ struct ReviewView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(KindCopy.title(for: kindSection.kind)), \(Counting.items(kindSection.itemCount)), \(ByteFormatting.string(kindSection.bytes))")
-        .accessibilityIdentifier("review.kindsection.\(kindSection.kind.rawValue)")
+        .accessibilityIdentifier("review.kindsection.\(KindCopy.slug(for: kindSection.kind))")
     }
 
     /// Photos, videos and files share every tier, because what deleting something costs you has
@@ -351,17 +372,17 @@ struct ReviewView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(KindCopy.title(for: kind)), \(Counting.items(tally.items))")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-        .accessibilityIdentifier("review.kind.\(kind.map(String.init(describing:)) ?? "all")")
+        .accessibilityIdentifier("review.kind.\(KindCopy.slug(for: kind))")
     }
 
-    private func rung(_ section: ReviewSection, isLast: Bool) -> some View {
+    private func rung(_ section: ReviewSection, in kind: MediaKind, isLast: Bool) -> some View {
         let tint = DS.tier(section.tier)
 
         return HStack(alignment: .top, spacing: 14) {
             rail(tint: tint, isLast: isLast)
 
             VStack(alignment: .leading, spacing: 12) {
-                rungHeader(section, tint: tint)
+                rungHeader(section, in: kind, tint: tint)
 
                 LazyVStack(spacing: 8) {
                     ForEach(section.groups) { group in
@@ -397,14 +418,20 @@ struct ReviewView: View {
         .accessibilityHidden(true)
     }
 
-    private func rungHeader(_ section: ReviewSection, tint: Color) -> some View {
+    /// Identifiers carry the kind as well as the tier.
+    ///
+    /// Accessibility identifiers are contracts, and a contract has to name one thing. Once the
+    /// list nested tiers under kinds, "Identical copies" appeared up to three times on one
+    /// screen — so `review.section.identical` matched three elements and the UI test that
+    /// tapped `review.selectall.identical` tapped whichever one the query happened to return.
+    private func rungHeader(_ section: ReviewSection, in kind: MediaKind, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(ScanCopy.title(for: section.tier))
                         .font(.system(.headline, design: .rounded))
                         .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("review.section.\(section.tier.rawValue)")
+                        .accessibilityIdentifier("review.section.\(KindCopy.slug(for: kind)).\(section.tier.rawValue)")
 
                     Eyebrow(DS.cost(section.tier), tint: DS.costTint(section.tier))
                 }
@@ -431,7 +458,8 @@ struct ReviewView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityIdentifier("review.selectall.\(section.tier.rawValue)")
+                .accessibilityLabel("\(model.selection.containsAll(section.candidateIDs) ? "Deselect" : "Select") every \(KindCopy.title(for: kind).lowercased()) copy in \(ScanCopy.title(for: section.tier).lowercased())")
+                .accessibilityIdentifier("review.selectall.\(KindCopy.slug(for: kind)).\(section.tier.rawValue)")
             }
 
             HStack(spacing: 6) {
