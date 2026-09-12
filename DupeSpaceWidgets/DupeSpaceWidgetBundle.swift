@@ -5,5 +5,6 @@ import WidgetKit
 struct DupeSpaceWidgetBundle: WidgetBundle {
     var body: some Widget {
         StorageWidget()
+        ScanLiveActivity()
     }
 }

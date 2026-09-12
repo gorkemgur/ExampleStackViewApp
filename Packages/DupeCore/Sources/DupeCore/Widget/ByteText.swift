@@ -34,3 +34,18 @@ public enum ByteText {
         compactFormatter.string(fromByteCount: max(bytes, 0))
     }
 }
+
+/// "1 items" is the kind of detail that makes a screen look unfinished, and this app asks
+/// people to trust it with their photos.
+///
+/// Shared with the widget and the Live Activity for the same reason `ByteText` is.
+public enum Counting {
+
+    public static func items(_ count: Int) -> String {
+        count == 1 ? "1 item" : "\(count) items"
+    }
+
+    public static func copies(_ count: Int) -> String {
+        count == 1 ? "1 other copy" : "\(count) other copies"
+    }
+}

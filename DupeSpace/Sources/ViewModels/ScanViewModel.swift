@@ -18,17 +18,22 @@ final class ScanViewModel: ObservableObject {
     private var task: Task<Void, Never>?
     private var gate = ScanPauseGate()
     private let cache: FileFingerprintCache?
+    private let activity: (any ScanActivityPresenting)?
+    private var startedAt = Date()
+    private var itemCount = 0
 
     init(
         analyzer: any AssetAnalyzing,
         configuration: ScanConfiguration = .default,
         history: (any HistoryRecording)? = nil,
-        cache: FileFingerprintCache? = nil
+        cache: FileFingerprintCache? = nil,
+        activity: (any ScanActivityPresenting)? = nil
     ) {
         self.analyzer = analyzer
         self.configuration = configuration
         self.history = history
         self.cache = cache
+        self.activity = activity
     }
 
     var hasFinished: Bool { result != nil }
@@ -46,16 +51,33 @@ final class ScanViewModel: ObservableObject {
         gate = ScanPauseGate()
         let pipeline = ScanPipeline(analyzer: analyzer, configuration: configuration, pause: gate)
         let onProgress: @Sendable (ScanProgress) -> Void = { [weak self] update in
-            Task { @MainActor in self?.progress = update }
+            Task { @MainActor in
+                guard let self else { return }
+                self.progress = update
+                self.activity?.update(self.liveState(phase: self.isPaused ? .paused : .scanning))
+            }
         }
 
         let startedAt = Date()
+        self.startedAt = startedAt
+        self.itemCount = items.count
+        activity?.start(
+            libraryItemCount: items.count,
+            state: liveState(phase: .scanning)
+        )
 
         task = Task {
             do {
                 let scan = try await pipeline.run(items: items, progress: onProgress)
                 self.result = scan
                 WidgetPublisher.publish(scan: scan)
+                self.activity?.finish(
+                    self.liveState(
+                        phase: .finished,
+                        candidateCount: scan.candidates.count,
+                        reclaimableBytes: scan.reclaimableBytes
+                    )
+                )
                 self.history?.record(
                     scan: HistoryBuilder.scanRecord(
                         result: scan,
@@ -74,8 +96,10 @@ final class ScanViewModel: ObservableObject {
                 }
             } catch is CancellationError {
                 self.wasCancelled = true
+                self.activity?.finish(self.liveState(phase: .cancelled))
             } catch {
                 self.failure = error.localizedDescription
+                self.activity?.finish(self.liveState(phase: .failed))
             }
             self.isScanning = false
         }
@@ -84,6 +108,7 @@ final class ScanViewModel: ObservableObject {
     func pause() {
         guard isScanning, !isPaused else { return }
         isPaused = true
+        activity?.update(liveState(phase: .paused))
         let gate = self.gate
         Task { await gate.pause() }
     }
@@ -91,6 +116,7 @@ final class ScanViewModel: ObservableObject {
     func resume() {
         guard isPaused else { return }
         isPaused = false
+        activity?.update(liveState(phase: .scanning))
         let gate = self.gate
         Task { await gate.resume() }
     }
@@ -102,5 +128,26 @@ final class ScanViewModel: ObservableObject {
         isPaused = false
         task?.cancel()
         task = nil
+    }
+
+    /// The running scan in the shape the Lock Screen and the Dynamic Island read.
+    ///
+    /// Totals stay at zero until the scan finishes, because until the planning stage has run
+    /// there is no honest number to show: an item is only a candidate once something else is
+    /// known to be a better copy of it.
+    private func liveState(
+        phase: LiveScanState.Phase,
+        candidateCount: Int = 0,
+        reclaimableBytes: Int64 = 0
+    ) -> LiveScanState {
+        LiveScanState(
+            phase: phase,
+            stage: progress?.stage ?? .bucketing,
+            completed: progress?.completed ?? 0,
+            total: progress?.total ?? itemCount,
+            candidateCount: candidateCount,
+            reclaimableBytes: reclaimableBytes,
+            startedAt: startedAt
+        )
     }
 }

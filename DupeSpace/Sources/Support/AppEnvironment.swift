@@ -45,6 +45,12 @@ enum AppEnvironment {
         return CachingAnalyzer(base: base, cache: fingerprintCache)
     }
 
+    /// No Live Activity under UI test: a simulator shows none, and a run's assertions should
+    /// describe the app's own screens rather than a surface that cannot appear.
+    static func makeScanActivity() -> (any ScanActivityPresenting)? {
+        isUITesting ? nil : LiveScanActivityController()
+    }
+
     static func makeChangeObserver() -> any LibraryChangeObserving {
         isUITesting ? StubLibraryChangeObserver() : PhotoLibraryChangeObserver()
     }

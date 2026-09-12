@@ -15,7 +15,8 @@ struct ScanView: View {
             wrappedValue: ScanViewModel(
                 analyzer: AppEnvironment.makeAnalyzer(),
                 history: history,
-                cache: AppEnvironment.fingerprintCache
+                cache: AppEnvironment.fingerprintCache,
+                activity: AppEnvironment.makeScanActivity()
             )
         )
     }

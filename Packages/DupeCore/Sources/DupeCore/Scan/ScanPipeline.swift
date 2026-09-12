@@ -42,7 +42,7 @@ public struct ScanConfiguration: Sendable, Hashable {
 
 public struct ScanProgress: Sendable, Hashable {
 
-    public enum Stage: Int, Sendable, Hashable, CaseIterable {
+    public enum Stage: Int, Sendable, Hashable, Codable, CaseIterable {
         case bucketing
         case hashing
         case fingerprinting
