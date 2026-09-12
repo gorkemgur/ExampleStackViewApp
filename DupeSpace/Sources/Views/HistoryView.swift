@@ -12,45 +12,46 @@ struct HistoryView: View {
     @State private var expanded: Set<String> = []
     @State private var confirmingClear = false
 
+    /// Pushed from the overview rather than owning a tab, so it has no navigation stack of its
+    /// own: it inherits the one it was pushed onto.
     var body: some View {
-        NavigationStack {
-            Group {
-                if history.isEmpty {
-                    ContentUnavailableView {
-                        Label("Nothing yet", systemImage: "clock.arrow.circlepath")
-                    } description: {
-                        Text("Once you scan or delete, what happened shows up here — including what was kept in place of each copy you removed.")
-                            .accessibilityIdentifier("history.empty")
+        Group {
+            if history.isEmpty {
+                ContentUnavailableView {
+                    Label("Nothing yet", systemImage: "clock.arrow.circlepath")
+                } description: {
+                    Text("Once you scan or delete, what happened shows up here — including what was kept in place of each copy you removed.")
+                        .accessibilityIdentifier("history.empty")
+                }
+            } else {
+                timeline
+            }
+        }
+        .navigationTitle("History")
+        .navigationBarTitleDisplayMode(.inline)
+        .background(DS.ink, ignoresSafeAreaEdges: .all)
+        .toolbar {
+            if !history.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Clear", role: .destructive) {
+                        confirmingClear = true
                     }
-                } else {
-                    timeline
+                    .tint(.red)
+                    .accessibilityIdentifier("history.clear")
                 }
             }
-            .navigationTitle("History")
-            .background(Color(uiColor: .systemGroupedBackground))
-            .toolbar {
-                if !history.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Clear", role: .destructive) {
-                            confirmingClear = true
-                        }
-                        .tint(.red)
-                        .accessibilityIdentifier("history.clear")
-                    }
-                }
+        }
+        .confirmationDialog(
+            "Clear the history?",
+            isPresented: $confirmingClear,
+            titleVisibility: .visible
+        ) {
+            Button("Clear the record", role: .destructive) {
+                withAnimation(Motion.content) { history.clear() }
             }
-            .confirmationDialog(
-                "Clear the history?",
-                isPresented: $confirmingClear,
-                titleVisibility: .visible
-            ) {
-                Button("Clear the record", role: .destructive) {
-                    withAnimation(Motion.content) { history.clear() }
-                }
-                Button("Keep it", role: .cancel) {}
-            } message: {
-                Text("This only forgets the record. Nothing that was deleted comes back, and nothing that is still in Recently Deleted is affected.")
-            }
+            Button("Keep it", role: .cancel) {}
+        } message: {
+            Text("This only forgets the record. Nothing that was deleted comes back, and nothing that is still in Recently Deleted is affected.")
         }
     }
 
@@ -77,29 +78,32 @@ struct HistoryView: View {
 
     // MARK: - Cards
 
+    /// The lifetime total, set like the disk reading on the overview and sitting straight on the
+    /// page for the same reason: it is the headline of the screen, not one section of it.
     private var lifetimeCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(ByteFormatting.string(history.totalReclaimedBytes))
-                    .font(.system(.largeTitle, design: .rounded).weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .contentTransition(.numericText())
-                    .accessibilityIdentifier("history.total")
+        VStack(alignment: .leading, spacing: 2) {
+            Eyebrow("Reclaimed with DupeSpace", tint: DS.aqua)
 
-                Text("reclaimed across \(Counting.items(history.totalItemsDeleted))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            Readout.bytes(history.totalReclaimedBytes, tint: DS.aqua)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+                .accessibilityIdentifier("history.total")
+
+            Text("across \(Counting.items(history.totalItemsDeleted))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 2)
     }
 
     private func recoveryCard(_ record: DeletionRecord) -> some View {
-        Card {
+        Card(rail: DS.tier(.burstLeftover)) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "arrow.uturn.backward.circle")
                     .font(.title3)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.tier(.burstLeftover))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("You can still change your mind")
@@ -125,9 +129,9 @@ struct HistoryView: View {
     }
 
     private func scanCard(_ record: ScanRecord) -> some View {
-        Card {
+        Card(rail: DS.deep) {
             HStack(alignment: .top, spacing: 12) {
-                badge(symbol: "magnifyingglass", tint: .blue)
+                badge(symbol: "magnifyingglass", tint: DS.deep)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(
@@ -156,7 +160,7 @@ struct HistoryView: View {
     }
 
     private func deletionCard(_ record: DeletionRecord, entryID: String) -> some View {
-        Card {
+        Card(rail: DS.aqua) {
             VStack(alignment: .leading, spacing: 12) {
                 Button {
                     withAnimation(Motion.content) {
@@ -168,7 +172,7 @@ struct HistoryView: View {
                     }
                 } label: {
                     HStack(alignment: .top, spacing: 12) {
-                        badge(symbol: "trash", tint: .red)
+                        badge(symbol: "trash", tint: DS.aqua)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Removed \(Counting.items(record.itemCount)) · \(ByteFormatting.string(record.reclaimedBytes))")
@@ -188,7 +192,10 @@ struct HistoryView: View {
                                     .foregroundStyle(.primary)
                                     .padding(.horizontal, 7)
                                     .padding(.vertical, 3)
-                                    .background(Color.orange.opacity(0.18), in: Capsule())
+                                    .background(
+                                        DS.tier(.burstLeftover).opacity(0.18),
+                                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    )
                             }
                         }
 
@@ -253,7 +260,7 @@ struct HistoryView: View {
             .foregroundStyle(tint)
             .frame(width: 32, height: 32)
             .background(
-                Circle().fill(tint.opacity(0.14))
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(tint.opacity(0.14))
             )
     }
 }

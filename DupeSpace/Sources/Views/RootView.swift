@@ -27,7 +27,7 @@ struct RootView: View {
                 VStack(spacing: 16) {
                     if let snapshot = model.storage {
                         StorageCardView(snapshot: snapshot, libraryBytes: model.onDeviceLibraryBytes)
-                            .cardEntrance()
+                            .padding(.bottom, 2)
                     }
 
                     if model.access != .authorized {
@@ -47,7 +47,7 @@ struct RootView: View {
                     }
 
                     if !model.items.isEmpty {
-                        scanEntryCard
+                        scanEntryPanel
                             .cardEntrance()
                             .transition(.opacity.combined(with: .offset(y: 12)))
                     }
@@ -74,14 +74,16 @@ struct RootView: View {
                         .cardEntrance()
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 28)
                 .animation(Motion.content, value: model.items.count)
                 .animation(Motion.content, value: model.access)
                 .animation(Motion.content, value: model.isLoading)
                 .animation(Motion.content, value: model.folders)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(DS.ink, ignoresSafeAreaEdges: .all)
             .navigationTitle("DupeSpace")
+            .navigationBarTitleDisplayMode(.inline)
             .refreshable {
                 await model.refresh()
             }
@@ -99,6 +101,10 @@ struct RootView: View {
                         Button("Live surfaces") { showingLiveSurfaces = true }
                             .accessibilityIdentifier("root.livesurfaces")
                     }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    historyEntry
                 }
             }
         }
@@ -127,27 +133,107 @@ struct RootView: View {
         }
     }
 
-    private var scanEntryCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 8) {
+    // MARK: - History
+
+    /// The whole of the old History tab, in one control — and it carries a reading rather than
+    /// just a word, so the chrome the tab bar used to cost is now telling you something.
+    private var historyEntry: some View {
+        NavigationLink {
+            HistoryView()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption.weight(.bold))
+                Text(historyChipTitle)
+                    .font(.caption.weight(.bold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
+            .foregroundStyle(DS.deep)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 32)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(DS.deep.opacity(0.13))
+            )
+        }
+        .accessibilityLabel("History")
+        .accessibilityHint("What this app has scanned and removed")
+        .accessibilityIdentifier("history.open")
+    }
+
+    private var historyChipTitle: String {
+        history.totalReclaimedBytes > 0 ? ByteFormatting.string(history.totalReclaimedBytes) : "History"
+    }
+
+    // MARK: - The invitation
+
+    /// The one block on this screen that is not a card: a dark instrument panel carrying the
+    /// ladder the whole product is built on, so the offer on the button is legible before it is
+    /// tapped rather than after.
+    private var scanEntryPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 7) {
+                Eyebrow("Ranked by regret", tint: DS.brandBottom)
+
                 Text("Find what you can lose least")
-                    .font(.title3.weight(.semibold))
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Text("Ranked by what deleting actually costs you — identical copies first, your judgement calls last.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.onSlab.opacity(0.74))
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            ladderPreview
 
             NavigationLink {
                 ScanView(items: model.items, history: history)
             } label: {
                 Text("Scan for duplicates")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.key)
             .accessibilityIdentifier("root.scan")
         }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(DS.slab)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    /// Four rungs, cheapest at the bottom of the cost scale and dearest at the top. The colours
+    /// here are the same ones the review screen rails its groups with, so the ladder is learned
+    /// once and read everywhere.
+    private var ladderPreview: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(RegretTier.allCases, id: \.self) { tier in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Capsule(style: .continuous)
+                        .fill(DS.tierVivid(tier))
+                        .frame(width: 3, height: 12)
+                        .alignmentGuide(.firstTextBaseline) { $0.height - 1 }
+
+                    Text(ScanCopy.title(for: tier))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(DS.onSlab.opacity(0.88))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    Spacer(minLength: 8)
+
+                    Eyebrow(DS.cost(tier), tint: DS.tierVivid(tier))
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("The ladder: identical copies and lower-quality re-sends cost nothing, burst leftovers and similar shots are your call.")
     }
 
     private var loadingCard: some View {
@@ -163,10 +249,16 @@ struct RootView: View {
     }
 
     private func failureCard(_ message: String) -> some View {
-        Card("Could not read the library", symbolName: "exclamationmark.triangle", identifier: "library.failure") {
+        Card(
+            "Could not read the library",
+            symbolName: "exclamationmark.triangle",
+            identifier: "library.failure",
+            rail: DS.tier(.similar)
+        ) {
             Text(message)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

@@ -1,6 +1,8 @@
 import SwiftUI
 import DupeCore
 
+/// One group, opened up: the copy that stays, then every copy on offer with the evidence for
+/// each one directly underneath it.
 struct GroupDetailView: View {
 
     let group: ReviewGroup
@@ -13,44 +15,58 @@ struct GroupDetailView: View {
     /// carries the tier as well.
     private var groupID: String? { group.candidates.first?.groupID }
 
+    private var tint: Color { DS.tier(group.tier) }
+
     var body: some View {
-        List {
-            Section {
-                HStack(spacing: 12) {
-                    ThumbnailView(item: group.keeper, side: 72, loader: loader)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(group.keeper.displayName)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text("\(group.keeper.pixelWidth)×\(group.keeper.pixelHeight) · \(ByteFormatting.string(group.keeper.totalByteSize))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 4)
-            } header: {
-                Text("Staying")
-            } footer: {
-                Text(keeperFooter)
-            }
+        ScrollView {
+            VStack(spacing: 16) {
+                keeperPanel
 
-            ForEach(group.items) { item in
-                Section {
-                    candidateRow(item)
-                    ComparisonTable(keeper: group.keeper, candidate: item)
-                    keepInsteadButton(item)
+                ForEach(group.items) { item in
+                    candidatePanel(item)
+                }
+
+                if let groupID {
+                    droppedNotice(groupID)
+                    clearEverythingSection(groupID)
                 }
             }
-
-            if let groupID {
-                droppedNotice(groupID)
-                clearEverythingSection(groupID)
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 28)
         }
+        .background(DS.ink, ignoresSafeAreaEdges: .all)
         .sensoryFeedback(.selection, trigger: model.selection.count)
         .navigationTitle(ScanCopy.title(for: group.tier))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - The survivor
+
+    private var keeperPanel: some View {
+        Card("Staying", symbolName: "checkmark.seal.fill", identifier: "group.keeper", rail: DS.tier(.inferiorCopy)) {
+            HStack(spacing: 12) {
+                ThumbnailView(item: group.keeper, side: 64, loader: loader)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(group.keeper.displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text("\(group.keeper.pixelWidth)×\(group.keeper.pixelHeight) · \(ByteFormatting.string(group.keeper.totalByteSize))")
+                        .font(.system(.caption, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Text(keeperFooter)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var keeperFooter: String {
@@ -58,6 +74,32 @@ struct GroupDetailView: View {
             return "Every copy below was compared against this one directly. It is never offered for deletion — unless you say otherwise."
         }
         return "Your choice, not the app's. Every copy below was compared against this one directly."
+    }
+
+    // MARK: - One copy on offer
+
+    private func candidatePanel(_ item: MediaItem) -> some View {
+        Card(rail: tint) {
+            candidateRow(item)
+
+            CompareSliderView(keeper: group.keeper, candidate: item, loader: loader)
+
+            ComparisonHighlights(keeper: group.keeper, candidate: item)
+
+            DisclosureGroup {
+                ComparisonTable(keeper: group.keeper, candidate: item)
+            } label: {
+                Text("Every measurement")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DS.deep)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .tint(DS.deep)
+            .accessibilityIdentifier("candidate.table.\(item.id)")
+
+            keepInsteadButton(item)
+        }
     }
 
     /// The other half of "your call": the app's pick is a default, and defaults can be wrong
@@ -69,8 +111,8 @@ struct GroupDetailView: View {
                 model.chooseKeeper(item.id, inGroup: groupID)
             } label: {
                 Label("Keep this one instead", systemImage: "arrow.triangle.swap")
-                    .font(.subheadline)
             }
+            .buttonStyle(.keyQuiet)
             .accessibilityIdentifier("candidate.keep.\(item.id)")
         }
     }
@@ -81,10 +123,11 @@ struct GroupDetailView: View {
     private func droppedNotice(_ groupID: String) -> some View {
         let dropped = model.droppedMembers(inGroup: groupID)
         if !dropped.isEmpty {
-            Section {
+            Card("No longer offered", symbolName: "eye.slash", identifier: "group.dropped.title") {
                 Text("\(Counting.items(dropped.count)) from this group \(dropped.count == 1 ? "is" : "are") no longer offered. They were each compared with the copy the app had chosen, and with nothing else — so against the one you kept, there is no evidence. Scan again to compare them directly.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("group.dropped")
             }
         }
@@ -92,15 +135,17 @@ struct GroupDetailView: View {
 
     @ViewBuilder
     private func clearEverythingSection(_ groupID: String) -> some View {
-        Section {
+        Card(rail: DS.tier(.similar)) {
             if model.isClearingEverything(inGroup: groupID) {
                 Label("Every copy in this group is selected, including the one that was staying.", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.tier(.burstLeftover))
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button("Keep one after all", role: .cancel) {
                     model.setClearingEverything(false, inGroup: groupID)
                 }
+                .buttonStyle(.keyQuiet)
                 .accessibilityIdentifier("group.keepone")
             } else {
                 Button(role: .destructive) {
@@ -108,10 +153,14 @@ struct GroupDetailView: View {
                 } label: {
                     Label("Delete every copy in this group", systemImage: "trash")
                 }
+                .buttonStyle(KeyButtonStyle(fill: AnyShapeStyle(DS.well), foreground: .red))
                 .accessibilityIdentifier("group.deleteall")
             }
-        } footer: {
+
             Text("The app will never select the last copy of anything on its own. This is the one way to say you want none of them.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .confirmationDialog(
             "Delete every copy, keeping none?",
@@ -135,25 +184,27 @@ struct GroupDetailView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: model.selection.isSelected(item.id) ? "checkmark.circle.fill" : "circle")
+                Image(systemName: model.selection.isSelected(item.id) ? "checkmark.square.fill" : "square")
                     .font(.title3)
-                    .foregroundStyle(model.selection.isSelected(item.id) ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(model.selection.isSelected(item.id) ? tint : Color.secondary)
                     .symbolEffect(.bounce, value: model.selection.isSelected(item.id))
 
-                ThumbnailView(item: item, side: 56, loader: loader)
+                ThumbnailView(item: item, side: 52, loader: loader)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.displayName)
-                        .font(.subheadline)
+                        .font(.subheadline.weight(.medium))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(ByteFormatting.string(item.totalByteSize))
-                        .font(.caption)
+                        .font(.system(.caption, design: .rounded))
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer(minLength: 8)
             }
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

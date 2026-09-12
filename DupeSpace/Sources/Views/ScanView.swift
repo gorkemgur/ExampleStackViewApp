@@ -38,10 +38,11 @@ struct ScanView: View {
                 }
 
                 if let failure = model.failure {
-                    Card("Scan failed", symbolName: "exclamationmark.triangle", identifier: "scan.failure") {
+                    Card("Scan failed", symbolName: "exclamationmark.triangle", identifier: "scan.failure", rail: DS.tier(.similar)) {
                         Text(failure)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -55,11 +56,12 @@ struct ScanView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 28)
             .animation(Motion.content, value: model.isScanning)
             .animation(Motion.content, value: model.result?.candidates.count)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(DS.ink, ignoresSafeAreaEdges: .all)
         .sensoryFeedback(.success, trigger: model.result != nil) { _, hasResult in hasResult }
         .navigationTitle("Find duplicates")
         .navigationBarTitleDisplayMode(.inline)
@@ -75,8 +77,10 @@ struct ScanView: View {
     private var introCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
+                Eyebrow("About to read", tint: DS.aqua)
+
                 Text("Scan \(Counting.items(items.count))")
-                    .font(.title3.weight(.semibold))
+                    .font(.system(.title2, design: .rounded).weight(.bold))
 
                 Text("Metadata is compared first, so only the handful of items that could possibly match ever get read. Nothing is downloaded from iCloud and nothing is deleted without you saying so.")
                     .font(.subheadline)
@@ -107,10 +111,8 @@ struct ScanView: View {
                 model.start(items: items)
             } label: {
                 Text("Start scan")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.key)
             .accessibilityIdentifier("scan.start")
         }
     }
@@ -119,16 +121,32 @@ struct ScanView: View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 Text(ScanCopy.title(for: model.progress?.stage ?? .bucketing))
-                    .font(.headline)
+                    .font(.system(.headline, design: .rounded))
+                    .fixedSize(horizontal: false, vertical: true)
                     .transition(.blurReplace)
                     .id(model.progress?.stage ?? .bucketing)
                     .accessibilityIdentifier("scan.stage")
 
-                ProgressView(value: model.progress?.fraction ?? 0)
+                // The same track shape the disk gauge and the ladder use, rather than a stock
+                // ProgressView, so a measurement always looks like a measurement in this app.
+                MeterTrack(
+                    segments: [
+                        MeterTrack.Segment(
+                            id: "progress",
+                            value: model.progress?.fraction ?? 0,
+                            color: model.isPaused ? DS.tier(.burstLeftover) : DS.aqua
+                        )
+                    ],
+                    total: 1,
+                    height: 8
+                )
+                .accessibilityElement()
+                .accessibilityLabel("Scan progress")
+                .accessibilityValue("\(Int(((model.progress?.fraction ?? 0) * 100).rounded())) percent")
 
                 Text(model.isPaused ? "Paused — nothing read so far is lost" : countsText)
                     .font(.footnote)
-                    .foregroundStyle(model.isPaused ? Color.orange : Color.secondary)
+                    .foregroundStyle(model.isPaused ? DS.tier(.burstLeftover) : Color.secondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("scan.counts")
@@ -150,20 +168,16 @@ struct ScanView: View {
                         model.isPaused ? "Resume" : "Pause",
                         systemImage: model.isPaused ? "play.fill" : "pause.fill"
                     )
-                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .buttonStyle(.keyQuiet)
                 .accessibilityIdentifier("scan.pause")
 
                 Button {
                     model.cancel()
                 } label: {
                     Text("Cancel")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .buttonStyle(.keyQuiet)
                 .accessibilityIdentifier("scan.cancel")
             }
         }
@@ -179,44 +193,24 @@ struct ScanView: View {
         let summaries = result.tierSummaries
 
         if summaries.isEmpty {
-            Card {
+            Card(rail: DS.tier(.inferiorCopy)) {
                 VStack(alignment: .leading, spacing: 8) {
                     Image(systemName: "checkmark.seal")
                         .font(.title)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(DS.tier(.inferiorCopy))
                         .symbolEffect(.bounce, value: hasSettled)
                         .onAppear { hasSettled = true }
                     Text("No duplicates found")
-                        .font(.title3.weight(.semibold))
+                        .font(.system(.title3, design: .rounded).weight(.bold))
                         .accessibilityIdentifier("scan.empty")
                     Text("Nothing in this library is a copy of anything else.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         } else {
-            Card {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(ByteFormatting.string(result.reclaimableBytes))
-                        .font(.system(.largeTitle, design: .rounded).weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .accessibilityIdentifier("scan.total")
-                    Text("across \(Counting.items(result.candidates.count)) you could remove")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                NavigationLink {
-                    ReviewView(result: result, history: history)
-                } label: {
-                    Text("Review and choose")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .accessibilityIdentifier("scan.review")
-            }
+            resultsHeadline(result)
 
             ForEach(summaries) { summary in
                 tierCard(summary)
@@ -236,9 +230,61 @@ struct ScanView: View {
                     Text("\(Counting.items(result.cloudOnlyIDs.count)) \(result.cloudOnlyIDs.count == 1 ? "has" : "have") the original in iCloud. They were left alone rather than downloaded over your connection.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+    }
+
+    /// What the scan found, on the instrument panel — the same slab the space budget uses,
+    /// because this figure is the one the budget is about to be spent against.
+    private func resultsHeadline(_ result: ScanResult) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Eyebrow("Found, ranked by what it costs you", tint: DS.brandBottom)
+
+                Readout.bytes(result.reclaimableBytes, tint: DS.brandBottom)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .accessibilityIdentifier("scan.total")
+
+                Text("across \(Counting.items(result.candidates.count)) you could remove")
+                    .font(.subheadline)
+                    .foregroundStyle(DS.onSlab.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            MeterTrack(
+                segments: result.tierSummaries.map {
+                    MeterTrack.Segment(
+                        id: "found.\($0.tier.rawValue)",
+                        value: Double($0.bytes),
+                        color: DS.tierVivid($0.tier)
+                    )
+                },
+                total: Double(max(result.reclaimableBytes, 1)),
+                height: 8
+            )
+            .accessibilityHidden(true)
+
+            NavigationLink {
+                ReviewView(result: result, history: history)
+            } label: {
+                Text("Review and choose")
+            }
+            .buttonStyle(.key)
+            .accessibilityIdentifier("scan.review")
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(DS.slab)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .environment(\.colorScheme, .dark)
     }
 
     /// Files whose names say "copy" but whose contents do not match.
@@ -265,20 +311,28 @@ struct ScanView: View {
         }
     }
 
+    /// One rung of the ladder, carrying its own colour — the same colour the review screen
+    /// rails that tier with, so the two screens are plainly describing the same thing.
     @ViewBuilder
     private func tierCard(_ summary: TierSummary) -> some View {
-        Card {
+        Card(rail: DS.tier(summary.tier)) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: ScanCopy.symbolName(for: summary.tier))
-                    .font(.title3)
-                    .foregroundStyle(summary.tier.isLossless ? Color.green : Color.orange)
-                    .frame(width: 30)
+                    .font(.system(.body, design: .rounded).weight(.semibold))
+                    .foregroundStyle(DS.tier(summary.tier))
+                    .frame(width: 28, height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(DS.tier(summary.tier).opacity(0.13))
+                    )
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(ScanCopy.title(for: summary.tier))
-                        .font(.headline)
+                        .font(.system(.headline, design: .rounded))
                         .lineLimit(2)
                         .accessibilityIdentifier("scan.tier.\(summary.tier.rawValue)")
+
+                    Eyebrow(DS.cost(summary.tier), tint: DS.tier(summary.tier))
 
                     Text(ScanCopy.subtitle(for: summary.tier))
                         .font(.footnote)
@@ -290,7 +344,7 @@ struct ScanView: View {
 
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(ByteFormatting.string(summary.bytes))
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .monospacedDigit()
                     Text(Counting.items(summary.itemCount))
                         .font(.caption)

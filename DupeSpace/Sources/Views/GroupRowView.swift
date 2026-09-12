@@ -1,22 +1,27 @@
 import SwiftUI
 import DupeCore
 
-/// One duplicate group as it appears in the review list: the survivor, then the copies on
-/// offer, with the count that is currently ticked.
+/// One duplicate group as it appears on the ladder: the survivor, then the copies on offer,
+/// with the count that is currently ticked.
 struct GroupRowView: View {
 
     let group: ReviewGroup
     let selectedCount: Int
+    /// The rung's colour, so a row never has to explain which tier it belongs to.
+    var tint: Color = DS.aqua
     let loader: any ThumbnailLoading
 
     var body: some View {
         HStack(spacing: 12) {
             ZStack(alignment: .bottomTrailing) {
-                ThumbnailView(item: group.keeper, side: 56, loader: loader)
+                ThumbnailView(item: group.keeper, side: 52, loader: loader)
+
+                // The survivor is marked on the picture rather than in the words: this is the
+                // copy that stays, and the row is otherwise about what goes.
                 Image(systemName: "checkmark.seal.fill")
                     .font(.caption2)
-                    .foregroundStyle(.white, .green)
-                    .padding(4)
+                    .foregroundStyle(.white, DS.tier(.inferiorCopy))
+                    .padding(3)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -36,16 +41,22 @@ struct GroupRowView: View {
 
             VStack(alignment: .trailing, spacing: 3) {
                 Text(ByteFormatting.string(group.bytes))
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .monospacedDigit()
 
                 Text("\(selectedCount)/\(group.candidates.count) ticked")
                     .font(.caption2)
-                    .foregroundStyle(selectedCount > 0 ? Color.accentColor : Color.secondary)
+                    .monospacedDigit()
+                    .foregroundStyle(selectedCount > 0 ? tint : Color.secondary)
                     .lineLimit(1)
             }
+
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
     }
 
     private var detail: String {
