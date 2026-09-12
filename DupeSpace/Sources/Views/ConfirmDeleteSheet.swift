@@ -36,13 +36,20 @@ struct ConfirmDeleteSheet: View {
             ScrollView {
                 VStack(spacing: 16) {
                     headline
-                    breakdown
 
-                    if model.judgementCallCount > 0 {
-                        judgementWarning
+                    // Everything below is about a decision that has already been taken. Leaving
+                    // it up while the sheet waits to dismiss is what produced the worst frame in
+                    // the recording: the ledger, the export offer and a dead "Delete 0 items"
+                    // key, all describing a selection that had just been cleared.
+                    if model.outcome == nil {
+                        breakdown
+
+                        if model.judgementCallCount > 0 {
+                            judgementWarning
+                        }
+
+                        keepACopy
                     }
-
-                    keepACopy
 
                     if let failure = model.failure {
                         Card(
@@ -185,7 +192,7 @@ struct ConfirmDeleteSheet: View {
     @ViewBuilder
     private var deleteKey: some View {
         VStack(spacing: 0) {
-            if model.isDeleting, let staged {
+            if (model.isDeleting || model.outcome != nil), let staged {
                 handover(staged)
                     .transition(.opacity)
             } else {
@@ -234,6 +241,16 @@ struct ConfirmDeleteSheet: View {
     }
 
     private func scene(_ staged: (files: Int, photos: Int, savings: SavingsBreakdown)) -> HandoverScene {
+        // Arrived. The sheet holds on this for a beat before dismissing, so the crossing is
+        // seen finishing rather than cut off by the transition.
+        if let outcome = model.outcome {
+            return .settled(
+                outcome: outcome,
+                savings: model.outcomeSavings ?? staged.savings,
+                fileCount: staged.files,
+                width: instrumentWidth
+            )
+        }
         guard let progress = model.deletionProgress else {
             return .staged(savings: staged.savings, fileCount: staged.files, width: instrumentWidth)
         }
@@ -249,10 +266,18 @@ struct ConfirmDeleteSheet: View {
     /// The gauge reading, set the same way as the disk on the overview so the two numbers read
     /// as measurements of the same thing.
     private var headline: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Eyebrow("Comes back to this device", tint: DS.deep)
+        // Once the deletion has run, the selection is empty — so reading it here produced
+        // "0 KB · nothing is selected" on the sheet at the exact moment it was meant to be
+        // showing the arrival. Past that point the figure is what actually went.
+        let done = model.outcome != nil
+        let bytes = done
+            ? (model.outcomeSavings ?? .empty).onDeviceBytes
+            : model.savings.onDeviceBytes
 
-            Readout.bytes(model.savings.onDeviceBytes, tint: DS.deep)
+        return VStack(alignment: .leading, spacing: 2) {
+            Eyebrow(done ? "What went" : "Comes back to this device", tint: DS.deep)
+
+            Readout.bytes(bytes, tint: DS.deep)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .contentTransition(.numericText())
@@ -265,9 +290,13 @@ struct ConfirmDeleteSheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, 2)
+        .animation(Motion.content, value: done)
     }
 
     private var deepestCostLine: String {
+        if let outcome = model.outcome {
+            return "\(Counting.items(outcome.deletedCount)) removed"
+        }
         guard let tier = model.deepestSelectedTier else { return "nothing is selected" }
         return tier.isLossless
             ? "from \(Counting.items(model.selection.count)) that cost you nothing"

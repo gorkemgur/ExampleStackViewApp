@@ -302,6 +302,10 @@ jobs:
           if [ -f artifacts/motion/deletion.mov ]; then
             mkdir -p docs/motion
             cp artifacts/motion/deletion.mov docs/motion/deletion.mov
+            # The GIF beside it is made off the runner and is stale the moment the .mov
+            # changes. Removing it is better than leaving a preview of a build that no longer
+            # exists — the same argument as replacing the screenshots wholesale.
+            rm -f docs/motion/deletion.gif
           fi
 
           git config user.name "github-actions[bot]"
