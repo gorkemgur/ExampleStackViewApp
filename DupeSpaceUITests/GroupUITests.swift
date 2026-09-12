@@ -14,6 +14,16 @@ final class GroupUITests: XCTestCase {
         app.launch()
     }
 
+    /// By label. A `confirmationDialog`'s buttons carry no identifiers, and the subscript form
+    /// searches identifiers first — which is why tapping "Cancel" could not find a button that
+    /// was plainly on screen.
+    ///
+    /// A method rather than a local closure: a closure here captures `app` off `self`, and
+    /// XCTest's `self` in a test body is not implicitly capturable.
+    private func button(labelled text: String) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label == %@", text)).firstMatch
+    }
+
     private func openFirstGroup() {
         let entry = app.buttons["root.scan"]
         for _ in 0..<8 where !entry.exists { app.swipeUp() }
@@ -55,17 +65,10 @@ final class GroupUITests: XCTestCase {
         XCTAssertTrue(deleteAll.waitForExistence(timeout: 10))
         deleteAll.tap()
 
-        // By label. A `confirmationDialog`'s buttons carry no identifiers, and the subscript
-        // form searches identifiers first — which is why this could not find "Cancel" even
-        // though it was plainly on screen.
-        let byLabel = { (text: String) in
-            app.buttons.matching(NSPredicate(format: "label == %@", text)).firstMatch
-        }
-
-        let arm = byLabel("Select them all")
+        let arm = button(labelled: "Select them all")
         XCTAssertTrue(arm.waitForExistence(timeout: 10), "clearing a group must ask first")
 
-        byLabel("Cancel").tap()
+        button(labelled: "Cancel").tap()
         XCTAssertFalse(app.buttons["group.keepone"].exists, "cancelling must not arm anything")
     }
 }
