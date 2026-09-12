@@ -59,16 +59,12 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1"
-      configs:
-        # Debug only. Every CI invocation already passes CODE_SIGNING_ALLOWED=NO on the command
-        # line, so having it in the *base* settings bought nothing and made a signed Release
-        # archive impossible — which is the one thing distribution needs and the one thing
-        # nothing here could ever have caught, because nothing here archives.
-        debug:
-          CODE_SIGNING_ALLOWED: NO
-          CODE_SIGNING_REQUIRED: NO
-        release:
-          CODE_SIGN_STYLE: Automatic
+        # Both configurations. It was Debug-only-off and Release-on, which made the project
+        # unable to do the one thing it is now for: pressing Run with a phone plugged in uses
+        # *Debug*, and a Debug build that may not be signed cannot be installed on a device.
+        # Every CI invocation already passes CODE_SIGNING_ALLOWED=NO on its own command line,
+        # so nothing in this file needs to say it.
+        CODE_SIGN_STYLE: Automatic
 
   DupeSpaceWidgets:
     type: app-extension
@@ -94,14 +90,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gorkemgur.dupespace.widgets
         SKIP_INSTALL: YES
-      configs:
-        # Same as the app: the extension has to be signable in Release or the app cannot be
-        # archived with it inside.
-        debug:
-          CODE_SIGNING_ALLOWED: NO
-          CODE_SIGNING_REQUIRED: NO
-        release:
-          CODE_SIGN_STYLE: Automatic
+        # Same as the app: the extension has to be signable in both configurations, or the app
+        # can be neither run on a device nor archived with it inside.
+        CODE_SIGN_STYLE: Automatic
 
   DupeSpaceTests:
     type: bundle.unit-test
