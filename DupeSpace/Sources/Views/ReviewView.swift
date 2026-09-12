@@ -5,6 +5,7 @@ struct ReviewView: View {
 
     @StateObject private var model: ReviewViewModel
     @State private var showingConfirm = false
+    @State private var confirmingReset = false
 
     private let loader: any ThumbnailLoading
 
@@ -45,6 +46,26 @@ struct ReviewView: View {
         .sensoryFeedback(.success, trigger: model.outcome != nil)
         .navigationTitle("Review")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if model.hasChangedTheProposal {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Reset") { confirmingReset = true }
+                        .accessibilityIdentifier("review.reset")
+                }
+            }
+        }
+        .confirmationDialog(
+            "Go back to what the app suggested?",
+            isPresented: $confirmingReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset my choices", role: .destructive) {
+                withAnimation(Motion.content) { model.resetToSafeDefaults() }
+            }
+            Button("Keep my choices", role: .cancel) {}
+        } message: {
+            Text("This drops every copy you chose to keep instead, and re-ticks only what deleting provably costs nothing. Nothing has been deleted either way.")
+        }
         .safeAreaInset(edge: .bottom) {
             deleteBar
         }

@@ -144,6 +144,31 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertTrue(model.clearedGroupIDs.isEmpty)
     }
 
+    /// A screen that lets you overrule the app needs a way back, or the choice is a trap.
+    func testResetUndoesEveryOverrideAndEveryTick() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        guard
+            let groupID = exactGroupID(model),
+            let decision = model.result.decisions.first(where: { $0.id == groupID }),
+            let other = decision.allCandidates.first
+        else { return XCTFail("fixture has no exact group") }
+
+        XCTAssertFalse(model.hasChangedTheProposal, "nothing has been touched yet")
+
+        model.chooseKeeper(other, inGroup: groupID)
+        model.setClearingEverything(true, inGroup: groupID)
+        XCTAssertTrue(model.hasChangedTheProposal)
+
+        model.resetToSafeDefaults()
+
+        XCTAssertTrue(model.overrides.isEmpty)
+        XCTAssertEqual(model.keeperID(inGroup: groupID), decision.keeperID)
+        XCTAssertTrue(model.clearedGroupIDs.isEmpty)
+        XCTAssertEqual(model.judgementCallCount, 0, "back to only what costs nothing")
+        XCTAssertTrue(model.violations.isEmpty)
+        XCTAssertFalse(model.hasChangedTheProposal)
+    }
+
     func testSectionsAreOrderedByWhatDeletingCosts() async {
         let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
         let tiers = model.sections.map(\.tier)

@@ -156,3 +156,53 @@ final class ClearedGroupValidationTests: XCTestCase {
         XCTAssertFalse(violations.contains(.groupFullyDeleted(groupID: "g1")))
     }
 }
+
+final class ScanStrictnessTests: XCTestCase {
+
+    func testStricterMeansACloserMatchIsRequired() {
+        let strict = ScanStrictness.strict.configuration
+        let balanced = ScanStrictness.balanced.configuration
+        let loose = ScanStrictness.loose.configuration
+
+        XCTAssertLessThan(strict.nearExactDistance, balanced.nearExactDistance)
+        XCTAssertLessThan(balanced.nearExactDistance, loose.nearExactDistance)
+        XCTAssertLessThan(strict.similarDistance, balanced.similarDistance)
+        XCTAssertLessThan(balanced.similarDistance, loose.similarDistance)
+    }
+
+    /// The configuration clamps this itself, and the ordering has to survive it: a threshold for
+    /// "worth showing at all" below the one for "the same shot" would be incoherent.
+    func testTheSimilarThresholdIsNeverTighterThanTheNearExactOne() {
+        for level in ScanStrictness.allCases {
+            XCTAssertGreaterThanOrEqual(
+                level.configuration.similarDistance,
+                level.configuration.nearExactDistance,
+                "\(level)"
+            )
+        }
+    }
+
+    func testBalancedIsTheDefaultTheAppShippedWith() {
+        XCTAssertEqual(ScanStrictness.balanced.configuration, .default)
+    }
+
+    func testEveryLevelSaysWhatItCostsYou() {
+        for level in ScanStrictness.allCases {
+            XCTAssertFalse(level.title.isEmpty)
+            XCTAssertFalse(level.explanation.isEmpty, "\(level) has no explanation on screen")
+        }
+    }
+
+    /// Nothing here may loosen a safety rule. Video matching gets wider thresholds too, but a
+    /// single bad frame still vetoes a match at every level.
+    func testEveryLevelStillVetoesOnOneBadFrame() {
+        for level in ScanStrictness.allCases {
+            let configuration = level.configuration
+            XCTAssertGreaterThan(
+                Double(configuration.videoWorstFrameDistance),
+                configuration.videoAverageDistance,
+                "\(level): the veto has to be a higher bar than the average, or it never fires"
+            )
+        }
+    }
+}

@@ -234,8 +234,19 @@ final class ReviewViewModel: ObservableObject {
         selection.replace(with: budgetPlan.selectedIDs)
     }
 
+    /// Back to what the app would have suggested: every override dropped, and only the copies
+    /// it is willing to vouch for ticked.
+    ///
+    /// A screen that lets you overrule it needs a way back, or the choice is a trap rather than
+    /// a choice.
     func resetToSafeDefaults() {
+        overrides = [:]
         selection = .preSelected(from: liveCandidates)
+    }
+
+    /// True once the user has changed anything the app proposed.
+    var hasChangedTheProposal: Bool {
+        !overrides.isEmpty || selection != .preSelected(from: liveCandidates)
     }
 
     // MARK: - Deletion

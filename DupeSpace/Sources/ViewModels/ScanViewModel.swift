@@ -12,8 +12,14 @@ final class ScanViewModel: ObservableObject {
     @Published private(set) var wasCancelled = false
     @Published private(set) var isPaused = false
 
+    /// How alike counts as a duplicate. The largest judgement in the app, and now the user's.
+    @Published var strictness: ScanStrictness {
+        didSet { Self.remember(strictness) }
+    }
+
     private let analyzer: any AssetAnalyzing
-    private let configuration: ScanConfiguration
+    /// Set only by tests that need a fixed configuration; otherwise the strictness decides.
+    private let configurationOverride: ScanConfiguration?
     private weak var history: (any HistoryRecording)?
     private var task: Task<Void, Never>?
     private var gate = ScanPauseGate()
@@ -24,13 +30,14 @@ final class ScanViewModel: ObservableObject {
 
     init(
         analyzer: any AssetAnalyzing,
-        configuration: ScanConfiguration = .default,
+        configuration: ScanConfiguration? = nil,
         history: (any HistoryRecording)? = nil,
         cache: FileFingerprintCache? = nil,
         activity: (any ScanActivityPresenting)? = nil
     ) {
         self.analyzer = analyzer
-        self.configuration = configuration
+        self.configurationOverride = configuration
+        self.strictness = Self.remembered()
         self.history = history
         self.cache = cache
         self.activity = activity
@@ -49,7 +56,11 @@ final class ScanViewModel: ObservableObject {
         progress = ScanProgress(stage: .bucketing, completed: 0, total: items.count)
 
         gate = ScanPauseGate()
-        let pipeline = ScanPipeline(analyzer: analyzer, configuration: configuration, pause: gate)
+        let pipeline = ScanPipeline(
+            analyzer: analyzer,
+            configuration: configurationOverride ?? strictness.configuration,
+            pause: gate
+        )
         let onProgress: @Sendable (ScanProgress) -> Void = { [weak self] update in
             Task { @MainActor in
                 guard let self else { return }
@@ -128,6 +139,24 @@ final class ScanViewModel: ObservableObject {
         isPaused = false
         task?.cancel()
         task = nil
+    }
+
+    // MARK: - Remembering the choice
+
+    private static let strictnessKey = "scan.strictness"
+
+    private static func remembered() -> ScanStrictness {
+        guard
+            let raw = UserDefaults.standard.object(forKey: strictnessKey) as? Int,
+            let stored = ScanStrictness(rawValue: raw)
+        else {
+            return .balanced
+        }
+        return stored
+    }
+
+    private static func remember(_ strictness: ScanStrictness) {
+        UserDefaults.standard.set(strictness.rawValue, forKey: strictnessKey)
     }
 
     /// The running scan in the shape the Lock Screen and the Dynamic Island read.

@@ -84,6 +84,25 @@ struct ScanView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("How alike counts as a copy", selection: $model.strictness) {
+                    ForEach(ScanStrictness.allCases, id: \.self) { level in
+                        Text(level.title).tag(level)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("scan.strictness")
+
+                Text(model.strictness.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .id(model.strictness)
+                    .transition(.opacity)
+                    .accessibilityIdentifier("scan.strictness.explanation")
+            }
+            .animation(Motion.control, value: model.strictness)
+
             Button {
                 model.start(items: items)
             } label: {
