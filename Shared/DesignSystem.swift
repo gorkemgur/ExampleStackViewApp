@@ -116,11 +116,14 @@ enum DS {
     /// There are two states here, so there are two colours: quiet for the rungs that cost
     /// nothing, the ladder's warning amber for the ones that are a judgement call. The rail
     /// beside the row still says which rung it is.
-    static func costTint(_ tier: RegretTier, onSlab: Bool = false) -> Color {
-        guard !tier.isLossless else {
+    static func costTint(_ rung: RegretTier, onSlab: Bool = false) -> Color {
+        guard !rung.isLossless else {
             return onSlab ? onSlabMuted : .secondary
         }
-        return onSlab ? tierVivid(.burstLeftover) : tier(.burstLeftover)
+        // The parameter is `rung`, not `tier`: `tier` is the name of the function right above
+        // this one, and a parameter called `tier` shadows it, so `tier(.burstLeftover)` reads
+        // as calling a `RegretTier` value.
+        return onSlab ? tierVivid(.burstLeftover) : Self.tier(.burstLeftover)
     }
 
     /// Secondary copy on the slab. `Color.secondary` resolves against the page, not against a
