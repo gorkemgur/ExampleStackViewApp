@@ -197,10 +197,19 @@ def sample(label, seconds=2.0, interval=0.0):
         findings.append(f"animation: {label} never changed the screen at all")
 
 
-def relaunch():
+def relaunch(text_size=None):
+    """Restart against the fixtures, optionally at a larger Dynamic Type size.
+
+    The size is passed as a launch argument, which UIKit reads in place of the device setting —
+    the same trick the UI tests use, and the only way to ask "does this still fit?" without a
+    human dragging a slider in Settings.
+    """
     run(["xcrun", "simctl", "terminate", UDID, BUNDLE_ID])
     time.sleep(1)
-    run(["xcrun", "simctl", "launch", UDID, BUNDLE_ID, "-ui-testing"])
+    arguments = ["xcrun", "simctl", "launch", UDID, BUNDLE_ID, "-ui-testing"]
+    if text_size:
+        arguments += ["-UIPreferredContentSizeCategoryName", text_size]
+    run(arguments)
 
 
 def write_report():
@@ -308,8 +317,43 @@ def main():
         time.sleep(1.5)
         audit_layout("review", describe())
 
+    audit_large_text()
+
     write_report()
     return 0
+
+
+def audit_large_text():
+    """The same screens, with the text at an accessibility size.
+
+    This is where padding chosen for one string length stops working: whatever overflows here
+    overflows on the phone of the person most likely to need the app to be legible.
+    """
+    relaunch("UICTContentSizeCategoryAccessibilityL")
+    time.sleep(4)
+
+    overview = describe()
+    if not overview:
+        notes.append("large text: the app never came back up, skipped")
+        return
+    audit_layout("overview at accessibility text size", overview)
+    shot(os.path.join(OUT_DIR, "large-text-overview.png"))
+
+    entry = find(overview, "root.scan")
+    for _ in range(8):
+        if entry is not None:
+            break
+        run(["idb", "ui", "swipe", "--udid", UDID, "200", "620", "200", "280"])
+        time.sleep(1)
+        entry = find(describe(), "root.scan")
+
+    if entry is None:
+        notes.append("large text: the scan entry was not reachable, so only the overview was audited")
+        return
+
+    tap(entry, settle=2.5)
+    audit_layout("scan at accessibility text size", describe())
+    shot(os.path.join(OUT_DIR, "large-text-scan.png"))
 
 
 if __name__ == "__main__":
