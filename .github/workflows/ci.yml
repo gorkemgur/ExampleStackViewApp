@@ -156,6 +156,9 @@ jobs:
       - name: Walk the app and photograph every screen
         run: python3 Scripts/capture-screens.py "$UDID" artifacts/screens
 
+      - name: Measure layout and animation
+        run: python3 Scripts/audit-ui.py "$UDID" artifacts/audit
+
       - name: Commit the screenshots
         if: github.event_name == 'push'
         run: |
@@ -170,16 +173,23 @@ jobs:
           mkdir -p docs/screenshots
           cp "${shots[@]}" docs/screenshots/
 
+          # The audit report travels with the pictures: an artifact nobody downloads is a
+          # measurement nobody reads.
+          if [ -f artifacts/audit/ui-audit.md ]; then
+            cp artifacts/audit/ui-audit.md docs/ui-audit.md
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/screenshots
+          if [ -f docs/ui-audit.md ]; then git add docs/ui-audit.md; fi
           if git diff --cached --quiet; then
             echo "screenshots unchanged"
             exit 0
           fi
 
           BRANCH="${GITHUB_REF#refs/heads/}"
-          git commit -m "Update simulator screenshots [skip ci]"
+          git commit -m "Update simulator screenshots and UI audit [skip ci]"
           # Rebase rather than force: this branch is also being pushed to by hand.
           git pull --rebase origin "$BRANCH"
           git push origin "HEAD:$BRANCH"
