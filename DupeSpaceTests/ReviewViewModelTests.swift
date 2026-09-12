@@ -374,6 +374,43 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertLessThanOrEqual(Int64(model.budgetBytes), model.maxReclaimableBytes)
     }
 
+    // MARK: - Looking at one kind
+
+    /// The filter is a way of looking, not a change to what was found. The budget slab's
+    /// ladder describes the whole scan, so filtering the source would have made the fader's
+    /// rungs move whenever somebody tapped "Videos".
+    func testFilteringByKindNarrowsTheListAndLeavesTheScanAlone() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+
+        let everything = model.sections.flatMap(\.groups).count
+        XCTAssertGreaterThan(everything, 0)
+        XCTAssertTrue(model.availableKinds.contains(.video), "the fixture has video duplicates")
+
+        model.kindFilter = .video
+        let visible = model.visibleSections.flatMap(\.groups)
+
+        XCTAssertFalse(visible.isEmpty)
+        XCTAssertTrue(visible.allSatisfy { $0.keeper.kind == .video })
+        XCTAssertEqual(model.sections.flatMap(\.groups).count, everything, "the scan itself is untouched")
+    }
+
+    /// A filter offering a kind the scan never found is a control that can only disappoint.
+    func testOnlyKindsThatWereActuallyFoundAreOffered() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        let found = Set(model.sections.flatMap { $0.groups.map { $0.keeper.kind } })
+
+        XCTAssertEqual(Set(model.availableKinds), found)
+    }
+
+    func testTheTallyForEverythingIsTheSumOfItsParts() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+        let whole = model.tally(for: nil)
+        let parts = model.availableKinds.map { model.tally(for: $0) }
+
+        XCTAssertEqual(whole.items, parts.reduce(0) { $0 + $1.items })
+        XCTAssertEqual(whole.bytes, parts.reduce(Int64(0)) { $0 + $1.bytes })
+    }
+
     func testAFailedDeletionIsReported() async {
         let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter(behaviour: .fail("disk on fire")))
         await model.delete()

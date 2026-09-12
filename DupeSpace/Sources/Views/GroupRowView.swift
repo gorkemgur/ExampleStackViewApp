@@ -16,6 +16,22 @@ struct GroupRowView: View {
             ZStack(alignment: .bottomTrailing) {
                 ThumbnailView(item: group.keeper, side: 52, loader: loader)
 
+                // What kind of thing this is, on the picture.
+                //
+                // A video's thumbnail is a frame, so it looks exactly like a photo — the only
+                // thing distinguishing a 1.84 GB movie from a 410 KB still was the file
+                // extension, which most people never see. The badge sits top-left, away from
+                // the survivor's seal.
+                if group.keeper.kind != .image {
+                    Image(systemName: KindCopy.symbolName(for: group.keeper.kind))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(3)
+                        .background(Circle().fill(.black.opacity(0.55)))
+                        .padding(3)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+
                 // The survivor is marked on the picture rather than in the words: this is the
                 // copy that stays, and the row is otherwise about what goes.
                 Image(systemName: "checkmark.seal.fill")

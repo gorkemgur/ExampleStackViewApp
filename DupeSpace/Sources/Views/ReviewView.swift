@@ -222,12 +222,80 @@ struct ReviewView: View {
     // MARK: - The ladder
 
     private var ladder: some View {
-        let sections = model.sections
+        let sections = model.visibleSections
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
-                rung(section, isLast: index == sections.count - 1)
+            if model.availableKinds.count > 1 {
+                kindFilter
+                    .padding(.bottom, DS.Space.l)
+            }
+
+            if sections.isEmpty {
+                Text("Nothing of that kind in this scan.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, DS.Space.l)
+            } else {
+                ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                    rung(section, isLast: index == sections.count - 1)
+                }
             }
         }
+        .animation(Motion.content, value: model.kindFilter)
+    }
+
+    /// Photos, videos and files share every tier, because what deleting something costs you has
+    /// nothing to do with what kind of thing it is. But videos are where the bytes are, and
+    /// "just show me those" was not askable. A filter rather than a second level of section:
+    /// splitting each tier by kind would double the headings and bury the decision.
+    private var kindFilter: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DS.Space.s) {
+                filterChip(nil)
+                ForEach(model.availableKinds, id: \.self) { kind in
+                    filterChip(kind)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .scrollClipDisabled()
+        .accessibilityIdentifier("review.kinds")
+    }
+
+    private func filterChip(_ kind: MediaKind?) -> some View {
+        let selected = model.kindFilter == kind
+        let tally = model.tally(for: kind)
+
+        return Button {
+            model.kindFilter = kind
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: KindCopy.symbolName(for: kind))
+                    .font(.caption2.weight(.bold))
+                Text(KindCopy.title(for: kind))
+                    .font(.footnote.weight(selected ? .bold : .medium))
+                Text(ByteFormatting.string(tally.bytes))
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .opacity(0.75)
+            }
+            .foregroundStyle(selected ? DS.deep : Color.secondary)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 34)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(selected ? DS.deep.opacity(0.13) : Color.clear)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(selected ? DS.deep.opacity(0.45) : DS.hairline, lineWidth: 1)
+            )
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(KindCopy.title(for: kind)), \(Counting.items(tally.items))")
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityIdentifier("review.kind.\(kind.map(String.init(describing:)) ?? "all")")
     }
 
     private func rung(_ section: ReviewSection, isLast: Bool) -> some View {

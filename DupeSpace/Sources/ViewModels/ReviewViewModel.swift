@@ -32,6 +32,18 @@ final class ReviewViewModel: ObservableObject {
         didSet { invalidateDerived() }
     }
 
+    /// Show only one kind of thing, or everything.
+    ///
+    /// A filter, deliberately, and not a second level of section. The axis this app files
+    /// things under is what deleting them costs — that is the product's whole idea and the
+    /// safety model is defined on it — so splitting every tier into photos, videos and files
+    /// would double the headings and bury the decision under navigation. But "just show me the
+    /// videos" is a real thing to want, because videos are where the bytes are, and until now
+    /// there was no way to ask it.
+    @Published var kindFilter: MediaKind? {
+        didSet { cachedVisibleSections = nil }
+    }
+
     /// Where the user has overruled the engine: a different survivor, or a group they want gone
     /// entirely. Keyed by group id.
     @Published private(set) var overrides: [String: GroupOverride] = [:] {
@@ -70,6 +82,7 @@ final class ReviewViewModel: ObservableObject {
     private var cachedBudgetPlan: BudgetPlan?
     private var cachedSavings: SavingsBreakdown?
     private var cachedSelectedCandidates: [DeletionCandidate]?
+    private var cachedVisibleSections: [ReviewSection]?
 
     init(result: ScanResult, deleter: MediaDeleting, history: (any HistoryRecording)? = nil) {
         self.result = result
@@ -99,6 +112,7 @@ final class ReviewViewModel: ObservableObject {
         cachedBudgetPlan = nil
         cachedSavings = nil
         cachedSelectedCandidates = nil
+        cachedVisibleSections = nil
     }
 
     var sections: [ReviewSection] {
@@ -113,6 +127,43 @@ final class ReviewViewModel: ObservableObject {
         }
         cachedSections = value
         return value
+    }
+
+    /// The sections as the list shows them, which is `sections` narrowed to one kind.
+    ///
+    /// Kept separate from `sections` on purpose: the budget slab's ladder and every byte figure
+    /// on it describe the whole scan, and a filter is a way of looking rather than a change to
+    /// what was found. Filtering the source would have made the fader's rungs move whenever
+    /// someone tapped "Videos".
+    var visibleSections: [ReviewSection] {
+        if let cachedVisibleSections { return cachedVisibleSections }
+        let value: [ReviewSection]
+        if let kindFilter {
+            value = sections.compactMap { section in
+                let groups = section.groups.filter { $0.keeper.kind == kindFilter }
+                return groups.isEmpty ? nil : ReviewSection(tier: section.tier, groups: groups)
+            }
+        } else {
+            value = sections
+        }
+        cachedVisibleSections = value
+        return value
+    }
+
+    /// The kinds this scan actually turned up, cheapest axis first. A filter offering "Videos"
+    /// on a library with none is a control that can only disappoint.
+    var availableKinds: [MediaKind] {
+        let present = Set(sections.flatMap { $0.groups.map { $0.keeper.kind } })
+        return [.image, .video, .document].filter(present.contains)
+    }
+
+    /// What one kind is worth, for the filter's own label.
+    func tally(for kind: MediaKind?) -> (items: Int, bytes: Int64) {
+        let groups = sections.flatMap(\.groups).filter { kind == nil || $0.keeper.kind == kind }
+        return (
+            groups.reduce(0) { $0 + $1.candidates.count },
+            groups.reduce(Int64(0)) { $0 + $1.bytes }
+        )
     }
 
     /// The decisions as they stand after the user has overruled any of them.
