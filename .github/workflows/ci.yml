@@ -404,7 +404,7 @@ jobs:
         run: |
           shopt -s nullglob
           for clip in artifacts/motion/*.mov; do
-            swift Scripts/mov-to-gif.swift "$clip" "${clip%.mov}.gif" 320 12 || true
+            swift Scripts/mov-to-gif.swift "$clip" "${clip%.mov}.gif" 320 12 18 200 || true
           done
           ls -la artifacts/motion || true
 

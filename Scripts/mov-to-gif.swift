@@ -1,17 +1,30 @@
 #!/usr/bin/env swift
 //
-// Turn a simulator recording into an animated GIF, with what every Mac already has.
+// Turn a simulator recording into an animated GIF of a given length, with what every Mac
+// already has.
 //
-//   swift Scripts/mov-to-gif.swift in.mov out.gif [width] [fps]
+//   swift Scripts/mov-to-gif.swift in.mov out.gif [width] [fps] [maxSeconds] [maxFrames]
 //
 // The runners have no ffmpeg, and installing one to make a preview would cost more than the
-// preview is worth — that is why the .mov has been committed unconverted since the recorder
-// was written. But AVFoundation reads the frames and ImageIO writes the GIF, and both ship
-// with the operating system, so there was never anything to install.
+// preview is worth — which is why the .mov went unconverted for so long. But AVFoundation
+// reads the frames and ImageIO writes the GIF, and both ship with the operating system.
 //
-// `requestedTimeToleranceBefore/After = .zero` matters: without it the generator happily hands
-// back the same keyframe for several consecutive requests and the GIF stutters where the
-// recording does not.
+// THE EDIT. A screen recording of an app being driven is mostly a still picture: the walk waits
+// on `describe-all`, and every one of those seconds is in the recording. So a frame that is the
+// same as the last one kept is not written; its time is added to that frame's delay instead,
+// capped, and a pause stays legible as a pause without being dead air. Motion is untouched and
+// plays at the speed it was recorded at. This is an edit, not a time-lapse.
+//
+// AND THE LENGTH IS DECIDED HERE. Two attempts at capping the tour from inside the walk both
+// missed — the budget bought the pauses and not the taps, the waits or the swipes, and the
+// clips came back at thirty-six seconds and then at seventy-three. The recorder cannot know how
+// long a runner will take. This can: it measures what it has, and raises the bar for what counts
+// as motion until the result fits. A GIF nobody waits to load is worth as little as one nobody
+// watches to the end.
+//
+// `requestedTimeToleranceBefore/After = .zero` matters throughout: without it the generator
+// hands back the same keyframe for several consecutive requests and the result stutters where
+// the recording does not.
 import AVFoundation
 import CoreGraphics
 import Foundation
@@ -20,7 +33,9 @@ import UniformTypeIdentifiers
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 3 else {
-    FileHandle.standardError.write(Data("usage: mov-to-gif.swift in.mov out.gif [width] [fps]\n".utf8))
+    FileHandle.standardError.write(
+        Data("usage: mov-to-gif.swift in.mov out.gif [width] [fps] [maxSeconds] [maxFrames]\n".utf8)
+    )
     exit(2)
 }
 
@@ -28,6 +43,16 @@ let input = URL(fileURLWithPath: arguments[1])
 let output = URL(fileURLWithPath: arguments[2])
 let targetWidth = arguments.count > 3 ? Int(arguments[3]) ?? 320 : 320
 let fps = arguments.count > 4 ? Double(arguments[4]) ?? 12 : 12
+let maxSeconds = arguments.count > 5 ? Double(arguments[5]) ?? 18 : 18
+let maxFrames = arguments.count > 6 ? Int(arguments[6]) ?? 200 : 200
+
+/// How long any one pause may keep.
+///
+/// Swept against the real recordings, because it is the whole of the trade: a pause that keeps
+/// for 0.4s spends the eighteen-second budget on stillness and leaves 47 frames of motion in
+/// it, while 0.15s leaves 123. Long enough to read as a beat between screens, short enough
+/// that a runner stalling for nine seconds does not cost nine seconds of anyone's attention.
+let maxHold = 0.15
 
 let asset = AVURLAsset(url: input)
 
@@ -51,51 +76,36 @@ guard seconds.isFinite, seconds > 0 else {
     exit(1)
 }
 
-let generator = AVAssetImageGenerator(asset: asset)
-generator.appliesPreferredTrackTransform = true
-generator.requestedTimeToleranceBefore = .zero
-generator.requestedTimeToleranceAfter = .zero
-// Height unconstrained, so the width is what decides the scale.
-generator.maximumSize = CGSize(width: targetWidth, height: 10_000)
-
-let frameCount = max(Int(seconds * fps), 2)
-let delay = 1.0 / fps
-
-guard let destination = CGImageDestinationCreateWithURL(
-    output as CFURL,
-    UTType.gif.identifier as CFString,
-    frameCount,
-    nil
-) else {
-    FileHandle.standardError.write(Data("cannot write \(output.path)\n".utf8))
-    exit(1)
+func makeGenerator(width: Int) -> AVAssetImageGenerator {
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = true
+    generator.requestedTimeToleranceBefore = .zero
+    generator.requestedTimeToleranceAfter = .zero
+    // Height unconstrained, so the width is what decides the scale.
+    generator.maximumSize = CGSize(width: width, height: 10_000)
+    return generator
 }
 
-CGImageDestinationSetProperties(destination, [
-    kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]
-] as CFDictionary)
+/// A grayscale reading of a frame, at half the output's own size.
+///
+/// The first version of this read 32x64 and was too coarse to see a progress ring turning
+/// inside a 104-point circle on a 695-point screen: swept against real recordings it called two
+/// thirds of the genuine motion static.
+let digestWidth = max(targetWidth / 2, 32)
+let digestHeight = digestWidth * 2
 
-let frameProperties = [
-    kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFUnclampedDelayTime: delay, kCGImagePropertyGIFDelayTime: delay]
-] as CFDictionary
-
-/// A 32x64 grayscale reading of a frame, cheap enough to take on every one of them.
 func digest(_ image: CGImage) -> [UInt8]? {
-    // Half the output's own size. A 32x64 reading was the first attempt and it is too coarse
-    // to see a progress ring turning inside a 104-point circle on a 695-point screen — it
-    // called two-thirds of the real motion in these clips static.
-    let width = 160, height = 348
-    var pixels = [UInt8](repeating: 0, count: width * height)
+    var pixels = [UInt8](repeating: 0, count: digestWidth * digestHeight)
     guard let context = CGContext(
         data: &pixels,
-        width: width,
-        height: height,
+        width: digestWidth,
+        height: digestHeight,
         bitsPerComponent: 8,
-        bytesPerRow: width,
+        bytesPerRow: digestWidth,
         space: CGColorSpaceCreateDeviceGray(),
         bitmapInfo: CGImageAlphaInfo.none.rawValue
     ) else { return nil }
-    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: digestWidth, height: digestHeight))
     return pixels
 }
 
@@ -106,62 +116,119 @@ func distance(_ a: [UInt8], _ b: [UInt8]) -> Double {
     return Double(total) / Double(a.count)
 }
 
-// A screen recording of an app being driven is mostly a still picture: the walk waits on
-// `describe-all`, which costs a second or two a call, and every one of those seconds is in the
-// recording. Filmed straight through, a nineteen-second tour came out at thirty-six seconds
-// with twenty-seven moving frames in four hundred and fifty-two.
-//
-// So a frame that is the same as the last one kept is not written. Its time is added to that
-// frame's delay instead, up to `maxHold` — the pause stays legible as a pause and stops being
-// dead air. Motion is untouched and plays at the speed it was recorded at, which is the whole
-// point: this is an edit, not a time-lapse.
-let staticThreshold = 0.08       // mean grayscale levels, out of 255
-let maxHold = 0.7                // seconds any one pause is allowed to keep
+// MARK: - Pass one: what moved, and when
 
-var pendingImage: CGImage?
-var pendingDelay = 0.0
-var lastDigest: [UInt8]?
+let frameCount = max(Int(seconds * fps), 2)
+let step = 1.0 / fps
+
+let prober = makeGenerator(width: digestWidth)
+var times: [Int] = []
+var digests: [[UInt8]] = []
+for index in 0..<frameCount {
+    let time = CMTime(seconds: Double(index) / fps, preferredTimescale: 600)
+    guard let image = try? prober.copyCGImage(at: time, actualTime: nil),
+          let reading = digest(image) else { continue }
+    times.append(index)
+    digests.append(reading)
+}
+
+guard digests.count > 1 else {
+    FileHandle.standardError.write(Data("only \(digests.count) frame(s) in \(input.lastPathComponent)\n".utf8))
+    exit(1)
+}
+
+/// Which frames survive at a given bar for what counts as motion, and how long each is held.
+func select(threshold: Double) -> [(index: Int, hold: Double)] {
+    var kept: [(index: Int, hold: Double)] = []
+    var last: [UInt8]?
+    var pending = 0.0
+
+    for (position, reading) in digests.enumerated() {
+        if let last, distance(reading, last) < threshold {
+            pending += step
+            continue
+        }
+        if !kept.isEmpty {
+            kept[kept.count - 1].hold = min(max(pending, step), maxHold)
+        }
+        kept.append((index: times[position], hold: step))
+        last = reading
+        pending = step
+    }
+    if !kept.isEmpty {
+        kept[kept.count - 1].hold = min(max(pending, step), maxHold)
+    }
+    return kept
+}
+
+func fits(_ selection: [(index: Int, hold: Double)]) -> Bool {
+    selection.count <= maxFrames && selection.reduce(0) { $0 + $1.hold } <= maxSeconds
+}
+
+// The bar starts at "anything at all moved" and rises until the result fits. Thirty steps of
+// bisection over a range this wide settles to well under a hundredth of a level.
+var low = 0.02
+var high = 64.0
+var chosen = select(threshold: low)
+if !fits(chosen) {
+    for _ in 0..<30 {
+        let middle = (low + high) / 2
+        let candidate = select(threshold: middle)
+        if fits(candidate) {
+            high = middle
+            chosen = candidate
+        } else {
+            low = middle
+        }
+    }
+    if !fits(chosen) { chosen = select(threshold: high) }
+}
+
+guard chosen.count > 1 else {
+    FileHandle.standardError.write(Data("nothing moved in \(input.lastPathComponent)\n".utf8))
+    exit(1)
+}
+
+// MARK: - Pass two: write only those frames, at full size
+
+guard let destination = CGImageDestinationCreateWithURL(
+    output as CFURL,
+    UTType.gif.identifier as CFString,
+    chosen.count,
+    nil
+) else {
+    FileHandle.standardError.write(Data("cannot write \(output.path)\n".utf8))
+    exit(1)
+}
+
+CGImageDestinationSetProperties(destination, [
+    kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]
+] as CFDictionary)
+
+let writer = makeGenerator(width: targetWidth)
 var written = 0
-var skipped = 0
-
-func flush() {
-    guard let image = pendingImage else { return }
-    let held = min(max(pendingDelay, delay), maxHold)
+for frame in chosen {
+    let time = CMTime(seconds: Double(frame.index) / fps, preferredTimescale: 600)
+    guard let image = try? writer.copyCGImage(at: time, actualTime: nil) else { continue }
     CGImageDestinationAddImage(destination, image, [
         kCGImagePropertyGIFDictionary: [
-            kCGImagePropertyGIFUnclampedDelayTime: held,
-            kCGImagePropertyGIFDelayTime: held
+            kCGImagePropertyGIFUnclampedDelayTime: frame.hold,
+            kCGImagePropertyGIFDelayTime: frame.hold
         ]
     ] as CFDictionary)
     written += 1
-    pendingImage = nil
-    pendingDelay = 0
 }
-
-for index in 0..<frameCount {
-    let time = CMTime(seconds: Double(index) / fps, preferredTimescale: 600)
-    guard let image = try? generator.copyCGImage(at: time, actualTime: nil) else { continue }
-    let current = digest(image)
-
-    if let current, let lastDigest, distance(current, lastDigest) < staticThreshold {
-        // Same picture. Hold the one already waiting rather than writing this one.
-        pendingDelay += delay
-        skipped += 1
-        continue
-    }
-
-    flush()
-    pendingImage = image
-    pendingDelay = delay
-    lastDigest = current
-}
-flush()
 
 guard written > 1, CGImageDestinationFinalize(destination) else {
-    FileHandle.standardError.write(Data("only \(written) frame(s) came back from \(input.lastPathComponent)\n".utf8))
+    FileHandle.standardError.write(Data("only \(written) frame(s) were written\n".utf8))
     exit(1)
 }
 
 let attributes = try? FileManager.default.attributesOfItem(atPath: output.path)
 let bytes = (attributes?[.size] as? Int) ?? 0
-print("\(output.lastPathComponent): \(written) frames kept, \(skipped) static dropped, \(String(format: "%.1f", seconds))s recorded, \(bytes / 1024) KB")
+let plays = chosen.reduce(0) { $0 + $1.hold }
+print(
+    "\(output.lastPathComponent): \(written) of \(digests.count) frames, "
+    + "\(String(format: "%.1f", seconds))s recorded → \(String(format: "%.1f", plays))s, "
+    + "\(bytes / 1024) KB"
+)

@@ -240,14 +240,13 @@ def tour_clean(recorder):
     More scrolling than the other one, deliberately: this tour has no deletion in it, so the
     screens themselves are the subject and they have to be seen rather than flashed past.
     """
-    hold(recorder, 1.2)
+    # Shorter through the overview than the other tour, not longer. The first cut of this one
+    # spent six of its eight sampled frames scrolling a screen the other tour already shows,
+    # and left the one thing it exists for — the screen that says it found nothing — squeezed
+    # into the end.
+    hold(recorder, 1.0)
     swipe(700, 330)
-    swipe(700, 330)
-    hold(recorder, 0.8)
-    swipe(700, 330)              # all the way to the honesty card
-    hold(recorder, 0.8)
-    swipe(330, 700)
-    swipe(330, 700)
+    hold(recorder, 0.6)
     swipe(330, 700)
 
     entry = reach("root.scan")
@@ -263,12 +262,15 @@ def tour_clean(recorder):
 
     if wait_for("scan.total", timeout=90) is None:
         return
-    # The whole point of this tour: it looked, it did the work, and it found nothing.
+    # The rest of the budget belongs here: it looked, it did the work, it found nothing, and it
+    # offers a looser setting rather than leaving you at a dead end.
+    hold(recorder, 2.0)
+    swipe(700, 400)
     hold(recorder, 1.6)
-    swipe(700, 380)
+    swipe(400, 700)
     hold(recorder, 1.2)
-    swipe(700, 380)
-    hold(recorder, max(1.0, recorder.left))
+    swipe(700, 400)
+    hold(recorder, max(1.2, recorder.left))
 
 
 def main():
