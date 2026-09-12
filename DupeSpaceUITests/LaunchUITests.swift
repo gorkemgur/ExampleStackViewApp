@@ -2,6 +2,10 @@ import XCTest
 
 /// Drives the app against the deterministic stub library, so these assertions mean the same
 /// thing on every runner and never wait on a permission alert nobody can tap.
+///
+/// Each test costs a fresh app launch, so they are written to cover a whole screen rather than
+/// one element apiece: a suite that relaunches twenty times spends longer fighting the
+/// simulator than it does testing.
 final class LaunchUITests: XCTestCase {
 
     private var app: XCUIApplication!
@@ -14,14 +18,11 @@ final class LaunchUITests: XCTestCase {
         app.launch()
     }
 
-    func testRootScreenAppears() {
+    func testRootScreenShowsCapacityWithItsCaveat() {
         XCTAssertTrue(
             app.navigationBars["DupeSpace"].waitForExistence(timeout: 30),
             "app did not reach its root screen"
         )
-    }
-
-    func testStorageCardShowsACapacityReading() {
         XCTAssertTrue(
             app.staticTexts["storage.headline"].waitForExistence(timeout: 30),
             "no capacity reading was rendered"
@@ -37,6 +38,11 @@ final class LaunchUITests: XCTestCase {
             app.staticTexts["breakdown.title"].waitForExistence(timeout: 30),
             "the category breakdown never appeared"
         )
+
+        for identifier in ["breakdown.row.videos", "breakdown.row.screenshots", "breakdown.row.photos"] {
+            XCTAssertTrue(app.staticTexts[identifier].exists, "\(identifier) missing from the breakdown")
+        }
+
         XCTAssertFalse(
             app.staticTexts["access.headline"].exists,
             "an authorised library must not show the permission wall"
@@ -44,48 +50,24 @@ final class LaunchUITests: XCTestCase {
         XCTAssertFalse(app.buttons["access.button"].exists)
     }
 
-    func testBreakdownListsTheCategoriesInTheFixture() {
+    /// One scroll to the bottom, checking everything that lives below the fold on the way.
+    func testEverythingBelowTheFoldIsReachable() {
         XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))
 
-        for identifier in ["breakdown.row.videos", "breakdown.row.screenshots", "breakdown.row.photos"] {
-            XCTAssertTrue(
-                app.staticTexts[identifier].exists,
-                "\(identifier) missing from the breakdown"
-            )
-        }
-    }
+        let folders = app.buttons["folders.add"]
+        let largest = app.staticTexts["largest.title"]
+        let limits = app.staticTexts["limits.title"]
 
-    func testFoldersCardOffersAGrantAndSaysWhenThereIsNone() {
-        XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))
-
-        let add = app.buttons["folders.add"]
-        for _ in 0..<8 where !add.exists {
+        for _ in 0..<10 where !(folders.exists && largest.exists && limits.exists) {
             app.swipeUp()
         }
-        XCTAssertTrue(add.exists, "there must be a way to hand over a folder")
+
+        XCTAssertTrue(folders.exists, "there must be a way to hand over a folder")
         XCTAssertTrue(
             app.staticTexts["folders.empty"].exists,
             "with no folders granted the card should say so rather than look broken"
         )
-    }
-
-    func testLimitsCardIsAlwaysShown() {
-        XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))
-
-        let limits = app.staticTexts["limits.title"]
-        for _ in 0..<8 where !limits.exists {
-            app.swipeUp()
-        }
-        XCTAssertTrue(limits.exists, "the honesty card must never be conditional")
-    }
-
-    func testScrollingReachesTheBiggestItemsCard() {
-        XCTAssertTrue(app.staticTexts["breakdown.title"].waitForExistence(timeout: 30))
-
-        let largest = app.staticTexts["largest.title"]
-        for _ in 0..<8 where !largest.exists {
-            app.swipeUp()
-        }
         XCTAssertTrue(largest.exists, "the biggest-items card was never reachable by scrolling")
+        XCTAssertTrue(limits.exists, "the honesty card must never be conditional")
     }
 }

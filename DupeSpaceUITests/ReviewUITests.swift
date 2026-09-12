@@ -34,19 +34,12 @@ final class ReviewUITests: XCTestCase {
         )
     }
 
-    func testReviewOpensWithASelectionAndATotal() {
+    func testReviewOpensWithASafeSelectionThatCanBeChanged() {
         openReview()
+
         XCTAssertTrue(app.staticTexts["review.count"].exists)
         XCTAssertTrue(app.buttons["review.delete"].isEnabled, "the safe default selection must be actionable")
-    }
-
-    func testSectionsAreListedCheapestFirst() {
-        openReview()
         XCTAssertTrue(app.staticTexts["review.section.0"].exists, "identical copies section missing")
-    }
-
-    func testASectionToggleChangesWhatIsSelected() {
-        openReview()
 
         let count = app.staticTexts["review.count"]
         let before = count.label
@@ -73,11 +66,14 @@ final class ReviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["review.total"].exists)
     }
 
-    func testConfirmationExplainsWhenTheSpaceComesBackAndThenDeletes() {
+    /// Cancelling first, then going through with it, in one launch.
+    func testConfirmationCanBeBackedOutOfAndThenGoneThroughWith() {
         openReview()
 
-        app.buttons["review.delete"].tap()
+        let count = app.staticTexts["review.count"]
+        let before = count.label
 
+        app.buttons["review.delete"].tap()
         XCTAssertTrue(
             app.staticTexts["confirm.total"].waitForExistence(timeout: 20),
             "the confirmation did not open"
@@ -87,23 +83,17 @@ final class ReviewUITests: XCTestCase {
             "the confirmation must say when the space actually returns"
         )
 
+        app.buttons["confirm.cancel"].tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 10))
+        XCTAssertEqual(count.label, before, "backing out must change nothing")
+
+        app.buttons["review.delete"].tap()
+        XCTAssertTrue(app.staticTexts["confirm.total"].waitForExistence(timeout: 20))
         app.buttons["confirm.delete"].tap()
 
         XCTAssertTrue(
             app.staticTexts["review.result"].waitForExistence(timeout: 30),
             "the deletion result was never reported"
         )
-    }
-
-    func testCancellingTheConfirmationChangesNothing() {
-        openReview()
-        let before = app.staticTexts["review.count"].label
-
-        app.buttons["review.delete"].tap()
-        XCTAssertTrue(app.staticTexts["confirm.total"].waitForExistence(timeout: 20))
-        app.buttons["confirm.cancel"].tap()
-
-        XCTAssertTrue(app.staticTexts["review.count"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.staticTexts["review.count"].label, before)
     }
 }

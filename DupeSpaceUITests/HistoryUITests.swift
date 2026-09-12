@@ -42,7 +42,7 @@ final class HistoryUITests: XCTestCase {
         )
     }
 
-    func testAScanIsRecorded() {
+    func testAScanIsRecordedAndTheRecordCanBeCleared() {
         runScan()
         openHistory()
 
@@ -51,9 +51,19 @@ final class HistoryUITests: XCTestCase {
             "a completed scan was not written down"
         )
         XCTAssertFalse(app.staticTexts["history.empty"].exists)
+
+        app.buttons["history.clear"].tap()
+        app.buttons["Clear the record"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["history.empty"].waitForExistence(timeout: 15),
+            "clearing the record should leave the empty state"
+        )
     }
 
-    func testADeletionLeavesAReceipt() {
+    /// Delete, then open the receipt and read what was kept in each item's place — the whole
+    /// reason for keeping one.
+    func testADeletionLeavesAReceiptYouCanOpen() {
         runScan()
 
         let review = app.buttons["scan.review"]
@@ -73,33 +83,12 @@ final class HistoryUITests: XCTestCase {
             app.staticTexts["history.total"].waitForExistence(timeout: 20),
             "the lifetime total never appeared"
         )
-        XCTAssertTrue(
-            app.staticTexts["history.deletion.headline"].exists,
-            "the deletion was not recorded"
-        )
-    }
 
-    func testTheReceiptCanBeOpenedToSeeWhatWasKept() {
-        testADeletionLeavesAReceipt()
+        let headline = app.staticTexts["history.deletion.headline"]
+        XCTAssertTrue(headline.exists, "the deletion was not recorded")
+        headline.tap()
 
-        app.staticTexts["history.deletion.headline"].tap()
-
-        // The expanded rows name the survivor, which is the whole point of keeping a receipt.
         let kept = app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] 'kept '")).firstMatch
         XCTAssertTrue(kept.waitForExistence(timeout: 10), "the receipt does not say what was kept")
-    }
-
-    func testClearingTheHistoryEmptiesIt() {
-        runScan()
-        openHistory()
-        XCTAssertTrue(app.staticTexts["history.scan.headline"].waitForExistence(timeout: 20))
-
-        app.buttons["history.clear"].tap()
-        app.buttons["Clear the record"].tap()
-
-        XCTAssertTrue(
-            app.staticTexts["history.empty"].waitForExistence(timeout: 15),
-            "clearing the record should leave the empty state"
-        )
     }
 }
