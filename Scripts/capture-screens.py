@@ -133,19 +133,57 @@ def main():
         captured += shot("03-results.png")
 
     review = scroll_to("scan.review")
-    if review is not None:
-        tap(review)
-        if wait_for("review.total", timeout=90) is not None:
-            captured += shot("04-review.png")
+    if review is None:
+        print(f"captured {captured} screens")
+        return 0
 
-            delete = find(describe(), "review.delete")
-            if delete is not None:
-                tap(delete, settle=3.0)
-                if wait_for("confirm.total", timeout=60) is not None:
-                    captured += shot("05-confirm.png")
+    tap(review)
+    if wait_for("review.total", timeout=90) is None:
+        print(f"captured {captured} screens")
+        return 0
+    captured += shot("04-review.png")
+
+    delete = find(describe(), "review.delete")
+    if delete is None:
+        print(f"captured {captured} screens")
+        return 0
+
+    tap(delete, settle=3.0)
+    if wait_for("confirm.total", timeout=60) is not None:
+        captured += shot("05-confirm.png")
+
+        # Deleting here only touches the stub library, and it is the only way to photograph
+        # what the app does afterwards.
+        confirm = find(describe(), "confirm.delete")
+        if confirm is not None:
+            tap(confirm, settle=4.0)
+            if wait_for("review.result", timeout=60) is not None:
+                captured += shot("06-deleted.png")
+                captured += capture_history()
 
     print(f"captured {captured} screens")
     return 0
+
+
+def capture_history():
+    """The receipt, which only exists once something has actually been deleted."""
+    tab = find(describe(), "History")
+    if tab is None:
+        print("History tab not found")
+        return 0
+
+    tap(tab, settle=2.5)
+    if wait_for("history.total", timeout=40) is None:
+        return 0
+
+    captured = shot("07-history.png")
+
+    receipt = find(describe(), "history.deletion.headline")
+    if receipt is not None:
+        tap(receipt, settle=2.0)
+        captured += shot("08-receipt.png")
+
+    return captured
 
 
 if __name__ == "__main__":
