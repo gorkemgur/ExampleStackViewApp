@@ -34,22 +34,27 @@ def describe():
     return []
 
 
-def find(tree, identifier):
-    """Locate an element by identifier, then by label, then by a label that contains it.
+def find(tree, identifier, types=None):
+    """Locate an element by identifier, then by exact label, then by label prefix.
 
-    The last pass matters for system chrome: a tab carrying a badge does not report a bare
-    "History" as its label, and the walk should still be able to reach it.
+    `types` restricts the search to element kinds. Without it the prefix pass happily matches
+    body copy: a sentence mentioning "History" is not the History tab, and tapping it does
+    nothing while the walk waits for a screen that never arrives.
     """
+    def allowed(element):
+        return types is None or element.get("type") in types
+
     for element in tree:
-        if element.get("AXUniqueId") == identifier:
+        if allowed(element) and element.get("AXUniqueId") == identifier:
             return element
     for element in tree:
-        if element.get("AXLabel") == identifier:
+        if allowed(element) and element.get("AXLabel") == identifier:
             return element
+
     needle = identifier.lower()
     for element in tree:
         label = element.get("AXLabel")
-        if isinstance(label, str) and needle in label.lower():
+        if allowed(element) and isinstance(label, str) and label.lower().startswith(needle):
             return element
     return None
 
@@ -178,13 +183,12 @@ def main():
 def capture_history():
     """The receipt, which only exists once something has actually been deleted."""
     tree = describe()
-    tab = find(tree, "History")
+    tab = find(tree, "History", types={"Button"})
     if tab is None:
-        print("History tab not found. Labels on screen:")
+        print("History tab not found. Buttons on screen:")
         for element in tree:
-            label = element.get("AXLabel")
-            if label:
-                print("   ", repr(label))
+            if element.get("type") == "Button" and element.get("AXLabel"):
+                print("   ", repr(element["AXLabel"]))
         return 0
 
     tap(tab, settle=2.5)
