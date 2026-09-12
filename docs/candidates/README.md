@@ -1,52 +1,36 @@
-# Candidates for the deletion animation
+# What the search for a sweeping figure actually turned up
 
-Put here to be looked at and then kept or deleted. Nothing in this folder is wired into the
-app — `DupeSpace/Sources/Views/SweeperRingView.swift` still draws its own figure.
+Nothing usable, and the honest version is short.
 
-## What could actually be found
+**unDraw** — 1,740 illustrations, MIT, free for commercial use. **Not one of them holds a
+broom.** The nearest are `clean-up` (a figure clearing tiles into a bin), `throw-away` (a
+figure dropping a document into a bin) and `painting-the-room` (a roller on a pole, which is
+at least the right posture). I recoloured eight of them to this app's palette, looked at
+them, and they were all rejected — correctly, none of them is a person cleaning. They have
+been removed rather than left here to be scrolled past.
 
-**unDraw** — the eight SVGs in `undraw/`. Free for commercial use, no attribution required;
-the npm package they came from (`undraw-svg` 2.0.0) is MIT. Pulled from the npm registry
-because `undraw.co` itself is blocked by this environment's network policy.
+**Everything animated is unreachable from this environment.** LottieFiles, IconScout,
+lottie.host and svgrepo all answer 403 at the network proxy on CONNECT, so no Lottie JSON or
+animated GIF could be fetched. I am not going to describe files I have not opened. Only
+`registry.npmjs.org` and `raw.githubusercontent.com` are reachable, which is how the unDraw
+set was obtained at all.
 
-They are recoloured to this app's palette, so they can be judged against the real screen
-rather than against unDraw's stock purple and pink: their accent to `#0A6FE0`, the limb tone
-to `#7FC4FF`, their two darks to the slab's `#1E3145` / `#18293C`.
+## The part that matters more than the licence
 
-| File | What it shows |
-|---|---|
-| `clean-up.svg` | A figure clearing tiles off a wall into a bin. The closest thing in the library to "someone tidying". |
-| `throw-away.svg` | A figure dropping a document into a bin. The most literal match for what this screen does. |
-| `schedule-cleanup.svg` | A figure beside a calendar, papers falling. |
-| `organize-photos.svg` | Two figures and a phone full of pictures. On-theme for the app rather than for the moment. |
-| `duplicate.svg` | A figure beside a copy-of-a-card. Exactly this app's subject. |
-| `memory-storage.svg` | A figure among documents. |
-| `photos.svg` | A figure behind a stack of photographs. |
-| `selecting.svg` | A figure choosing between three things. |
+A flat illustration could not do this job even if one existed. They are single poses with no
+rig: nothing in the file separates the arm from the body, so a figure can be made to bob or
+float, but it cannot sweep. Using one means giving up the movement, which is the whole thing
+that was asked for.
 
-## What could not be found, and why
+`DupeSpace/Sources/Views/SweeperRingView.swift` draws its own for that reason — a Canvas and
+about a dozen paths. The legs alternate, the body bobs, the broom swings more than twice as
+wide as the shoulders sway, and the figure's position along the floor is the real progress
+reading.
 
-**No animated candidates.** Everything above is static. LottieFiles, IconScout, lottie.host
-and svgrepo are all refused by the network policy here (403 at the proxy on CONNECT), so no
-Lottie JSON or animated GIF could be fetched and I am not going to describe files I have not
-opened. If you want a Lottie, the workable route is you downloading one and dropping it in —
-LottieFiles' public animations carry the Lottie Simple License, which clears commercial use
-without attribution.
+## If you want a downloaded one anyway
 
-**No sweeping figure at all.** unDraw has 1,740 illustrations and not one of them holds a
-broom. `clean-up` and `throw-away` are the nearest, and neither is sweeping.
-
-## What is honestly wrong with all of them
-
-They are flat marketing illustrations: one pose, no rig, drawn at roughly a quarter of a
-screen. The moment asks for something the size of a control that moves while work happens.
-An unDraw figure can be made to bob or float, but its arm cannot sweep — nothing in the file
-separates the arm from the body. So using one means giving up the part you asked for, which
-is the movement.
-
-They also sit inside a ring badly. They are wide compositions with props and foliage, and
-cropping one to a circle throws most of it away.
-
-The hand-drawn figure in `SweeperRingView` exists because of exactly that: it is rigged, so
-its broom swings, its legs alternate, and its position along the floor is the real progress
-reading. It costs no licence and no download.
+Download a Lottie yourself and drop the JSON in this folder; I will wire it up. LottieFiles'
+public animations carry the Lottie Simple License, which clears commercial use with no
+attribution. Worth knowing first: it means shipping the `lottie-ios` dependency, the figure
+stops being tied to the real progress count, and the app gains an asset whose licence has to
+be tracked.
