@@ -55,12 +55,23 @@ jobs:
       - name: Test
         run: |
           set -o pipefail
+          # The whole log is three thousand lines and the failure is four of them. Kept, then
+          # the interesting lines printed on the way out: reading a CI log should not require
+          # downloading a 75 MB result bundle.
           xcodebuild test \
             -project DupeSpace.xcodeproj \
             -scheme DupeSpace \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -resultBundlePath TestResults.xcresult \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee xcodebuild.log || {
+              status=$?
+              echo "::group::What actually failed"
+              grep -nE "error:|warning: .*deprecated|XCTAssert|' failed \(|Failing tests:|\*\* [A-Z ]+ \*\*" xcodebuild.log \
+                | grep -v "Checking existence" | tail -80
+              echo "::endgroup::"
+              exit $status
+            }
 
       - name: Upload test results
         if: always()
