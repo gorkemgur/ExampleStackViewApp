@@ -191,6 +191,21 @@ def wait_for(identifier, timeout=150):
     return None
 
 
+def swipe_down():
+    run(["idb", "ui", "swipe", "--udid", UDID, "200", "280", "200", "620"])
+    time.sleep(1.0)
+
+
+def scroll_to_top(swipes=10):
+    """Back to the top of a long screen.
+
+    `scroll_to` only ever scrolls down, so a walk that has been to the bottom of the overview
+    can never find anything above where it stopped.
+    """
+    for _ in range(swipes):
+        swipe_down()
+
+
 def scroll_to(identifier, attempts=8):
     """Find an element, scrolling down until it comes into view."""
     for _ in range(attempts):
@@ -299,14 +314,19 @@ def capture_live_surfaces():
     No simulator will show a Live Activity, so the app renders the same views on a screen of
     its own under `-ui-testing`. This is the only picture anyone gets of them.
     """
-    entry = find(describe(), "root.livesurfaces")
+    # Scrolled to, not looked for in place. The entry sits at the very bottom of the overview
+    # so that it is nowhere near the part of the screen the site photographs, and it used to be
+    # a toolbar glyph — which never reached the accessibility tree at all.
+    entry = scroll_to("root.livesurfaces")
     if entry is None:
         print("no live-surfaces entry on the overview")
         dump_tree("overview-no-livesurfaces")
+        scroll_to_top()
         return 0
 
     tap(entry, settle=2.0)
     if wait_for("livepreview.close", timeout=30) is None:
+        scroll_to_top()
         return 0
 
     captured = shot("01b-live-surfaces.png")
@@ -314,7 +334,26 @@ def capture_live_surfaces():
     close = find(describe(), "livepreview.close")
     if close is not None:
         tap(close, settle=1.5)
+    # Back to the top, because everything after this looks for controls by scrolling *down*.
+    scroll_to_top()
     return captured
+
+
+#: The History control, in the order the walk should prefer them.
+#:
+#: The bar chip came first and could never be found: a toolbar item does not reach the
+#: accessibility tree idb reads, so every run since History stopped being a tab has dumped a
+#: 64-element overview with no `history.open` anywhere in it. The card in the content is the
+#: one the walk can actually see.
+HISTORY_ENTRIES = ("history.open.card", "history.open")
+
+
+def history_entry(tree):
+    for identifier in HISTORY_ENTRIES:
+        element = find(tree, identifier)
+        if element is not None:
+            return element
+    return None
 
 
 def pop_to_overview(limit=4):
@@ -325,7 +364,10 @@ def pop_to_overview(limit=4):
     """
     for _ in range(limit):
         tree = describe()
-        if find(tree, "history.open") is not None:
+        # "Am I on the overview" is a different question from "can I see the History control",
+        # and asking the second one meant a walk that had scrolled the overview kept tapping
+        # back out of a screen it was already standing on.
+        if find(tree, "storage.headline") is not None or history_entry(tree) is not None:
             return True
         # Exact labels only. `find` falls back to a prefix match, and "Review" would happily
         # match the "Review and choose" button on the results screen — walking deeper into the
@@ -349,7 +391,7 @@ def pop_to_overview(limit=4):
             return False
         tap(back, settle=1.5)
 
-    if find(describe(), "history.open") is not None:
+    if find(describe(), "storage.headline") is not None or history_entry(describe()) is not None:
         return True
     dump_tree("overview-no-history")
     return False
@@ -361,9 +403,12 @@ def capture_history():
         print("could not get back to the overview to open History")
         return 0
 
-    entry = find(describe(), "history.open")
+    entry = history_entry(describe())
+    if entry is None:
+        entry = scroll_to("history.open.card")
     if entry is None:
         print("no History control on the overview")
+        dump_tree("overview-no-history-control")
         return 0
     tap(entry, settle=2.5)
 

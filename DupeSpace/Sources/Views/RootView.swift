@@ -52,6 +52,14 @@ struct RootView: View {
                             .transition(.opacity.combined(with: .offset(y: 12)))
                     }
 
+                    // High, not buried under the breakdown: once this app has actually removed
+                    // something, what it removed and what it kept instead is the most valuable
+                    // thing on the screen — and the only part of it no other cleaner has.
+                    if !history.isEmpty {
+                        reclaimedCard
+                            .cardEntrance()
+                    }
+
                     FoldersCardView(
                         folders: model.folders,
                         message: model.folderMessage,
@@ -72,6 +80,12 @@ struct RootView: View {
 
                     LimitsCardView(cloudOnlyBytes: model.cloudOnlyBytes)
                         .cardEntrance()
+
+                    // Last, so it is nowhere near the part of this screen anybody photographs
+                    // for the site — the walk scrolls to it.
+                    if AppEnvironment.isUITesting {
+                        liveSurfacesEntry
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -93,24 +107,6 @@ struct RootView: View {
                 }
             }
             .toolbar {
-                // The Lock Screen and the Dynamic Island cannot be walked to on a simulator, so
-                // under test the app renders those same views itself and the walk photographs
-                // them. Nothing here is reachable in a shipping build.
-                if AppEnvironment.isUITesting {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        // A glyph rather than the words: the bar also carries the title and the
-                        // History reading, and "Live surfaces" spelled out crowds both off a
-                        // phone. The label is unchanged, so the walk still finds it by name.
-                        Button {
-                            showingLiveSurfaces = true
-                        } label: {
-                            Image(systemName: "iphone.gen3")
-                        }
-                        .accessibilityLabel("Live surfaces")
-                        .accessibilityIdentifier("root.livesurfaces")
-                    }
-                }
-
                 ToolbarItem(placement: .topBarTrailing) {
                     historyEntry
                 }
@@ -145,6 +141,60 @@ struct RootView: View {
 
     /// The whole of the old History tab, in one control — and it carries a reading rather than
     /// just a word, so the chrome the tab bar used to cost is now telling you something.
+    /// The Lock Screen and the Dynamic Island cannot be walked to on a simulator, so under test
+    /// the app renders those same views itself and the walk photographs them. Nothing here is
+    /// reachable in a shipping build.
+    ///
+    /// In the content rather than the toolbar. It was a toolbar glyph, and a toolbar glyph does
+    /// not reach the accessibility tree idb reads: the walk saw an `Image` carrying the SF
+    /// Symbol's own name and no button at all, so the one picture anyone gets of the Live
+    /// Activity has been missing from `docs/screenshots` for every run since it was written.
+    private var liveSurfacesEntry: some View {
+        Button {
+            showingLiveSurfaces = true
+        } label: {
+            Label("Live surfaces", systemImage: "iphone.gen3")
+        }
+        .buttonStyle(.keyQuiet)
+        .accessibilityIdentifier("root.livesurfaces")
+    }
+
+    /// The receipt, in the content as well as the bar.
+    ///
+    /// The bar chip is the everyday way in and it stays. But it is a toolbar item, which means
+    /// the simulator walk cannot see it — History and the receipt have been missing from the
+    /// screenshots for the same reason the live surfaces were — and it is also a small chip in
+    /// the corner of a screen that otherwise makes no mention of the one thing this app keeps
+    /// that no cleaner does: a record of what it removed and what it kept instead.
+    @ViewBuilder
+    private var reclaimedCard: some View {
+        NavigationLink {
+            HistoryView()
+        } label: {
+            Card("What you have got back", symbolName: "clock.arrow.circlepath", rail: DS.deep) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Readout.bytes(history.totalReclaimedBytes, scale: .title, unitScale: .subheadline, tint: DS.deep)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Every deletion this app has made, with the copy that was kept in each one's place.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("history.open.card")
+    }
+
     private var historyEntry: some View {
         NavigationLink {
             HistoryView()
