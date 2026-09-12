@@ -569,6 +569,29 @@ final class ReviewViewModel: ObservableObject {
         }
     }
 
+    // MARK: - What the deletion instrument draws
+
+    /// How many of the selected copies live in a granted folder.
+    ///
+    /// The instrument needs it to know how many cells the file lane has, and it cannot come
+    /// from the progress reports: the lane has to be drawn full before the first one arrives.
+    var selectedFileCount: Int {
+        selection.selectedIDs.reduce(0) { count, id in
+            result.items[id]?.source == .fileFolder ? count + 1 : count
+        }
+    }
+
+    var selectedPhotoCount: Int { selection.count - selectedFileCount }
+
+    /// The same count for what actually went, so the settled instrument draws the deletion that
+    /// happened rather than the one that was asked for.
+    var outcomeFileCount: Int {
+        guard let outcome else { return 0 }
+        return outcome.deletedIDs.reduce(0) { count, id in
+            result.items[id]?.source == .fileFolder ? count + 1 : count
+        }
+    }
+
     // MARK: - Keeping a copy first
 
     /// What an export would write: every selected copy, in the order the list offers them,

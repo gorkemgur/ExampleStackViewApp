@@ -140,6 +140,14 @@ enum DS {
         return isOnSlab ? tierVivid(.burstLeftover) : tier(.burstLeftover)
     }
 
+    /// The muting neutral, at a value that reads on the slab.
+    ///
+    /// `MeterTrack` mutes with `DS.neutral.opacity(0.35)`, which on navy is very nearly
+    /// nothing. Same meaning, slab-correct value — the pattern `tierVivid` and `onSlabAccent`
+    /// already set. It is the most load-bearing colour in the deletion instrument, because it
+    /// is what says "in Recently Deleted: gone from the library, not yours again yet".
+    static let neutralOnSlab = Color(dsRGB: 0x5D7288)
+
     /// Secondary copy on the slab. `Color.secondary` resolves against the page, not against a
     /// navy block that ignores the appearance.
     static let onSlabMuted = Color(dsRGB: 0x8FA3B8)
@@ -297,17 +305,21 @@ extension View {
     /// This was three byte-identical copies of the same eight lines, in the three files that
     /// draw the product's three main blocks. The material that says "this is the instrument,
     /// not another section" is exactly the thing that must not be re-typed per screen.
-    func dsSlab(padding: CGFloat = DS.Space.xl) -> some View {
+    /// `radius` because a slab nested inside another rounded thing has to be concentric with
+    /// it. The instrument that draws a deletion sits inside the dock, whose corner is
+    /// `DS.controlCorner`, and a `slabCorner` block in a `controlCorner` well reads as a
+    /// mistake.
+    func dsSlab(padding: CGFloat = DS.Space.xl, radius: CGFloat = DS.slabCorner) -> some View {
         self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous).fill(DS.slabFill)
+                RoundedRectangle(cornerRadius: radius, style: .continuous).fill(DS.slabFill)
             )
             .overlay(
                 // A brighter edge at the top than at the bottom, which is what makes a panel
                 // look like it is sitting on the page rather than punched through it.
-                RoundedRectangle(cornerRadius: DS.slabCorner, style: .continuous)
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(
                         LinearGradient(
                             colors: [Color.white.opacity(0.16), Color.white.opacity(0.05)],

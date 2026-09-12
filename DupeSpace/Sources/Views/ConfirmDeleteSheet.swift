@@ -14,6 +14,15 @@ struct ConfirmDeleteSheet: View {
 
     @State private var pickingFolder = false
 
+    /// The instrument's staging width, captured once so the cell layout does not re-solve on
+    /// every progress tick.
+    @State private var instrumentWidth: CGFloat = 320
+
+    /// Counts frozen the moment the key is spent. The selection is cleared the instant the
+    /// deletion succeeds, so reading it afterwards would collapse the instrument to nothing at
+    /// the exact frame it is meant to show the arrival.
+    @State private var staged: (files: Int, photos: Int, savings: SavingsBreakdown)?
+
     var body: some View {
         content
             // Sized to what it holds: at full height the sheet left 400pt of empty grey
@@ -168,32 +177,73 @@ struct ConfirmDeleteSheet: View {
 
     /// The one place in the app that is red. Everything before this point is reversible; this
     /// button is not, so it is the only control that gets the colour of a thing you cannot undo.
+    ///
+    /// It is spent, not transformed. A `matchedGeometryEffect` morph from the key into the
+    /// instrument was tempting and is wrong: `DS.destructive` belongs to the irreversible
+    /// *control*, and carrying red into the *process* would make the running deletion look like
+    /// something still tappable.
+    @ViewBuilder
     private var deleteKey: some View {
-        Button(role: .destructive) {
-            Task {
-                await model.delete()
-                if model.outcome != nil { dismiss() }
-            }
-        } label: {
-            if model.isDeleting {
-                // Not tinted white: while the deletion runs the key is disabled, so it is a
-                // grey well, and a white spinner on it is an invisible spinner.
-                ProgressView()
-                    .tint(DS.deep)
+        VStack(spacing: 0) {
+            if model.isDeleting, let staged {
+                handover(staged)
+                    .transition(.opacity)
             } else {
-                Text("Delete \(Counting.items(model.selection.count))")
+                Button(role: .destructive) {
+                    // Frozen before the work starts, because `model.selection` is cleared the
+                    // instant it succeeds.
+                    staged = (model.selectedFileCount, model.selectedPhotoCount, model.savings)
+                    Task {
+                        await model.delete()
+                        if model.outcome != nil {
+                            // A files-only deletion can finish in under a tenth of a second,
+                            // which would make the instrument a flicker. Long enough to be
+                            // seen arriving, short enough not to be a fake wait: the work is
+                            // already done either way.
+                            try? await Task.sleep(for: .milliseconds(450))
+                            dismiss()
+                        }
+                    }
+                } label: {
+                    Text("Delete \(Counting.items(model.selection.count))")
+                }
+                .buttonStyle(.key(DS.destructive, enabled: model.canDelete))
+                .disabled(!model.canDelete)
+                .transition(.opacity)
+                .accessibilityIdentifier("confirm.delete")
             }
         }
-        .buttonStyle(.key(DS.destructive, enabled: model.canDelete))
-        .disabled(!model.canDelete)
         .padding(14)
         // The same floating dock as the review screen's, so the two bottoms of the two screens
         // in this flow are the same object rather than two edge-to-edge material strips.
         .dsDock()
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+        .animation(Motion.content, value: model.isDeleting)
         .sensoryFeedback(.impact(weight: .heavy), trigger: model.isDeleting) { _, started in started }
-        .accessibilityIdentifier("confirm.delete")
+    }
+
+    private func handover(_ staged: (files: Int, photos: Int, savings: SavingsBreakdown)) -> some View {
+        HandoverView(scene: scene(staged))
+            .dsSlab(padding: DS.Space.m, radius: DS.controlCorner)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.onAppear { instrumentWidth = proxy.size.width }
+                }
+            )
+    }
+
+    private func scene(_ staged: (files: Int, photos: Int, savings: SavingsBreakdown)) -> HandoverScene {
+        guard let progress = model.deletionProgress else {
+            return .staged(savings: staged.savings, fileCount: staged.files, width: instrumentWidth)
+        }
+        return .inFlight(
+            progress: progress,
+            savings: staged.savings,
+            fileCount: staged.files,
+            photoCount: staged.photos,
+            width: instrumentWidth
+        )
     }
 
     /// The gauge reading, set the same way as the disk on the overview so the two numbers read

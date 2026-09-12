@@ -642,37 +642,74 @@ struct ReviewView: View {
 
     // MARK: - Outcome
 
+    /// The success moment, which is the same instrument the user was just watching — arrived.
+    ///
+    /// It used to be a card with a checkmark and no byte figure anywhere on it, under a dark
+    /// slab still shouting "I NEED BACK 12.3 MB" about what was *left*. In an app whose whole
+    /// identity is `Readout.bytes` and the meter, a success step with no quantity on it is not
+    /// a quiet success step, it is a missing one.
+    ///
+    /// Re-showing the handover diagram settled — rather than inventing a new celebration —
+    /// makes this read as the arrival of the thing they were watching thirty frames ago. It
+    /// also makes the celebration physically incapable of implying the space is already back,
+    /// because the held portion is drawn in the app's own colour for a measurement it cannot
+    /// act on. No confetti, no trophy, no bouncing tick: this is a destruction the user
+    /// authorised, not a level cleared.
     private func outcomeSection(_ outcome: DeletionOutcome) -> some View {
-        // Not `tier(.inferiorCopy)`. Green was doing three jobs in this app — a rung of the
-        // ladder, "it worked", and "this is the copy that stays" — and a hue that means three
-        // things means none of them.
-        Card(rail: DS.deep) {
-            VStack(alignment: .leading, spacing: 8) {
-                Label {
-                    Text("\(Counting.items(outcome.deletedCount)) removed")
-                } icon: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(DS.deep)
+        let savings = model.outcomeSavings ?? .empty
+
+        return VStack(alignment: .leading, spacing: DS.Space.l) {
+            VStack(alignment: .leading, spacing: 2) {
+                Eyebrow("What went", tint: DS.onSlabAccent)
+
+                // Present at full value immediately, never rolled up from zero. The figure was
+                // known the instant the change returned; counting it up would dramatise a
+                // duration that did not exist.
+                Readout.bytes(savings.immediateBytes + savings.deferredBytes, tint: DS.onSlabAccent)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .accessibilityIdentifier("review.freed")
+
+                Text("\(Counting.items(outcome.deletedCount)) removed")
+                    .font(.subheadline)
+                    .foregroundStyle(DS.onSlab.opacity(0.72))
+                    .accessibilityIdentifier("review.result")
+            }
+
+            if savings.immediateBytes + savings.deferredBytes > 0 {
+                HandoverView(
+                    scene: .settled(
+                        outcome: outcome,
+                        savings: savings,
+                        fileCount: model.outcomeFileCount,
+                        width: 300
+                    )
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                if savings.deferredBytes > 0 {
+                    Text("\(ByteFormatting.string(savings.deferredBytes)) of it is in Recently Deleted for 30 days — the space comes back when you empty that album in Photos.")
+                        .font(.caption)
+                        .foregroundStyle(DS.onSlab.opacity(0.66))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.system(.headline, design: .rounded))
-                .accessibilityIdentifier("review.result")
 
-                Text("The receipt is in History: what went, and what was kept in its place.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("They are in Recently Deleted for 30 days. Empty that album in Photos to get the space back now.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if savings.immediateBytes > 0 && savings.deferredBytes == 0 {
+                    // Only here may the app say the space is back, because for files it is.
+                    Text("Those were outside the photo library, so that space is back now.")
+                        .font(.caption)
+                        .foregroundStyle(DS.onSlab.opacity(0.66))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 if outcome.skippedCount > 0 {
                     // Not a failure, a refusal — and the difference matters to someone deciding
                     // whether to trust this app with the rest of their library.
                     Text("\(Counting.items(outcome.skippedCount)) \(outcome.skippedCount == 1 ? "was" : "were") left alone: the file changed after the scan read it, so it is no longer the copy that was checked.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.onSlab.opacity(0.66))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("review.skipped")
                 }
@@ -680,10 +717,19 @@ struct ReviewView: View {
                 if outcome.missingCount > 0 {
                     Text("\(Counting.items(outcome.missingCount)) \(outcome.missingCount == 1 ? "was" : "were") already gone.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.onSlab.opacity(0.66))
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                NavigationLink {
+                    HistoryView()
+                } label: {
+                    Text("See the receipt")
+                }
+                .buttonStyle(.keyOnSlab)
+                .accessibilityIdentifier("review.receipt")
             }
         }
+        .dsSlab()
     }
 }
