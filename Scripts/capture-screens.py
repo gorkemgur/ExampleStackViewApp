@@ -35,11 +35,21 @@ def describe():
 
 
 def find(tree, identifier):
+    """Locate an element by identifier, then by label, then by a label that contains it.
+
+    The last pass matters for system chrome: a tab carrying a badge does not report a bare
+    "History" as its label, and the walk should still be able to reach it.
+    """
     for element in tree:
         if element.get("AXUniqueId") == identifier:
             return element
     for element in tree:
         if element.get("AXLabel") == identifier:
+            return element
+    needle = identifier.lower()
+    for element in tree:
+        label = element.get("AXLabel")
+        if isinstance(label, str) and needle in label.lower():
             return element
     return None
 
@@ -167,9 +177,14 @@ def main():
 
 def capture_history():
     """The receipt, which only exists once something has actually been deleted."""
-    tab = find(describe(), "History")
+    tree = describe()
+    tab = find(tree, "History")
     if tab is None:
-        print("History tab not found")
+        print("History tab not found. Labels on screen:")
+        for element in tree:
+            label = element.get("AXLabel")
+            if label:
+                print("   ", repr(label))
         return 0
 
     tap(tab, settle=2.5)
