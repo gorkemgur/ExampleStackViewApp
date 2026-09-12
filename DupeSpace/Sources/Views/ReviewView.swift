@@ -35,7 +35,11 @@ struct ReviewView: View {
                 }
             }
 
-            budgetSection
+            if model.isFinished {
+                finishedSection
+            } else {
+                budgetSection
+            }
 
             ForEach(model.sections) { section in
                 sectionView(section)
@@ -79,6 +83,24 @@ struct ReviewView: View {
     }
 
     // MARK: - Budget
+
+    /// After the last candidate is gone the budget card was still on screen saying "I need
+    /// 2.02 GB back" above "nothing is selected by a plan of zero" — the screen arguing with
+    /// itself over a question that no longer has an answer.
+    private var finishedSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Nothing left to review")
+                    .font(.headline)
+                    .accessibilityIdentifier("review.finished")
+                Text("Everything this scan found has been dealt with. Scan again when the library has changed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 4)
+        }
+    }
 
     private var budgetSection: some View {
         Section {

@@ -106,6 +106,9 @@ final class ReviewViewModel: ObservableObject {
 
     var maxReclaimableBytes: Int64 { liveCandidates.reduce(Int64(0)) { $0 + $1.bytes } }
 
+    /// True once there is nothing left to offer — everything found has been dealt with.
+    var isFinished: Bool { liveCandidates.isEmpty }
+
     var savings: SavingsBreakdown {
         SavingsCalculator.breakdown(for: selection.selectedIDs, items: result.items)
     }
