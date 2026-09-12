@@ -18,6 +18,11 @@ struct CompareSliderView: View {
     @State private var keeperImage: UIImage?
     @State private var candidateImage: UIImage?
 
+    /// Where the two differ, computed from the same grayscale buffers the fingerprints came
+    /// from. `nil` until both faces have loaded; a grid with nothing in it means they agree.
+    @State private var difference: DifferenceGrid?
+    @State private var showingDifference = false
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The comparator is 180pt tall and never wider than the screen.
@@ -39,6 +44,12 @@ struct CompareSliderView: View {
                         .mask(alignment: .leading) {
                             Rectangle().frame(width: max(proxy.size.width * split, 0))
                         }
+
+                    if showingDifference, let difference, !difference.isBelowNoiseFloor {
+                        DifferenceOverlay(grid: difference)
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
 
                     divider(at: proxy.size.width * split, height: proxy.size.height)
                 }
@@ -75,16 +86,76 @@ struct CompareSliderView: View {
             HStack(spacing: 8) {
                 chip("Keeping", tint: DS.deep)
                 Spacer(minLength: 0)
+                differenceToggle
                 chip("This copy", tint: DS.neutral)
             }
-            .accessibilityHidden(true)
         }
+        .animation(reduceMotion ? nil : Motion.control, value: showingDifference)
         .task(id: keeper.id) {
             keeperImage = await loader.thumbnail(for: keeper.id, size: CGSize(width: side, height: side))
+            await computeDifference()
         }
         .task(id: candidate.id) {
             candidateImage = await loader.thumbnail(for: candidate.id, size: CGSize(width: side, height: side))
+            await computeDifference()
         }
+    }
+
+    /// The promise `docs/CONCEPT.md` makes second, after "the gain comes first": the match is
+    /// shown, not asserted. The wipe already lets someone see *that* two copies are alike; this
+    /// says *where* they are not.
+    ///
+    /// Off by default. It is evidence to be asked for, and a heat map permanently over the
+    /// photograph would make every comparison look like a diagnostic readout instead of two
+    /// pictures.
+    @ViewBuilder
+    private var differenceToggle: some View {
+        if let difference {
+            Button {
+                showingDifference.toggle()
+            } label: {
+                Label(
+                    difference.isBelowNoiseFloor ? "No visible difference" : "Where they differ",
+                    systemImage: difference.isBelowNoiseFloor ? "equal.circle" : "square.grid.3x3.topleft.filled"
+                )
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(showingDifference ? DS.deep : Color.secondary)
+                .padding(.horizontal, 9)
+                .frame(minHeight: 32)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(showingDifference ? DS.deep.opacity(0.13) : Color.clear)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(showingDifference ? DS.deep.opacity(0.4) : DS.hairline, lineWidth: 1)
+                )
+                .contentShape(Capsule(style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(difference.isBelowNoiseFloor)
+            .accessibilityIdentifier("candidate.difference.\(candidate.id)")
+        }
+    }
+
+    /// Off the main actor: this is two 64×64 renders and about eight thousand subtractions, on
+    /// a screen that can hold sixty of these.
+    private func computeDifference() async {
+        guard let keeperImage, let candidateImage, difference == nil else { return }
+
+        let a = keeperImage.cgImage
+        let b = candidateImage.cgImage
+        guard let a, let b else { return }
+
+        difference = await Task.detached(priority: .utility) {
+            guard
+                let left = GrayImageRenderer.render(a),
+                let right = GrayImageRenderer.render(b)
+            else {
+                return nil
+            }
+            return DifferenceGrid.between(left, right)
+        }.value
     }
 
     @ViewBuilder
@@ -146,5 +217,47 @@ struct CompareSliderView: View {
     private func placeholderSymbol(for item: MediaItem) -> String {
         if !item.isLocallyAvailable { return "icloud" }
         return item.kind == .video ? "film" : "photo"
+    }
+}
+
+/// The heat map itself: one translucent square per grid cell, over the two faces.
+///
+/// Drawn in the app's own warning amber rather than the usual red-to-blue thermal ramp. Red on
+/// this screen means the irreversible key, and a picture that borrows it would read as "these
+/// pixels are the problem" rather than "these pixels are where the two differ".
+struct DifferenceOverlay: View {
+
+    let grid: DifferenceGrid
+
+    var body: some View {
+        Canvas { context, size in
+            guard grid.size > 0 else { return }
+
+            let cellWidth = size.width / CGFloat(grid.size)
+            let cellHeight = size.height / CGFloat(grid.size)
+            let tint = DS.tier(.burstLeftover)
+
+            for y in 0..<grid.size {
+                for x in 0..<grid.size {
+                    let value = grid.cell(x: x, y: y)
+                    // Nothing under a tenth is painted at all. A faint wash over the whole
+                    // picture would say "everything differs a little", which is both true of
+                    // any re-encode and useless to look at.
+                    guard value > 0.1 else { continue }
+
+                    let rect = CGRect(
+                        x: CGFloat(x) * cellWidth,
+                        y: CGFloat(y) * cellHeight,
+                        width: cellWidth,
+                        height: cellHeight
+                    )
+                    context.fill(
+                        Path(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 2),
+                        with: .color(tint.opacity(0.15 + value * 0.45))
+                    )
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }

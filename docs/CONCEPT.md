@@ -22,8 +22,17 @@ silme setini **pişmanlık riskine göre sıralayarak** kurar ve sana katman kat
 | 0 — Sıfır kayıp | Hiçbir şey. Bayt bayt aynı dosya. | Aynı fotoğrafın 3 kopyası |
 | 1 — Sıfır kayıp | Hiçbir şey. Daha iyisi kalıyor. | WhatsApp'tan dönen 1280px kopya, 4032px orijinal dururken |
 | 2 — Çok düşük | Aynı anın daha bulanık kareleri | Burst'ün 11 karesinden en netini tut |
-| 3 — Düşük | Eski, albümsüz, favorisiz ekran görüntüleri | 2019'daki dekont ekran görüntüsü |
-| 4 — Kullanıcı kararı | Benzer ama aynı değil | Aynı manzaranın 4 farklı çekimi |
+| 3 — Kullanıcı kararı | Benzer ama aynı değil | Aynı manzaranın 4 farklı çekimi |
+
+> **Yazıldı, sonra kasıtlı olarak çıkarıldı: "eski, albümsüz, favorisiz ekran görüntüleri".**
+> Bu tablo güvenlik modelinden önce yazılmıştı. Motorun her adayı bir *hayatta kalanla*
+> karşılaştırılmış olmak zorunda — `CleanupValidator` bir grubun son kopyasının silinmesini
+> reddediyor, ve uygulamanın tamamı bu kurala dayanıyor. Tek başına duran eski bir ekran
+> görüntüsünün karşılaştırıldığı bir kopya yok; onu bir "pişmanlık katmanı" yapmak, o kuralı
+> onu delmek için gevşetmek olurdu. Ekran görüntüleri hâlâ *skorlamada* rol alıyor (iki
+> kopyadan biri ekran görüntüsüyse gitmesi gereken odur), ama silme önerisi olarak
+> sunulmuyorlar. Ayrı bir "dağınıklık" yüzeyi olarak yapılabilir — kopya merdiveninin içinde
+> değil.
 
 Slider'ı 12 GB'a çekersin, app "Katman 0 ve 1 yeter: 9.4 GB. Katman 2'den 6 seri daha
 eklersen 13.1 GB" der. Bunu hiçbir yerleşik özellik yapmıyor.
