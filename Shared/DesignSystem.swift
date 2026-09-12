@@ -173,7 +173,9 @@ enum Readout {
         unitScale: Font.TextStyle = .title3,
         tint: Color = DS.deep
     ) -> Text {
-        let formatted = ByteFormatting.string(value)
+        // `ByteText` from the engine rather than the app-side `ByteFormatting` wrapper around
+        // it: this file is compiled into the widget extension too, and the wrapper is not.
+        let formatted = ByteText.string(value)
         let parts = formatted.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
 
         let figureFont = Font.system(scale, design: .rounded).weight(.heavy)
