@@ -196,19 +196,16 @@ def main():
 
     review = scroll_to("scan.review")
     if review is None:
-        print(f"captured {captured} screens")
-        return 0
+        return report(captured)
 
     tap(review)
     if wait_for("review.total", timeout=90) is None:
-        print(f"captured {captured} screens")
-        return 0
+        return report(captured)
     captured += shot("04-review.png")
 
     delete = find(describe(), "review.delete")
     if delete is None:
-        print(f"captured {captured} screens")
-        return 0
+        return report(captured)
 
     tap(delete, settle=3.0)
     if wait_for("confirm.total", timeout=60) is not None:
@@ -223,7 +220,28 @@ def main():
                 captured += shot("06-deleted.png")
                 captured += capture_history()
 
+    return report(captured)
+
+
+EXPECTED = [
+    "01-overview.png", "01b-live-surfaces.png", "02-scan.png", "03-results.png",
+    "04-review.png", "05-confirm.png", "06-deleted.png", "07-history.png", "08-receipt.png",
+]
+
+
+def report(captured):
+    """Say what came out, and name what did not.
+
+    A partial walk used to be invisible: the screens it reached were committed over the old
+    ones, the screens it did not were left behind, and the page ended up showing two different
+    designs of the same app beside each other. Saying so is what makes that impossible to miss.
+    """
+    missing = [name for name in EXPECTED if not os.path.exists(os.path.join(OUT_DIR, name))]
     print(f"captured {captured} screens")
+    if missing:
+        print("MISSING " + " ".join(missing))
+        return 2
+    print("every expected screen was captured")
     return 0
 
 
@@ -233,7 +251,7 @@ def capture_live_surfaces():
     No simulator will show a Live Activity, so the app renders the same views on a screen of
     its own under `-ui-testing`. This is the only picture anyone gets of them.
     """
-    entry = find(describe(), "Live surfaces", types={"Button"})
+    entry = find(describe(), "root.livesurfaces")
     if entry is None:
         print("no live-surfaces entry on the overview")
         return 0
@@ -244,7 +262,7 @@ def capture_live_surfaces():
 
     captured = shot("01b-live-surfaces.png")
 
-    close = find(describe(), "livepreview.close", types={"Button"})
+    close = find(describe(), "livepreview.close")
     if close is not None:
         tap(close, settle=1.5)
     return captured
@@ -258,7 +276,7 @@ def pop_to_overview(limit=4):
     """
     for _ in range(limit):
         tree = describe()
-        if find(tree, "history.open", types={"Button"}) is not None:
+        if find(tree, "history.open") is not None:
             return True
         # Exact labels only. `find` falls back to a prefix match, and "Review" would happily
         # match the "Review and choose" button on the results screen — walking deeper into the
@@ -275,7 +293,7 @@ def pop_to_overview(limit=4):
         if back is None:
             return False
         tap(back, settle=1.5)
-    return find(describe(), "history.open", types={"Button"}) is not None
+    return find(describe(), "history.open") is not None
 
 
 def capture_history():
@@ -284,7 +302,7 @@ def capture_history():
         print("could not get back to the overview to open History")
         return 0
 
-    entry = find(describe(), "history.open", types={"Button"})
+    entry = find(describe(), "history.open")
     if entry is None:
         print("no History control on the overview")
         return 0

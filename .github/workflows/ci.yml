@@ -174,7 +174,14 @@ jobs:
           echo "UDID=$UDID" >> "$GITHUB_ENV"
 
       - name: Walk the app and photograph every screen
-        run: python3 Scripts/capture-screens.py "$UDID" artifacts/screens
+        id: walk
+        # A partial walk is not a failure worth stopping the run over — the screens it did reach
+        # are still worth having — but it must not pass silently either, or the page keeps
+        # showing whatever era the missing ones were captured in.
+        run: |
+          set +e
+          python3 Scripts/capture-screens.py "$UDID" artifacts/screens
+          echo "status=$?" >> "$GITHUB_OUTPUT"
 
       - name: Measure layout and animation
         run: python3 Scripts/audit-ui.py "$UDID" artifacts/audit
@@ -190,6 +197,10 @@ jobs:
             exit 0
           fi
 
+          # Replaced wholesale rather than copied over: a screenshot the walk could not take
+          # this time is a screenshot of an app that no longer exists, and leaving it beside
+          # eight new ones is how the page came to show two designs at once.
+          rm -rf docs/screenshots
           mkdir -p docs/screenshots
           cp "${shots[@]}" docs/screenshots/
 
@@ -213,6 +224,12 @@ jobs:
           # Rebase rather than force: this branch is also being pushed to by hand.
           git pull --rebase origin "$BRANCH"
           git push origin "HEAD:$BRANCH"
+
+      - name: Fail if the walk could not reach every screen
+        if: steps.walk.outputs.status != '0'
+        run: |
+          echo "the walk exited ${{ steps.walk.outputs.status }} — see MISSING above"
+          exit 1
 
       - name: Upload simulator artifacts
         if: always()

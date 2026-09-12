@@ -321,13 +321,13 @@ def main():
     overview = describe()
     audit_layout("overview", overview)
 
-    live = find(overview, "Live surfaces", types={"Button"})
+    live = find(overview, "root.livesurfaces")
     if live is not None:
         sample("live surfaces sheet presenting", lambda: tap(live, settle=0), seconds=2.0)
         time.sleep(1.5)
         sheet = describe()
         audit_layout("live surfaces", sheet)
-        close = find(sheet, "livepreview.close", types={"Button"})
+        close = find(sheet, "livepreview.close")
         if close is not None:
             tap(close, settle=1.5)
     else:
