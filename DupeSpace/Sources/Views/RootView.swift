@@ -67,10 +67,10 @@ struct RootView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .animation(.snappy(duration: 0.35), value: model.items.count)
-                .animation(.snappy(duration: 0.3), value: model.access)
-                .animation(.snappy(duration: 0.3), value: model.isLoading)
-                .animation(.snappy(duration: 0.3), value: model.folders)
+                .animation(Motion.content, value: model.items.count)
+                .animation(Motion.content, value: model.access)
+                .animation(Motion.content, value: model.isLoading)
+                .animation(Motion.content, value: model.folders)
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("DupeSpace")

@@ -24,6 +24,20 @@ final class ReviewViewModelTests: XCTestCase {
         XCTAssertTrue(model.violations.isEmpty)
     }
 
+    /// The card used to open at zero and say "nothing is selected by a plan of zero" directly
+    /// above a bar reporting three selected items — the screen arguing with itself.
+    func testTheBudgetOpensWhereTheAppsOwnSuggestionAlreadyIs() async {
+        let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
+
+        let preSelected = model.result.candidates
+            .filter(\.isPreSelected)
+            .reduce(Int64(0)) { $0 + $1.bytes }
+
+        XCTAssertGreaterThan(model.budgetBytes, 0)
+        XCTAssertEqual(Int64(model.budgetBytes), preSelected)
+        XCTAssertFalse(model.budgetPlan.selected.isEmpty)
+    }
+
     func testSectionsAreOrderedByWhatDeletingCosts() async {
         let model = ReviewViewModel(result: await makeResult(), deleter: StubDeleter())
         let tiers = model.sections.map(\.tier)

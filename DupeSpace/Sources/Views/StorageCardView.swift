@@ -11,9 +11,11 @@ struct StorageCardView: View {
         Card {
             VStack(alignment: .leading, spacing: 6) {
                 Text(ByteFormatting.string(snapshot.usedCapacity))
-                    .font(.system(size: 38, weight: .semibold, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded).weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.4), value: snapshot.usedCapacity)
+                    .animation(Motion.content, value: snapshot.usedCapacity)
                     .accessibilityIdentifier("storage.headline")
 
                 Text("used of \(ByteFormatting.string(snapshot.totalCapacity))")
@@ -27,7 +29,7 @@ struct StorageCardView: View {
             HStack(spacing: 18) {
                 legend(color: .accentColor, title: "Photos & videos", bytes: libraryBytes)
                 legend(color: Color(uiColor: .systemGray3), title: "Everything else", bytes: otherBytes)
-                legend(color: Color(uiColor: .tertiarySystemFill), title: "Free", bytes: snapshot.availableCapacity)
+                legend(color: Color(uiColor: .systemGray5), title: "Free", bytes: snapshot.availableCapacity)
             }
 
             Text("Free space is an estimate — iOS counts storage it can purge on demand as available.")
@@ -58,9 +60,13 @@ struct StorageCardView: View {
                 Text(title)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             Text(ByteFormatting.string(bytes))
                 .font(.footnote.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
     }
 }

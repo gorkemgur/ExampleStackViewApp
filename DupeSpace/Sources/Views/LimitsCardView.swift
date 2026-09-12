@@ -24,11 +24,13 @@ struct LimitsCardView: View {
 
     @ViewBuilder
     private func bullet(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // Aligned to the first line's baseline rather than nudged down by a fixed number of
+            // points, which drifts the moment the text size changes the line height.
             Circle()
                 .fill(Color.secondary)
                 .frame(width: 4, height: 4)
-                .padding(.top, 7)
+                .alignmentGuide(.firstTextBaseline) { dimension in dimension.height }
             Text(text)
                 .font(.footnote)
                 .foregroundStyle(.secondary)

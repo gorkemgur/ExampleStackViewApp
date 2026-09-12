@@ -7,6 +7,8 @@ struct ScanView: View {
 
     private let history: HistoryViewModel
     @StateObject private var model: ScanViewModel
+    /// Set once the results have appeared, so the seal bounces on arrival rather than never.
+    @State private var hasSettled = false
 
     init(items: [MediaItem], history: HistoryViewModel) {
         self.items = items
@@ -54,11 +56,11 @@ struct ScanView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .animation(.snappy(duration: 0.35), value: model.isScanning)
-            .animation(.snappy(duration: 0.35), value: model.result?.candidates.count)
+            .animation(Motion.content, value: model.isScanning)
+            .animation(Motion.content, value: model.result?.candidates.count)
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .sensoryFeedback(.success, trigger: model.result != nil)
+        .sensoryFeedback(.success, trigger: model.result != nil) { _, hasResult in hasResult }
         .navigationTitle("Find duplicates")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
@@ -99,12 +101,11 @@ struct ScanView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(ScanCopy.title(for: model.progress?.stage ?? .bucketing))
                     .font(.headline)
-                    .id(model.progress?.stage ?? .bucketing)
                     .transition(.blurReplace)
+                    .id(model.progress?.stage ?? .bucketing)
                     .accessibilityIdentifier("scan.stage")
 
                 ProgressView(value: model.progress?.fraction ?? 0)
-                    .animation(.smooth(duration: 0.3), value: model.progress?.fraction)
 
                 Text(model.isPaused ? "Paused — nothing read so far is lost" : countsText)
                     .font(.footnote)
@@ -113,8 +114,8 @@ struct ScanView: View {
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("scan.counts")
             }
-            .animation(.snappy(duration: 0.3), value: model.progress?.stage)
-            .animation(.snappy(duration: 0.25), value: model.isPaused)
+            .animation(Motion.content, value: model.progress?.stage)
+            .animation(Motion.control, value: model.isPaused)
 
             HStack(spacing: 10) {
                 // Pausing keeps everything read so far. Cancelling throws it away, which is
@@ -136,7 +137,7 @@ struct ScanView: View {
                 .controlSize(.large)
                 .accessibilityIdentifier("scan.pause")
 
-                Button(role: .destructive) {
+                Button {
                     model.cancel()
                 } label: {
                     Text("Cancel")
@@ -164,7 +165,8 @@ struct ScanView: View {
                     Image(systemName: "checkmark.seal")
                         .font(.title)
                         .foregroundStyle(.green)
-                        .symbolEffect(.bounce, value: result.candidates.count)
+                        .symbolEffect(.bounce, value: hasSettled)
+                        .onAppear { hasSettled = true }
                     Text("No duplicates found")
                         .font(.title3.weight(.semibold))
                         .accessibilityIdentifier("scan.empty")
@@ -177,7 +179,9 @@ struct ScanView: View {
             Card {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(ByteFormatting.string(result.reclaimableBytes))
-                        .font(.system(size: 38, weight: .semibold, design: .rounded))
+                        .font(.system(.largeTitle, design: .rounded).weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                         .accessibilityIdentifier("scan.total")
                     Text("across \(Counting.items(result.candidates.count)) you could remove")
                         .font(.subheadline)
@@ -254,6 +258,7 @@ struct ScanView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(ScanCopy.title(for: summary.tier))
                         .font(.headline)
+                        .lineLimit(2)
                         .accessibilityIdentifier("scan.tier.\(summary.tier.rawValue)")
 
                     Text(ScanCopy.subtitle(for: summary.tier))
@@ -262,7 +267,7 @@ struct ScanView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 8)
 
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(ByteFormatting.string(summary.bytes))
@@ -272,6 +277,9 @@ struct ScanView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .lineLimit(1)
+                .fixedSize()
+                .layoutPriority(1)
             }
         }
     }

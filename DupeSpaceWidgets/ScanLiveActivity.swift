@@ -23,8 +23,8 @@ struct ScanLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.leading) {
                     Label {
                         Text(scan.headline)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
                     } icon: {
                         Image(systemName: scan.symbolName)
                             .foregroundStyle(ScanPalette.tint(for: scan))
@@ -38,6 +38,8 @@ struct ScanLiveActivity: Widget {
                         .font(.system(.title3, design: .rounded, weight: .semibold))
                         .contentTransition(.numericText())
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                         .foregroundStyle(ScanPalette.tint(for: scan))
                 }
 
@@ -59,7 +61,7 @@ struct ScanLiveActivity: Widget {
                             }
                         }
                     }
-                    .animation(.smooth, value: scan)
+                    .animation(Motion.content, value: scan.phase)
                 }
             } compactLeading: {
                 Image(systemName: scan.symbolName)
@@ -70,6 +72,8 @@ struct ScanLiveActivity: Widget {
                     .font(.system(.caption, design: .rounded, weight: .semibold))
                     .contentTransition(.numericText())
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .foregroundStyle(ScanPalette.tint(for: scan))
             } minimal: {
                 // The minimal slot is a circle a few points across, so the ring carries the
@@ -84,11 +88,8 @@ struct ScanLiveActivity: Widget {
                             style: StrokeStyle(lineWidth: 2, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
-                    Image(systemName: scan.symbolName)
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(ScanPalette.tint(for: scan))
                 }
-                .animation(.smooth, value: scan.fraction)
+                .animation(Motion.content, value: scan.fraction)
                 .accessibilityLabel(scan.accessibilityDescription)
             }
             .widgetURL(URL(string: "dupespace://scan"))

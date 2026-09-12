@@ -195,3 +195,38 @@ final class WidgetSnapshotUpdateTests: XCTestCase {
         XCTAssertEqual(fresh.reclaimableBytes, 0)
     }
 }
+
+final class ByteTextTests: XCTestCase {
+
+    /// The gauge ring and the island's compact slots have room for three or four glyphs, so
+    /// this is the one formatter whose output length is a correctness question.
+    func testTightIsShortEnoughForAGaugeRing() {
+        XCTAssertEqual(ByteText.tight(0), "0")
+        XCTAssertEqual(ByteText.tight(-5), "0")
+        XCTAssertEqual(ByteText.tight(400_000), "<1M")
+        XCTAssertEqual(ByteText.tight(430_000_000), "430M")
+        XCTAssertEqual(ByteText.tight(4_300_000_000), "4.3G")
+        XCTAssertEqual(ByteText.tight(44_220_000_000), "44G")
+        XCTAssertEqual(ByteText.tight(512_000_000_000), "512G")
+        XCTAssertEqual(ByteText.tight(1_000_000_000_000), "1.0T")
+
+        // The boundary that a naive implementation gets wrong: just under a gigabyte must not
+        // round up into "1000M".
+        XCTAssertEqual(ByteText.tight(999_999_999), "1.0G")
+
+        let sizes: [Int64] = [
+            0, 1, 400_000, 999_999, 1_000_000, 999_999_999, 1_000_000_000,
+            9_940_000_000, 9_950_000_000, 512_000_000_000, 2_000_000_000_000
+        ]
+        for bytes in sizes {
+            XCTAssertLessThanOrEqual(ByteText.tight(bytes).count, 4, "\(bytes) formats too wide")
+        }
+    }
+
+    /// "1 items" is the kind of detail that makes a screen look unfinished.
+    func testCountingNeverSaysOneItems() {
+        XCTAssertEqual(Counting.items(1), "1 item")
+        XCTAssertEqual(Counting.items(2), "2 items")
+        XCTAssertEqual(Counting.copies(1), "1 other copy")
+    }
+}

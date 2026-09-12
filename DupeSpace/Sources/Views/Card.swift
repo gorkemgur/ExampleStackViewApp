@@ -58,10 +58,12 @@ extension View {
     /// motion that draws attention to itself is motion that distracts from the decision.
     func cardEntrance() -> some View {
         scrollTransition { content, phase in
+            // No blur: behind the translucent tab bar a blurred card reads as a rendering
+            // fault rather than as content that is scrolled away. Opacity and scale carry the
+            // depth on their own.
             content
                 .opacity(phase.isIdentity ? 1 : 0.45)
                 .scaleEffect(phase.isIdentity ? 1 : 0.97)
-                .blur(radius: phase.isIdentity ? 0 : 1.5)
         }
     }
 }

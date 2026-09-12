@@ -145,13 +145,16 @@ struct StorageWidgetView: View {
                         Text("Last scan")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                            .lineLimit(1)
                         Text(scanned, style: .relative)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
             }
-            .frame(width: 118, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -162,7 +165,8 @@ struct StorageWidgetView: View {
         Gauge(value: min(entry.snapshot.usedFraction, 1)) {
             Image(systemName: "internaldrive")
         } currentValueLabel: {
-            Text(ByteText.compact(entry.snapshot.availableCapacity))
+            Text(ByteText.tight(entry.snapshot.availableCapacity))
+                .lineLimit(1)
                 .minimumScaleFactor(0.5)
         }
         .gaugeStyle(.accessoryCircularCapacity)
@@ -202,6 +206,8 @@ struct StorageWidgetView: View {
                 Text(entry.snapshot.losslessBytes > 0 ? "to reclaim, no loss" : "to reclaim")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         } else if entry.snapshot.hasScanned {
             Text("Nothing to clean up")
@@ -218,6 +224,7 @@ struct StorageWidgetView: View {
         HStack(spacing: 10) {
             legendDot(color: .accentColor, title: "Photos")
             legendDot(color: Color.secondary.opacity(0.5), title: "Other")
+            legendDot(color: Color(uiColor: .systemGray4), title: "Free")
         }
     }
 

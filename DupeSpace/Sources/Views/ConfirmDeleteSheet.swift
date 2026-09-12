@@ -12,6 +12,14 @@ struct ConfirmDeleteSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        content
+            // Sized to what it holds: at full height the sheet left 400pt of empty grey
+            // between the breakdown and the button that matters.
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+    }
+
+    private var content: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
@@ -32,8 +40,8 @@ struct ConfirmDeleteSheet: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .animation(.snappy(duration: 0.3), value: model.judgementCallCount)
-                .animation(.snappy(duration: 0.3), value: model.failure)
+                .animation(Motion.content, value: model.judgementCallCount)
+                .animation(Motion.content, value: model.failure)
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Confirm")
@@ -65,7 +73,7 @@ struct ConfirmDeleteSheet: View {
                 .disabled(!model.canDelete)
                 .padding(16)
                 .background(.regularMaterial)
-                .sensoryFeedback(.impact(weight: .heavy), trigger: model.isDeleting)
+                .sensoryFeedback(.impact(weight: .heavy), trigger: model.isDeleting) { _, started in started }
                 .accessibilityIdentifier("confirm.delete")
             }
         }
@@ -75,7 +83,9 @@ struct ConfirmDeleteSheet: View {
         Card {
             VStack(alignment: .leading, spacing: 6) {
                 Text(ByteFormatting.string(model.savings.onDeviceBytes))
-                    .font(.system(size: 36, weight: .semibold, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded).weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("confirm.total")
                 Text("comes back to this device")
@@ -121,13 +131,17 @@ struct ConfirmDeleteSheet: View {
     @ViewBuilder
     private func row(_ title: String, bytes: Int64, note: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(title)
                     .font(.subheadline.weight(.medium))
-                Spacer()
+                    .lineLimit(2)
+                Spacer(minLength: 8)
                 Text(ByteFormatting.string(bytes))
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
+                    .layoutPriority(1)
             }
             Text(note)
                 .font(.caption)

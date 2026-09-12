@@ -16,7 +16,7 @@ struct GroupRowView: View {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.caption2)
                     .foregroundStyle(.white, .green)
-                    .padding(2)
+                    .padding(4)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -28,9 +28,11 @@ struct GroupRowView: View {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 3) {
                 Text(ByteFormatting.string(group.bytes))
@@ -40,6 +42,7 @@ struct GroupRowView: View {
                 Text("\(selectedCount)/\(group.candidates.count) ticked")
                     .font(.caption2)
                     .foregroundStyle(selectedCount > 0 ? Color.accentColor : Color.secondary)
+                    .lineLimit(1)
             }
         }
         .padding(.vertical, 4)

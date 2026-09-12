@@ -34,6 +34,7 @@ struct HistoryView: View {
                         Button("Clear", role: .destructive) {
                             confirmingClear = true
                         }
+                        .tint(.red)
                         .accessibilityIdentifier("history.clear")
                     }
                 }
@@ -44,7 +45,7 @@ struct HistoryView: View {
                 titleVisibility: .visible
             ) {
                 Button("Clear the record", role: .destructive) {
-                    withAnimation(.snappy) { history.clear() }
+                    withAnimation(Motion.content) { history.clear() }
                 }
                 Button("Keep it", role: .cancel) {}
             } message: {
@@ -64,17 +65,13 @@ struct HistoryView: View {
 
                 ForEach(history.timeline) { entry in
                     entryCard(entry)
-                        .scrollTransition { content, phase in
-                            content
-                                .opacity(phase.isIdentity ? 1 : 0.4)
-                                .scaleEffect(phase.isIdentity ? 1 : 0.96)
-                        }
+                        .cardEntrance()
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .animation(.snappy(duration: 0.28), value: expanded)
-            .animation(.snappy(duration: 0.3), value: history.timeline.count)
+            .animation(Motion.content, value: expanded)
+            .animation(Motion.content, value: history.timeline.count)
         }
     }
 
@@ -84,7 +81,9 @@ struct HistoryView: View {
         Card {
             VStack(alignment: .leading, spacing: 6) {
                 Text(ByteFormatting.string(history.totalReclaimedBytes))
-                    .font(.system(size: 38, weight: .semibold, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded).weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("history.total")
 
@@ -160,7 +159,7 @@ struct HistoryView: View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 Button {
-                    withAnimation(.snappy(duration: 0.28)) {
+                    withAnimation(Motion.content) {
                         if expanded.contains(entryID) {
                             expanded.remove(entryID)
                         } else {
@@ -181,13 +180,19 @@ struct HistoryView: View {
                                 .foregroundStyle(.secondary)
 
                             if let window = HistoryCopy.recoveryWindow(record) {
-                                Text(window)
-                                    .font(.caption2.weight(.medium))
-                                    .foregroundStyle(.orange)
+                                // Orange text on a white card measured barely 2:1. The colour
+                                // moves to the glyph and the tinted capsule; the words, which
+                                // are the part that has to be read, go back to full contrast.
+                                Label(window, systemImage: "clock.arrow.circlepath")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.orange.opacity(0.18), in: Capsule())
                             }
                         }
 
-                        Spacer(minLength: 0)
+                        Spacer(minLength: 8)
 
                         Image(systemName: "chevron.down")
                             .font(.caption.weight(.semibold))

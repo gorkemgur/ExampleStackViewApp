@@ -23,6 +23,8 @@ struct ScanLockScreenView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(state.headline)
                         .font(.system(.headline, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text(state.detail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -30,12 +32,15 @@ struct ScanLockScreenView: View {
                         .minimumScaleFactor(0.8)
                 }
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
 
                 Text(state.compactValue)
                     .font(.system(.title2, design: .rounded, weight: .semibold))
                     .contentTransition(.numericText())
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .layoutPriority(1)
                     .foregroundStyle(ScanPalette.tint(for: state))
             }
 
@@ -46,8 +51,9 @@ struct ScanLockScreenView: View {
                     Text(state.startedAt, style: .timer)
                         .font(.caption2)
                         .monospacedDigit()
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: 52, alignment: .leading)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
 
                 if state.foundSomething {
@@ -55,20 +61,22 @@ struct ScanLockScreenView: View {
                 } else if state.isRunning {
                     Text("Totals when it finishes")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 0)
 
                 if state.isRunning && total > 0 {
-                    Text("\(total) to check")
+                    Text("\(total.formatted()) to check")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
         }
         .padding(14)
-        .animation(.smooth, value: state)
+        .animation(Motion.content, value: state.phase)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(state.accessibilityDescription)
     }
@@ -124,7 +132,7 @@ struct ScanProgressTrack: View {
             }
         }
         .frame(height: height)
-        .animation(.smooth(duration: 0.4), value: state.fraction)
+        .animation(Motion.content, value: state.fraction)
     }
 }
 

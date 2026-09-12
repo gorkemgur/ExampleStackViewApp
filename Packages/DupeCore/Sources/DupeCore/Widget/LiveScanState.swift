@@ -86,12 +86,16 @@ public struct LiveScanState: Sendable, Hashable, Codable {
         }
     }
 
-    /// Two or three characters: the compact trailing slot and the circular gauge label.
+    /// Two or three glyphs: the compact trailing slot and the circular gauge label, neither of
+    /// which is wide enough for "4.32 GB".
+    ///
+    /// Paused says nothing, because the slot next to it already carries a pause glyph and a
+    /// second symbol for the same fact is noise.
     public var compactValue: String {
         switch phase {
         case .scanning: return "\(Int((fraction * 100).rounded()))%"
-        case .paused: return "II"
-        case .finished: return foundSomething ? ByteText.compact(reclaimableBytes) : "0"
+        case .paused: return ""
+        case .finished: return foundSomething ? ByteText.tight(reclaimableBytes) : "0"
         case .cancelled, .failed: return "—"
         }
     }

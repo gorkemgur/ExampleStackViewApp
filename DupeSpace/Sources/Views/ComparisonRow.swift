@@ -11,6 +11,9 @@ struct ComparisonTable: View {
     let keeper: MediaItem
     let candidate: MediaItem
 
+    /// Grows with the text size, so "Kept because" is not clipped by a box that never moves.
+    @ScaledMetric(relativeTo: .caption) private var labelWidth: CGFloat = 86
+
     var body: some View {
         VStack(spacing: 0) {
             ForEach(rows, id: \.label) { row in
@@ -21,15 +24,24 @@ struct ComparisonTable: View {
                     Text(row.label)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .frame(width: 86, alignment: .leading)
+                        .lineLimit(2)
+                        .frame(width: labelWidth, alignment: .leading)
 
+                    // Filenames, dates and reason lists are all longer than the ~110pt each
+                    // column gets on a phone; without this they wrap to four ragged lines.
                     Text(row.keeperValue)
                         .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     Text(row.candidateValue)
                         .font(.caption.weight(row.differs ? .semibold : .regular))
                         .foregroundStyle(row.differs ? Color.orange : Color.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.vertical, 7)
@@ -49,8 +61,8 @@ struct ComparisonTable: View {
             Row(label: "File", keeperValue: keeper.displayName, candidateValue: candidate.displayName),
             Row(
                 label: "Resolution",
-                keeperValue: "\(keeper.pixelWidth)x\(keeper.pixelHeight)",
-                candidateValue: "\(candidate.pixelWidth)x\(candidate.pixelHeight)"
+                keeperValue: "\(keeper.pixelWidth)×\(keeper.pixelHeight)",
+                candidateValue: "\(candidate.pixelWidth)×\(candidate.pixelHeight)"
             ),
             Row(
                 label: "Size",

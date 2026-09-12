@@ -29,13 +29,13 @@ struct CapacityBar: View {
                         .frame(width: width(for: segment.bytes, in: proxy.size.width))
                 }
                 Rectangle()
-                    .fill(Color(uiColor: .tertiarySystemFill))
+                    .fill(Color(uiColor: .systemGray5))
             }
         }
         .frame(height: height)
         .clipShape(Capsule())
-        .animation(.smooth(duration: 0.45), value: segments)
-        .animation(.smooth(duration: 0.45), value: total)
+        .animation(Motion.content, value: segments)
+        .animation(Motion.content, value: total)
         .accessibilityHidden(true)
     }
 

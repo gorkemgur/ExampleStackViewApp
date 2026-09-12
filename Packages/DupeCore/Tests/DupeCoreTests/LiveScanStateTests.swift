@@ -51,6 +51,7 @@ final class LiveScanStateTests: XCTestCase {
         XCTAssertEqual(state.fraction, 0.1, accuracy: 0.0001)
         XCTAssertEqual(state.headline, "Paused")
         XCTAssertEqual(state.detail, "Held at 10 of 100")
+        XCTAssertEqual(state.compactValue, "", "the pause glyph beside it already says this")
     }
 
     func testARunningScanSaysWhatItIsDoingAndHowFar() {
@@ -115,9 +116,8 @@ final class LiveScanStateTests: XCTestCase {
         ]
 
         for state in states {
-            XCTAssertFalse(state.compactValue.isEmpty)
             XCTAssertLessThanOrEqual(
-                state.compactValue.count, 8,
+                state.compactValue.count, 4,
                 "\(state.phase) renders \(state.compactValue), which will be truncated"
             )
         }

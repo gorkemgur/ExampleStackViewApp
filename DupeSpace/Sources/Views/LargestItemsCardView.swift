@@ -48,7 +48,7 @@ struct LargestItemsCardView: View {
     private func subtitle(for item: MediaItem) -> String {
         var parts: [String] = []
         if item.pixelWidth > 0 && item.pixelHeight > 0 {
-            parts.append("\(item.pixelWidth)x\(item.pixelHeight)")
+            parts.append("\(item.pixelWidth)×\(item.pixelHeight)")
         }
         if item.duration > 0 {
             parts.append(durationText(item.duration))

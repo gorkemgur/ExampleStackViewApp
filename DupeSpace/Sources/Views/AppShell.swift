@@ -23,7 +23,6 @@ struct AppShell: View {
                 .tabItem {
                     Label("History", systemImage: "clock.arrow.circlepath")
                 }
-                .badge(history.totalItemsDeleted)
         }
         .task {
             await history.load()

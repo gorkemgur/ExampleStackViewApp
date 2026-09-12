@@ -23,7 +23,6 @@ struct ReviewView: View {
         List {
             if let outcome = model.outcome {
                 outcomeSection(outcome)
-                    .transition(.move(edge: .top).combined(with: .opacity))
             }
 
             if let failure = model.failure, model.outcome == nil {
@@ -42,8 +41,6 @@ struct ReviewView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .animation(.snappy(duration: 0.32), value: model.selection)
-        .animation(.snappy(duration: 0.35), value: model.deletedIDs)
         .sensoryFeedback(.selection, trigger: model.selection.count)
         .sensoryFeedback(.success, trigger: model.outcome != nil)
         .navigationTitle("Review")
@@ -51,6 +48,10 @@ struct ReviewView: View {
         .safeAreaInset(edge: .bottom) {
             deleteBar
         }
+        // After the inset, not before: the bottom bar is where the selection total actually
+        // changes, and an animation applied above it never reaches it.
+        .animation(Motion.content, value: model.selection)
+        .animation(Motion.content, value: model.deletedIDs)
         .sheet(isPresented: $showingConfirm) {
             ConfirmDeleteSheet(model: model)
         }
@@ -68,7 +69,8 @@ struct ReviewView: View {
                     Text(ByteFormatting.string(Int64(model.budgetBytes)))
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
-                        .contentTransition(.numericText())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .accessibilityIdentifier("budget.target")
                     Text("back")
                         .font(.subheadline)
@@ -98,7 +100,9 @@ struct ReviewView: View {
                 Button("Select this plan") {
                     model.applyBudgetPlan()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
                 .disabled(model.budgetPlan.selected.isEmpty)
                 .accessibilityIdentifier("budget.apply")
             }
@@ -151,6 +155,9 @@ struct ReviewView: View {
                 }
                 .font(.caption.weight(.semibold))
                 .textCase(nil)
+                .padding(.vertical, 10)
+                .padding(.leading, 12)
+                .contentShape(Rectangle())
                 .accessibilityIdentifier("review.selectall.\(section.tier.rawValue)")
             }
         } footer: {
@@ -176,11 +183,16 @@ struct ReviewView: View {
 
             Spacer(minLength: 0)
 
-            Button("Delete…") {
+            Button(model.canDelete ? "Delete \(Counting.items(model.selection.count))…" : "Delete…") {
                 showingConfirm = true
             }
             .buttonStyle(.borderedProminent)
-            .tint(.red)
+            .controlSize(.large)
+            // Disabled, a red prominent button washes out to text that is barely darker than
+            // the bar behind it. A grey fill still reads as a control that is simply not
+            // available yet.
+            .tint(model.canDelete ? .red : Color(uiColor: .systemGray))
+            .lineLimit(1)
             .disabled(!model.canDelete)
             .accessibilityIdentifier("review.delete")
         }
@@ -195,11 +207,14 @@ struct ReviewView: View {
     private func outcomeSection(_ outcome: DeletionOutcome) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
-                Label("\(Counting.items(outcome.deletedCount)) removed", systemImage: "checkmark.circle.fill")
-                    .font(.headline)
-                    .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: outcome.deletedCount)
-                    .accessibilityIdentifier("review.result")
+                Label {
+                    Text("\(Counting.items(outcome.deletedCount)) removed")
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+                .font(.headline)
+                .accessibilityIdentifier("review.result")
 
                 Text("The receipt is in History: what went, and what was kept in its place.")
                     .font(.caption)

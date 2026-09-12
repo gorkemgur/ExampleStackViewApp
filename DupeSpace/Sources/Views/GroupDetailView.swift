@@ -17,7 +17,7 @@ struct GroupDetailView: View {
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Text("\(group.keeper.pixelWidth)x\(group.keeper.pixelHeight) · \(ByteFormatting.string(group.keeper.totalByteSize))")
+                        Text("\(group.keeper.pixelWidth)×\(group.keeper.pixelHeight) · \(ByteFormatting.string(group.keeper.totalByteSize))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -44,7 +44,7 @@ struct GroupDetailView: View {
     @ViewBuilder
     private func candidateRow(_ item: MediaItem) -> some View {
         Button {
-            withAnimation(.snappy(duration: 0.25)) {
+            withAnimation(Motion.control) {
                 model.toggle(item.id)
             }
         } label: {
@@ -53,7 +53,6 @@ struct GroupDetailView: View {
                     .font(.title3)
                     .foregroundStyle(model.selection.isSelected(item.id) ? Color.accentColor : Color.secondary)
                     .symbolEffect(.bounce, value: model.selection.isSelected(item.id))
-                    .scaleEffect(model.selection.isSelected(item.id) ? 1.08 : 1)
 
                 ThumbnailView(item: item, side: 56, loader: loader)
 
@@ -67,7 +66,7 @@ struct GroupDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
             }
             .contentShape(Rectangle())
         }

@@ -32,6 +32,13 @@ final class ReviewViewModel: ObservableObject {
         self.history = history
         self.allSections = ReviewBuilder.sections(for: result)
         self.selection = .preSelected(from: result.candidates)
+
+        // The slider opens where the app's own suggestion already sits. Starting at zero made
+        // the card say "nothing is selected by a plan of zero" directly above a bar saying
+        // three things were selected — the screen contradicting itself on first sight.
+        budgetBytes = Double(
+            result.candidates.filter(\.isPreSelected).reduce(Int64(0)) { $0 + $1.bytes }
+        )
     }
 
     var sections: [ReviewSection] {
