@@ -323,15 +323,24 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             2>&1 | tee xcodebuild.log
 
-      # The slow half. Every one of these launches the app and scans the fixture from scratch,
-      # which is twenty seconds apiece — so they run two simulators at once, which is also why
-      # this job cannot share a device with the unit half: XCTest *clones* the destination to
-      # parallelise, and a clone taken from a simulator the other run left live comes back as
-      # `SBMainWorkspace` denying the launch, with no assertion in the log to explain it.
+      # One simulator per shard, and no cloning. The parallelism is the sharding.
       #
-      # A parallel run prints only `Test case '...' failed on 'Clone 1 of ...'`. The assertion,
-      # the file and the line go into the result bundle, which is what `why-tests-failed.py`
-      # reads at the bottom of this job.
+      # This ran with two parallel workers until the numbers came in, and two workers means
+      # XCTest *clones* the destination twice. Two shards times two clones is four simulators
+      # across two runners, and the run that measured it came back with two failures that were
+      # not test failures at all:
+      #
+      #     Failed to launch <XCUIApplicationImpl: … com.gorkemgur.dupespace>
+      #     Error getting main window kAXErrorServerNotFound
+      #
+      # That is a simulator falling over and an accessibility server going away — resource
+      # pressure wearing a test failure's clothes, and it cost more than the concurrency
+      # bought. Dropping the clones also deletes the whole `SBMainWorkspace`-denies-the-launch
+      # family, which comes from cloning a device that is not at rest.
+      #
+      # A parallel run also prints only `Test case '...' failed on 'Clone 1 of ...'` — the
+      # assertion, the file and the line go to the result bundle, which is what
+      # `why-tests-failed.py` reads at the bottom of this job. Serial runs say it out loud.
       - name: UI tests
         run: |
           set -o pipefail
@@ -342,8 +351,7 @@ jobs:
             -derivedDataPath .derived \
             -resultBundlePath TestResults.xcresult \
             ${{ matrix.shard.only }} \
-            -parallel-testing-enabled YES \
-            -maximum-parallel-testing-workers 2 \
+            -parallel-testing-enabled NO \
             -enableCodeCoverage NO \
             2>&1 | tee -a xcodebuild.log
 

@@ -152,7 +152,17 @@ final class ReviewUITests: XCTestCase {
     func testTheListControlsAreBigEnoughToHit() {
         openReview()
 
-        let minimum: CGFloat = 44
+        // A hair under 44, because a point is not an integer on a 3x screen. The run that
+        // caught this said:
+        //
+        //     ("43.99999999999994") is less than ("44.0")
+        //
+        // `.frame(minHeight: 44)` laid out on a device with a 3x scale comes back through
+        // XCUITest's arithmetic six ten-trillionths short, and the chip is 44 points tall by
+        // every measure that matters. `audit-ui.py` learned this weeks ago and carries an
+        // `EDGE_SLACK` for exactly it; this assertion did not get the same memo and has been
+        // failing a correct layout.
+        let minimum: CGFloat = 44 - 0.01
 
         for order in ["biggest", "oldest", "newest"] {
             let chip = require("review.order.\(order)", in: app, "no sort chip for \(order)")
