@@ -243,53 +243,90 @@ def is_on_glass(element, height=940.0):
     return 0 < middle < height
 
 
+def local_storage_directories():
+    """Every directory on this simulator that a file provider serves "On My iPhone" from.
+
+    FOUND BY LOOKING, and the previous version of this function is why. It wrote into the Files
+    app's own container under `File Provider Storage`, printed `put 3 files in On My iPhone /
+    DupeSpace Fixture`, and was believed for days. The first run that actually opened the
+    picker and looked showed the tree ending in:
+
+        Other, identifier: 'DOC.browsingRoot Source: com.apple.FileProvider.LocalStorage,
+                            Title: On My iPhone'
+        StaticText, label: 'On My iPhone is Empty'
+
+    The location is served by `com.apple.FileProvider.LocalStorage`, which is not the Files
+    app's data container. So this stops naming a path and searches the device's own data root
+    for the directory the provider actually uses — and prints every candidate, so that a run
+    which still comes back empty says where it looked.
+    """
+    root = os.path.expanduser(
+        f"~/Library/Developer/CoreSimulator/Devices/{UDID}/data"
+    )
+    if not os.path.isdir(root):
+        print(f"no device data root at {root}")
+        return []
+
+    # Bounded. The data root has tens of thousands of files under it and this runs on every
+    # invocation of the job.
+    found = run([
+        "find", root, "-maxdepth", "8", "-type", "d",
+        "-name", "File Provider Storage",
+    ], timeout=120)
+    candidates = [line for line in found.stdout.splitlines() if line.strip()]
+
+    print(f"{len(candidates)} 'File Provider Storage' directories under the device root:")
+    for path in candidates:
+        # The parent is what identifies it — an app container, a shared app group, or the
+        # provider's own directory.
+        print(f"    {path.replace(root, '<device>')}")
+    return candidates
+
+
 def place_the_folder():
     """Put the folder half where the document picker can reach it.
 
-    The Files app's own local storage lives inside its container, under `File Provider
-    Storage` — which is what "On My iPhone" shows. `simctl` will hand over that container path,
-    and writing into it from the host is the only way to get a populated folder onto a
-    simulator: there is no `simctl addfile`, and the picker can create an empty folder but not
-    fill one.
+    There is no `simctl addfile`, and the picker can create an empty folder but not fill one,
+    so writing into the provider's storage from the host is the only route onto a simulator.
 
-    Returns the folder's name on the device, or None. None is a note and not a failure: this is
-    the first run that has ever tried it, and a technique that turns out not to work must say
-    so plainly rather than take the rest of the check down with it.
+    It writes into *every* candidate rather than picking one. Choosing needs knowing which
+    provider backs "On My iPhone" on this iOS, which is the thing we do not know; writing into
+    all of them costs three JPEGs apiece and the picker will show whichever is the real one.
+
+    Returns the folder's name on the device, or None. None is a note and not a failure — the
+    crossing test is what proves this worked, and it says so from the picker's own tree.
     """
     source = os.path.join(LIBRARY, "folder")
     if not os.path.isdir(source):
         print("no folder half was generated")
         return None
 
-    # A simulator that has never shown the Files app has no container to write into, and
-    # `get_app_container` says "No such file or directory" rather than anything about Files.
-    # Launching it once creates the container; terminating it means the copy below is not
-    # racing a running file provider.
-    found = run(["xcrun", "simctl", "get_app_container", UDID, "com.apple.DocumentsApp", "data"])
-    if found.returncode != 0:
+    # A simulator that has never shown the Files app may not have created the provider's
+    # storage yet. Launching it once does; terminating it means the copies below are not
+    # racing a running provider.
+    if not local_storage_directories():
         run(["xcrun", "simctl", "launch", UDID, "com.apple.DocumentsApp"])
-        time.sleep(3)
+        time.sleep(5)
         run(["xcrun", "simctl", "terminate", UDID, "com.apple.DocumentsApp"])
-        found = run(["xcrun", "simctl", "get_app_container", UDID, "com.apple.DocumentsApp", "data"])
-    if found.returncode != 0:
-        print(f"the Files app has no container here: {found.stderr.strip()[:200]}")
-        return None
 
-    storage = os.path.join(found.stdout.strip(), "File Provider Storage")
-    try:
-        os.makedirs(storage, exist_ok=True)
+    written = []
+    for storage in local_storage_directories():
         target = os.path.join(storage, FOLDER_NAME)
-        if os.path.isdir(target):
-            shutil.rmtree(target)
-        shutil.copytree(source, target)
-    except OSError as error:
-        print(f"could not write into the Files app's storage: {error}")
+        try:
+            if os.path.isdir(target):
+                shutil.rmtree(target)
+            shutil.copytree(source, target)
+            written.append(target)
+        except OSError as error:
+            print(f"could not write into {storage}: {error}")
+
+    if not written:
+        print("the folder half was not written anywhere a picker could reach")
         return None
 
-    print(f"put {len(os.listdir(target))} files in On My iPhone / {FOLDER_NAME}")
+    count = len(os.listdir(written[0]))
+    print(f"wrote {count} files into {len(written)} provider directories as '{FOLDER_NAME}'")
     return FOLDER_NAME
-
-
 
 
 def labels(tree, limit=120):

@@ -133,8 +133,11 @@ final class CrossSourceUITests: XCTestCase {
         guard add.exists else { return }
         add.tap()
 
-        // Everything from here is Apple's UI, addressed by label, in whichever process turns
-        // out to own it.
+        // Everything from here is Apple's UI. Which process it lives in is found, not assumed
+        // — and run 149 answered it: the app's own tree. `UIDocumentPickerViewController` is a
+        // remote view controller, but a remote view's accessibility tree is bridged into its
+        // host, so the picker's elements answer to `XCUIApplication()` and no second process
+        // is ever foregrounded.
         guard let host = findPicker() else {
             XCTFail("no document picker appeared anywhere after tapping Add a folder — every tree above")
             return
@@ -142,33 +145,62 @@ final class CrossSourceUITests: XCTestCase {
         let hostName = host.name
         let picker = host.app
 
-        for step in ["Browse", "On My iPhone", folderName] {
-            // By label *or* identifier. The subscript matches on identifier, and none of
-            // Apple's picker chrome has one — "Browse" is a label. `folderName` is a filename,
-            // which the picker may publish as either.
-            let target = picker.descendants(matching: .any)
+        // The tab bar, by its own identifier. Not `picker.buttons["Browse"]`: run 149's tree
+        // has two elements labelled Browse — the tab and the navigation bar's back button —
+        // and `firstMatch` on that is a coin toss between going forward and going back.
+        let tabs = picker.tabBars["DOC.browsingModeTabBar"]
+        if tabs.buttons["Browse"].waitForExistence(timeout: 20) {
+            tabs.buttons["Browse"].tap()
+        }
+
+        // And the files themselves, inside the picker's own collection. The picker is in the
+        // app's tree, so an unscoped query for a folder name would happily match the app's own
+        // chrome behind the sheet.
+        let files = picker.collectionViews["File View"]
+        XCTAssertTrue(
+            files.waitForExistence(timeout: 20),
+            "the picker never showed a file list (\(hostName)):\n\n\(picker.debugDescription)"
+        )
+
+        for step in ["On My iPhone", folderName] {
+            let target = files.descendants(matching: .any)
                 .matching(NSPredicate(format: "identifier == %@ OR label == %@", step, step))
                 .firstMatch
             guard target.waitForExistence(timeout: 20) else {
-                // Only the ones that are genuinely optional: the picker opens wherever it was
-                // last, so "Browse" and "On My iPhone" may already be where we are. The folder
-                // itself is not optional.
-                if step == folderName {
+                // "On My iPhone" is optional — the picker reopens wherever it was last, so it
+                // may already be inside it. The fixture folder is not.
+                if step != folderName { continue }
+
+                // The failure that matters, named rather than left to be read out of a
+                // thousand-line tree. Run 149 ended exactly here, and the reason was on the
+                // screen: the folder had been written into the Files app's data container,
+                // and "On My iPhone" is served by `com.apple.FileProvider.LocalStorage`.
+                let empty = picker.staticTexts
+                    .matching(NSPredicate(format: "label CONTAINS[c] 'is Empty'"))
+                    .firstMatch
+                if empty.exists {
+                    XCTFail(
+                        "the picker says '\(empty.label)' — the fixture was not written where "
+                        + "this location is served from. See `local_storage_directories()`."
+                    )
+                } else {
                     XCTFail(
                         "'\(step)' was not in the picker (\(hostName)). What it was showing:"
                         + "\n\n\(picker.debugDescription)"
                     )
-                    return
                 }
-                continue
+                return
             }
             target.tap()
         }
 
-        for label in ["Open", "Done", "Open \"\(folderName)\""] {
-            let confirm = picker.buttons[label]
-            if confirm.waitForExistence(timeout: 3) {
-                confirm.tap()
+        // The navigation bar's own Open, which is what commits the grant.
+        let open = picker.navigationBars["FullDocumentManagerViewControllerNavigationBar"].buttons["Open"]
+        if open.waitForExistence(timeout: 10) {
+            open.tap()
+        } else {
+            for label in ["Open", "Done"] where picker.buttons[label].exists {
+                picker.buttons[label].tap()
                 break
             }
         }

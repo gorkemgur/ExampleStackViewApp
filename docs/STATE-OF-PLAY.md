@@ -152,10 +152,27 @@ older than X".
 **A populated folder cannot be granted on a simulator through idb.** Two halves, and only one
 of them failed:
 
-- Getting files onto the device: **works.** There is no `simctl addfile` and the picker can
-  create an empty folder but not fill one, so the route is to write into the Files app's own
+- Getting files onto the device: **not yet, and the log said otherwise for days.** There is no
+  `simctl addfile` and the picker can create an empty folder but not fill one, so the route is
+  to write into a file provider's storage from the host. The path used was the Files app's own
   container (`simctl get_app_container <udid> com.apple.DocumentsApp data`, then
-  `File Provider Storage/`). The log says `put 3 files in On My iPhone / DupeSpace Fixture`.
+  `File Provider Storage/`), and the driver printed `put 3 files in On My iPhone /
+  DupeSpace Fixture` on every run. Run 149 opened the picker and looked:
+
+  ```
+  Other, identifier: 'DOC.browsingRoot Source: com.apple.FileProvider.LocalStorage,
+                      Title: On My iPhone'
+  StaticText, label: 'On My iPhone is Empty'
+  ```
+
+  That location is served by `com.apple.FileProvider.LocalStorage`, which is not the Files
+  app's data container. The copy succeeded into a directory nothing reads. **A log line that
+  says what a script did is not evidence about what happened** — this one was believed for
+  three days because nothing had ever opened the picker to check.
+
+  `local_storage_directories()` now searches the device's own data root for every
+  `File Provider Storage` directory, writes the fixture into all of them, and prints each one,
+  so a run that still comes back empty says where it looked.
 - Driving the picker: **blocked.** The dump at the failing step is one line long:
 
   ```
@@ -168,7 +185,17 @@ of them failed:
   the application under test. The picker's own UI is invisible to it. This is not a timing or
   scrolling problem and no amount of waiting fixes it.
 
-  **The split that came out of it.** XCUITest *can* reach system UI by bundle identifier, so
+  **Which process hosts the picker: the app's own.** Settled by run 149, which printed
+  `Path to element: →Application … label: 'DupeSpace'`. `UIDocumentPickerViewController` is a
+  remote view controller, but a remote view's accessibility tree is bridged into its *host*, so
+  the picker answers to plain `XCUIApplication()` and `com.apple.DocumentManagerUICore` never
+  comes to the front at all. Asserting that it did cost run 148. The useful identifiers, all
+  from that dump: `DOC.browsingModeTabBar`, `File View`,
+  `FullDocumentManagerViewControllerNavigationBar`. Note that *Browse* is both a tab and the
+  back button, so an unscoped `buttons["Browse"].firstMatch` is a coin toss between forward and
+  back.
+
+  **The split that came out of it.** XCUITest *can* reach system UI, so
   the work is divided along the line the tools actually draw: the Python driver keeps the
   placement, because writing into another process's container is a `simctl` job and it works,
   and `DupeSpaceUITests/CrossSourceUITests` does the granting, because walking Apple's picker
@@ -260,7 +287,7 @@ any of them started, which no table can predict.
 | `compile` | the one-minute verdict, and the only Release build | 2 m 20 |
 | `app` | simulator unit tests, 172 tests | 6 m 00 |
 | `ui` ×2 | XCUITest, sharded by measured cost | 6 m 48 / 7 m 14 |
-| `crossing` | the library/folder line, through the real document picker | first run |
+| `crossing` | the library/folder line, through the real document picker | 7 m 39 |
 | `real` | **the one that finds real bugs** — real media, real PhotoKit, real deletion | 10 m 52 |
 | `idb` | screenshots and the layout/motion audit | 11 m 59 |
 
@@ -333,12 +360,13 @@ thing; 7 jobs should be 4–5.
 In order, and the first one is the one that matters:
 
 1. ~~Get `ui` green.~~ Done in run 146.
-2. ~~Move the folder grant into `DupeSpaceUITests`.~~ Written: `CrossSourceUITests` and the
-   `crossing` job. **Read its first run before believing it.** The parts most likely to be
-   wrong are Apple's own, and neither can be checked from here: whether the picker opens on
-   *Browse* or somewhere else on a fresh simulator, and whether the folder written into the
-   Files container shows up under *On My iPhone* at all. Both failure paths dump the picker's
-   element tree, so one run should say which.
+2. ~~Move the folder grant into `DupeSpaceUITests`.~~ Written, and it drives the real picker:
+   runs 148 and 149 settled which process hosts it and what its elements are called. **What is
+   still open is the fixture, not the test.** "On My iPhone" is served by
+   `com.apple.FileProvider.LocalStorage` and the folder was being written somewhere else, so
+   the picker had nothing to grant. The driver now finds every `File Provider Storage`
+   directory on the device and writes into all of them; if that still comes up empty, the run
+   prints the ones it found and the next move is to read that list rather than guess again.
 3. Fix `real-library-check.py` so it stops reporting the clips as missing — or find out they
    genuinely are.
 4. Run it on a phone and answer the trashing question.
