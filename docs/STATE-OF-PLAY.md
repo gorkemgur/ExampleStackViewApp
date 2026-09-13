@@ -383,10 +383,12 @@ In order, and the first one is the one that matters:
    `com.apple.FileProvider.LocalStorage` and the folder was being written somewhere else, so
    the picker had nothing to grant. The driver now finds every `File Provider Storage`
    directory on the device and writes into all of them, which reaches the picker. **The app
-   takes the grant** — run 151 came back with a folder on the overview. What it took was
-   `File Provider Storage`, the parent, because Open was tapped before the picker had finished
-   moving into the fixture. The walk waits for the title bar now. Nothing past the grant — the
-   scan, and whether a group says it spans both halves — has been reached yet.
+   takes the grant** — run 151 came back with a folder on the overview. Runs 151 and 152 were
+   then both spent on *which* folder: Open grants the directory you are standing in, and the
+   picker would not move into the fixture. That stopped being asserted in the end, because it
+   never mattered — `FileMediaLibrary` enumerates recursively, so a grant on the fixture's
+   parent contains the fixture. Nothing past the grant — the scan, and whether a group says it
+   spans both halves — has been reached yet.
 3. Fix `real-library-check.py` so it stops reporting the clips as missing — or find out they
    genuinely are.
 4. Run it on a phone and answer the trashing question.
