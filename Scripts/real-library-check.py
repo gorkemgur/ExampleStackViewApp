@@ -141,33 +141,58 @@ def scroll_to(identifier, attempts=10):
     return None
 
 
-def sweep(swipes=6):
-    """Every label on a scrolling screen, and every group id on it.
+def sweep():
+    """Every label and every group id on the review screen, without trusting a swipe.
 
-    `idb ui describe-all` returns what is laid out, and a review list of seven groups is taller
-    than the glass. The first end-to-end run reported three video pairs MISSED while the
-    screenshot taken beside it showed their section header and their byte figure — the rows
-    were simply below the fold. A membership check that only sees the top of a scroll view is a
-    check that gets more wrong the more the app finds, which is the worst direction for it to
-    be wrong in.
+    The first version of this swiped down the list six times and unioned what it saw, which was
+    already better than reading only the top of the glass — but it is a guess about how many
+    swipes a list needs, and the list grows as the app gets better at its job. It reported
+    three video pairs MISSED in the very run where the app found all seven pairs the fixture
+    builds: the change that fixed the photographs made the list longer, and six swipes stopped
+    reaching the bottom. A check whose accuracy falls as the app improves is worse than no
+    check, because it reads as a regression.
 
-    Swipes down collecting, then swipes back up, because the delete key and every screenshot
-    after this expect the list where they left it.
+    So it uses the screen's own filter instead. Each kind chip narrows the list to three or
+    four groups, which fits, and the chips say how many items they hold — so nothing here
+    depends on guessing a scroll distance. A few swipes per filter as well, because "fits" is
+    also a guess, just a far smaller one.
     """
     said = []
     groups = set()
-    for _ in range(swipes):
+
+    def collect():
         tree = describe()
         said.extend(str(element.get("AXLabel") or "") for element in tree)
         for element in tree:
             identifier = element.get("AXUniqueId")
             if isinstance(identifier, str) and identifier.startswith("review.group."):
                 groups.add(identifier)
-        run(["idb", "ui", "swipe", "--udid", UDID, "200", "700", "200", "260"])
-        time.sleep(0.8)
-    for _ in range(swipes + 2):
-        run(["idb", "ui", "swipe", "--udid", UDID, "200", "260", "200", "700"])
-        time.sleep(0.4)
+        return tree
+
+    def walk():
+        for _ in range(3):
+            collect()
+            run(["idb", "ui", "swipe", "--udid", UDID, "200", "640", "200", "300"])
+            time.sleep(0.7)
+        collect()
+        for _ in range(5):
+            run(["idb", "ui", "swipe", "--udid", UDID, "200", "300", "200", "640"])
+            time.sleep(0.4)
+
+    tree = collect()
+    for slug in ["image", "video", "all"]:
+        chip = find(tree, f"review.kind.{slug}")
+        if chip is None:
+            continue
+        tap(chip, settle=1.2)
+        walk()
+        tree = describe()
+
+    # Back to everything, so the delete key counts what the run intends to delete.
+    everything = find(describe(), "review.kind.all")
+    if everything is not None:
+        tap(everything, settle=1.2)
+
     return " ".join(said).lower(), groups
 
 
