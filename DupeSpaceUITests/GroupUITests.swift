@@ -14,14 +14,44 @@ final class GroupUITests: XCTestCase {
         app.launch()
     }
 
-    /// By label. A `confirmationDialog`'s buttons carry no identifiers, and the subscript form
-    /// searches identifiers first — which is why tapping "Cancel" could not find a button that
-    /// was plainly on screen.
+    /// By label, and in every drawer rather than only `buttons`.
+    ///
+    /// A `confirmationDialog`'s buttons carry no identifiers, and the subscript form searches
+    /// identifiers first — which is why tapping "Cancel" could not find a button that was
+    /// plainly on screen. That was the first version of this. The second failed too, and said
+    /// why in a way worth keeping:
+    ///
+    ///     Failed to tap Button (First Match): No matches found ... 'label == "Cancel"'
+    ///     Automation type mismatch: computed Button from legacy attributes vs
+    ///     DisclosureTriangle from modern attribute
+    ///
+    /// The framework and the app disagree about what type that element is, so `app.buttons`
+    /// misses it from one side while the screenshot shows it from the other. A label is a
+    /// label; which bucket the accessibility translation filed it under is not this test's
+    /// business.
     ///
     /// A method rather than a local closure: a closure here captures `app` off `self`, and
     /// XCTest's `self` in a test body is not implicitly capturable.
     private func button(labelled text: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label == %@", text)).firstMatch
+        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", text)).firstMatch
+    }
+
+    /// Tap something by its label, and print the screen if it is not there.
+    private func tap(
+        labelled text: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let target = button(labelled: text)
+        guard target.waitForExistence(timeout: timeout) else {
+            XCTFail(
+                "nothing labelled '\(text)' appeared in \(Int(timeout))s. What was on the screen:\n\n\(app.debugDescription)",
+                file: file, line: line
+            )
+            return
+        }
+        target.tap()
     }
 
     private func openFirstGroup() {
@@ -68,7 +98,7 @@ final class GroupUITests: XCTestCase {
         let arm = button(labelled: "Select them all")
         XCTAssertTrue(arm.waitForExistence(timeout: 10), "clearing a group must ask first")
 
-        button(labelled: "Cancel").tap()
+        tap(labelled: "Cancel")
         XCTAssertFalse(app.buttons["group.keepone"].exists, "cancelling must not arm anything")
     }
 }

@@ -63,11 +63,11 @@ final class ScanUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["scan.start"].waitForExistence(timeout: 20))
 
-        let summary = app.staticTexts["scan.plan.summary"]
-        XCTAssertTrue(
-            summary.waitForExistence(timeout: 20),
+        let summary = require(
+            "scan.plan.summary", in: app,
             "the scan screen never said how much of the library it would read"
         )
+        guard summary.exists else { return }
         XCTAssertTrue(
             summary.label.contains("will be opened"),
             "the plan summary read \(summary.label)"

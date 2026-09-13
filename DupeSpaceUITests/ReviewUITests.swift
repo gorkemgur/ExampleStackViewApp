@@ -125,9 +125,12 @@ final class ReviewUITests: XCTestCase {
         // Everything lossless has just gone, so "No loss" now reaches nothing — and a fader
         // with no target to set is a control with no job. It is not drawn greyed, it is not
         // drawn: the line that names what ran out stands where it was.
-        let exhausted = app.otherElements["budget.exhausted"]
-        XCTAssertTrue(
-            exhausted.waitForExistence(timeout: 15),
+        // Searched by identifier alone. This used to ask `app.otherElements`, and the strip
+        // carries `.accessibilityElement(children: .combine)` — which publishes it as a static
+        // text, because everything inside it is text. The identifier was on the screen the
+        // whole time and the query was looking in the wrong drawer.
+        require(
+            "budget.exhausted", in: app, timeout: 15,
             "after a lossless pass the budget card must say the depth has run out"
         )
         XCTAssertFalse(
@@ -152,8 +155,8 @@ final class ReviewUITests: XCTestCase {
         let minimum: CGFloat = 44
 
         for order in ["biggest", "oldest", "newest"] {
-            let chip = app.buttons["review.order.\(order)"]
-            XCTAssertTrue(chip.waitForExistence(timeout: 20), "no sort chip for \(order)")
+            let chip = require("review.order.\(order)", in: app, "no sort chip for \(order)")
+            guard chip.exists else { continue }
             XCTAssertGreaterThanOrEqual(
                 chip.frame.height, minimum,
                 "the \(order) chip is \(chip.frame.height)pt tall, under the 44pt target"
@@ -190,8 +193,7 @@ final class ReviewUITests: XCTestCase {
         let before = (total.label, count.label)
 
         for order in ["oldest", "newest", "biggest"] {
-            let chip = app.buttons["review.order.\(order)"]
-            XCTAssertTrue(chip.waitForExistence(timeout: 20))
+            let chip = require("review.order.\(order)", in: app)
             chip.tap()
 
             XCTAssertEqual(total.label, before.0, "sorting by \(order) changed the total on offer")
