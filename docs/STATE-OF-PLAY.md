@@ -344,6 +344,11 @@ thing; 7 jobs should be 4–5.
   every run of it scanned from behind the permission wall and offered two groups where the
   `real` job — which installs first — offers four. A short library looks exactly like a broken
   matcher.
+- **`ReviewView` is a `LazyVStack`, so only the rows that have been on screen exist in the
+  accessibility tree.** Counting `review.open.` elements without scrolling counts what fits on
+  the screen, not what was found — run 155 read two where there were four. This is §5's rule
+  about membership checks over visible lists, and it caught me in a test I wrote after writing
+  the rule down.
 - The DupeCore test factory is `Fixtures`, not `TestSupport`.
 - **"On My iPhone" is not the Files app's data container.** It is served by
   `com.apple.FileProvider.LocalStorage`, and on a simulator the directories are

@@ -367,39 +367,66 @@ final class CrossSourceUITests: XCTestCase {
             "the scan offered nothing at all. What is on the review screen:\n\n\(screen(app))"
         )
 
+        // A sweep, because the list is lazy.
+        //
+        // `ReviewView` is a `LazyVStack` inside a `ScrollView`, so only the rows that have been
+        // on screen exist in the accessibility tree at all. Run 155 counted two and concluded
+        // two groups were offered; the `real` job, which scrolls, counts four against the same
+        // library. Two was how many fitted on the screen.
+        //
+        // This repository already knew that — §5 of the handover says a membership check that
+        // reads only the visible part of a list gets *more* wrong as the app finds more — and
+        // the check I wrote read only the visible part of a list.
         var crossed = false
-        // Capped: the fixture builds nine groups at the outside, and a walk that would open
-        // eighty is a hang dressed up as a search.
-        let limit = min(rows.count, 20)
-        for index in 0 ..< limit {
-            let row = rows.element(boundBy: index)
-            guard row.exists, row.isHittable else { continue }
-            row.tap()
+        var opened = Set<String>()
+        var quietSweeps = 0
 
-            // Short: the detail screen is already built by the time it is on screen.
-            if element("group.spansSources", in: app).waitForExistence(timeout: 4) {
-                crossed = true
-                break
+        // Twenty-five groups is more than this fixture can produce, and six sweeps that open
+        // nothing new means the bottom.
+        while !crossed, opened.count < 25, quietSweeps < 6 {
+            // Names first, then each addressed by name. `allElementsBoundByIndex` hands back
+            // *positional* elements, and coming back out of a group can leave the list scrolled
+            // somewhere else — so index 4 on the way in is not index 4 on the way out, and a
+            // test that taps by position would open one group twice and another never.
+            let names = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "review.open."))
+                .allElementsBoundByIndex
+                .filter { $0.exists }
+                .map { $0.identifier }
+
+            var openedThisSweep = false
+            for name in names where !opened.contains(name) {
+                let row = element(name, in: app)
+                guard row.exists, row.isHittable else { continue }
+                opened.insert(name)
+                openedThisSweep = true
+
+                row.tap()
+                if element("group.spansSources", in: app).waitForExistence(timeout: 4) {
+                    crossed = true
+                    break
+                }
+
+                let back = app.navigationBars.buttons.element(boundBy: 0)
+                guard back.waitForExistence(timeout: 10) else {
+                    XCTFail("could not get back out of a group")
+                    return
+                }
+                back.tap()
+                _ = require("review.total", in: app, timeout: 15, "the review screen did not come back")
             }
 
-            let back = app.navigationBars.buttons.element(boundBy: 0)
-            guard back.waitForExistence(timeout: 10) else {
-                XCTFail("could not get back out of a group")
-                return
-            }
-            back.tap()
-            _ = rows.firstMatch.waitForExistence(timeout: 10)
+            if crossed { break }
+            quietSweeps = openedThisSweep ? 0 : quietSweeps + 1
+            app.swipeUp()
         }
 
-        // Both halves of the claim in one assertion, because either alone is worth nothing: a
-        // crossing pair that is never found means the app cannot do the one thing no other
-        // cleaner does, and a crossing pair found but never announced means the person has no
-        // reason to believe it looked anywhere their own eyes had not.
         if !crossed {
             // What was offered, by name, and what the scan had to work with. Between them these
             // say which half is broken without anybody having to run it again.
-            let offered = (0 ..< min(rows.count, 20))
-                .map { rows.element(boundBy: $0) }
+            let offered = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "review.open."))
+                .allElementsBoundByIndex
                 .filter { $0.exists }
                 .map { $0.label }
             let fromTheFolder = app.descendants(matching: .any)
@@ -413,7 +440,8 @@ final class CrossSourceUITests: XCTestCase {
                 line the whole app is built on.
 
                 the scan's own ledger:   \(ledger)
-                groups offered:          \(rows.count) — \(offered)
+                groups opened:           \(opened.count)
+                groups on screen at the end: \(offered)
                 anything named exported- on the review screen: \(fromTheFolder)
                 the permission wall was \(wall ? "UP — the library itself was short" : "down")
 
