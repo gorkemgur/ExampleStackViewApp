@@ -82,16 +82,19 @@ final class HistoryUITests: XCTestCase {
     func testADeletionLeavesAReceiptYouCanOpen() {
         runScan()
 
-        let review = app.buttons["scan.review"]
-        XCTAssertTrue(review.waitForExistence(timeout: 30))
-        review.tap()
+        // Every wait on this path says which identifier it was waiting for and prints the
+        // screen when it gives up. They were bare `XCTAssertTrue`s, and this test failed after
+        // 194 seconds with the message `XCTAssertTrue failed` — four unlabelled waits, one of
+        // which timed out, and no way to tell which without another twenty-minute run.
+        require("scan.review", in: app, timeout: 30, "the scan never offered a way in to review")
+        app.buttons["scan.review"].tap()
 
-        XCTAssertTrue(app.staticTexts["review.total"].waitForExistence(timeout: 20))
+        require("review.total", in: app, "the review screen did not open")
         app.buttons["review.delete"].tap()
 
-        XCTAssertTrue(app.staticTexts["confirm.total"].waitForExistence(timeout: 20))
+        require("confirm.total", in: app, "the confirmation sheet never opened")
         app.buttons["confirm.delete"].tap()
-        XCTAssertTrue(app.staticTexts["review.result"].waitForExistence(timeout: 30))
+        require("review.result", in: app, timeout: 30, "the deletion never reported a result")
 
         openHistory()
 

@@ -409,6 +409,17 @@ struct ReviewView: View {
 
             Spacer(minLength: 0)
         }
+            // `.contain`, and not for decoration. An `accessibilityIdentifier` on a container
+            // is inherited by everything inside it and *overrides* the identifiers set there,
+            // so every one of these carried the container's name and none of its own. The
+            // element tree said so plainly once a failing test printed it:
+            //
+            //     Button, identifier: 'review.order', label: 'Biggest'
+            //     Button, identifier: 'review.order', label: 'Oldest'
+            //     Button, identifier: 'review.order', label: 'Newest'
+            //
+            // Marking the container as a container is what keeps the children addressable.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("review.order")
     }
 

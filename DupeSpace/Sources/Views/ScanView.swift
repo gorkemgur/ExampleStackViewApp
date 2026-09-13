@@ -188,6 +188,11 @@ struct ScanView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        // See the note beside `review.order`: without `.contain`, this identifier is inherited
+        // by every row, figure and caveat inside the ledger and overrides theirs. Ten separate
+        // elements were wearing the name `scan.plan`, including the one the scan screen's own
+        // test waits for.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("scan.plan")
     }
 

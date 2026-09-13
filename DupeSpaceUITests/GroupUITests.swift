@@ -98,7 +98,22 @@ final class GroupUITests: XCTestCase {
         let arm = button(labelled: "Select them all")
         XCTAssertTrue(arm.waitForExistence(timeout: 10), "clearing a group must ask first")
 
-        tap(labelled: "Cancel")
+        // Backing out, and not by the button. `confirmationDialog` is given a
+        // `Button("Cancel", role: .cancel)` in `GroupDetailView` and that button is not in the
+        // element tree: the dialog comes back as a `Sheet` holding its title, its message and
+        // `Select them all`, and nothing else. The system owns the cancel affordance and does
+        // not publish it where a query can reach.
+        //
+        // So this backs out the way a person would when they change their mind — a tap on the
+        // screen above the sheet — and then *checks that the sheet actually went away*, which
+        // is the part the old version took on trust.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
+
+        let dialog = button(labelled: "Select them all")
+        XCTAssertTrue(
+            dialog.waitForNonExistence(timeout: 10),
+            "the confirmation is still up after backing out of it:\n\n\(app.debugDescription)"
+        )
         XCTAssertFalse(app.buttons["group.keepone"].exists, "cancelling must not arm anything")
     }
 }

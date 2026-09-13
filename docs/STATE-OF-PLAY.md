@@ -1,6 +1,6 @@
 # State of play
 
-Written 13 September 2026, at commit `c901e35`, branch `claude/selam-dr571g` (184 commits).
+Written 13 September 2026, updated after CI run 140. Branch `claude/selam-dr571g`.
 
 This is a handover, not a summary. It is organised by *how much we know*, because that turned
 out to be the thing that mattered: this project has repeatedly had code that worked and code
@@ -68,11 +68,38 @@ decoration). A "Where" row in the comparison table, and a line on the group scre
 holds both. The engine change underneath it is proven; *that a library item and a folder item
 actually land in one group* is not. See §4 for why.
 
-**The five UI tests** that had been red for four runs. Three were the same mistake — the test
-asked `app.otherElements` / `app.buttons` for an identifier that SwiftUI's accessibility
-translation had filed elsewhere. `DupeSpaceUITests/ElementSearch.swift` now searches every type
-at once and dumps the element tree on failure. **These have never been seen green.** Four
-consecutive runs were cancelled by my own pushes before the UI job finished.
+**The five UI tests.** Run 140 was the first run allowed to finish, and the element tree the
+new `require(_:in:)` prints answered it: 18 passed, 5 failed, **three separate causes, and the
+largest was a bug in the app rather than in the tests.**
+
+*An `accessibilityIdentifier` on a container is inherited by everything inside it and overrides
+the identifiers set there.* Two containers were swallowing their children:
+
+```
+Button, identifier: 'review.order', label: 'Biggest'
+Button, identifier: 'review.order', label: 'Oldest'
+Button, identifier: 'review.order', label: 'Newest'
+StaticText, identifier: 'scan.plan', label: '27 of 28 will be opened'
+StaticText, identifier: 'scan.plan', label: '24 · 80.2 MB'
+```
+
+Ten elements wore the name `scan.plan`, four wore `review.order`, and `review.order.biggest`
+and `scan.plan.summary` did not exist on the screen at all. `.accessibilityElement(children:
+.contain)` on both containers is the fix. Sweeping the whole tree for identifiers worn by more
+than one element found exactly these two and nothing else — worth re-running as a check.
+
+This is an accessibility defect, not only a test problem: VoiceOver navigation of those two
+rows was as flattened as the query was.
+
+*The confirmation dialog's Cancel is not in the element tree.* `GroupDetailView` passes
+`Button("Cancel", role: .cancel)` to `confirmationDialog` and the dialog comes back as a
+`Sheet` holding its title, its message and `Select them all` — nothing else. The system owns
+that affordance and does not publish it where a query can reach. The test backs out with a tap
+above the sheet now, the way a person would, and then checks the sheet actually went away.
+
+*One history test failed after 194 seconds saying `XCTAssertTrue failed`* and nothing more —
+four unlabelled waits on that path, one of which timed out, with no way to tell which. They
+are all `require(_:in:)` now. **Cause still unknown**; the next run will name it.
 
 **`Badge`, the Paper palette, the budget fader rework** — screenshotted and audited (0 findings
 in `docs/ui-audit.md`), never used by a person.
@@ -166,6 +193,11 @@ grant can settle this**, and the answer decides whether folder deletion can offe
 undo like the photo half does. This is the single most valuable unanswered question in the
 project.
 
+**Why did one history test start failing?** `testADeletionLeavesAReceiptYouCanOpen` passed for
+days and failed in run 140 after 194 seconds against its usual 110. The fixture changed in the
+same window (EXIF dates, two new piles), so the ordering it walks may have moved — or the
+runner was simply loaded. Instrumented, not diagnosed.
+
 **Are the three video pairs actually on the review screen?** The app finds them — "Videos, 3
 items, 89 KB" is on the screen and all seven items delete — but `real-library-check.py` has
 reported `MISSED clip-11/12/13` in three consecutive runs. The Videos section header renders
@@ -206,7 +238,9 @@ GIFs in `docs/motion` come from a script driving a simulator. No person has held
 ## 7. The pipeline
 
 Seven jobs (`.github/workflows/ci.yml`). `concurrency.cancel-in-progress: true` — **a push
-cancels the run in flight**, which cost four separate answers today. Batch changes; push once.
+cancels the run in flight**, which cost five separate answers in one day. Batch changes; push
+once. The times below are the jobs' own; run 140 sat in the queue for eighteen minutes before
+any of them started, which no table can predict.
 
 | Job | What it is for | Rough time |
 |---|---|---|
@@ -278,7 +312,8 @@ thing; 7 jobs should be 4–5.
 
 In order, and the first one is the one that matters:
 
-1. Get `ui` green. The fixes are written and have never been seen to work.
+1. Get `ui` green. Run 140 named all five failures; the fixes for four of them are written and
+   unrun, and the fifth is only instrumented.
 2. Move the folder grant into `DupeSpaceUITests` using
    `XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore")`. That closes the
    cross-source proof, which is the app's one distinctive claim.
