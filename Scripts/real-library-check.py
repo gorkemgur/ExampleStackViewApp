@@ -418,7 +418,14 @@ def main():
     # the screen rather than assume it: `CrossSourceUITests` reinstalls the app to run, and
     # whether a grant made in that run survives into this one is exactly the sort of thing that
     # must be observed rather than believed.
-    granted_folder = FOLDER_NAME.lower() in " ".join(labels(describe(), limit=400)).lower()
+    # Not `labels(describe())`: `main` binds a local called `labels` further down, and Python
+    # decides that at compile time for the whole function body — so the call here raised
+    # `UnboundLocalError` against a module-level function that is plainly defined. Read the
+    # tree directly rather than rename a local that six later assertions read.
+    on_screen = " ".join(
+        element.get("AXLabel") or "" for element in describe()
+    ).lower()
+    granted_folder = FOLDER_NAME.lower() in on_screen
     print(
         f"the folder half is {'granted' if granted_folder else 'not granted'} in this run"
         + ("" if granted_folder else " — nothing across the library/folder line will be checked")

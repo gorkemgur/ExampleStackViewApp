@@ -20,6 +20,8 @@ import XCTest
 /// XCUITest can reach system UI by bundle identifier, which idb cannot. So the placement stays
 /// in the Python driver and the granting moves here.
 ///
+/// WHICH PROCESS OWNS THE PICKER IS NOT ASSUMED. It is found by looking — see `findPicker()`.
+///
 /// AND IT RUNS WITHOUT `-ui-testing`. Every other test in this bundle launches the app against
 /// stubs; this one launches it against the real `PhotoKitMediaLibrary`, the real analyzers and
 /// the real deleter, on a simulator the `real` job has already loaded with media. It is
@@ -29,13 +31,62 @@ final class CrossSourceUITests: XCTestCase {
 
     private var app: XCUIApplication!
 
-    /// The Files app, which owns the picker's own UI.
-    private var picker: XCUIApplication {
-        XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore")
-    }
-
     private var springboard: XCUIApplication {
         XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    }
+
+    /// Every process the document picker might be living in, named so a failure can say which
+    /// one it looked in.
+    ///
+    /// The app itself is first and is not a formality. `UIDocumentPickerViewController` is a
+    /// remote view controller, but a remote view's accessibility tree is bridged into its
+    /// *host* — so on some iOS versions the picker's elements answer to the app's own query
+    /// and the separate process is never foregrounded at all. Run 148 asserted
+    /// `com.apple.DocumentManagerUICore` came to the front and waited thirty seconds for
+    /// something that may never have been going to happen.
+    private var pickerHosts: [(name: String, app: XCUIApplication)] {
+        [
+            ("the app's own tree", app),
+            ("com.apple.DocumentManagerUICore", XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore")),
+            ("com.apple.DocumentsApp", XCUIApplication(bundleIdentifier: "com.apple.DocumentsApp")),
+            ("com.apple.springboard", springboard),
+        ]
+    }
+
+    /// Labels that only a document picker has. `folders.add` is the last thing tapped before
+    /// this runs, and none of these is on the overview behind it.
+    private let pickerMarks = ["Browse", "Recents", "On My iPhone", "Shared", "Cancel"]
+
+    /// Find the picker by looking for it, rather than by believing a bundle identifier.
+    ///
+    /// - Returns: the process it was found in, or `nil` — in which case every candidate's tree
+    ///   has already been printed, because a failure here that cannot say what *was* on the
+    ///   screen costs a full CI round trip to learn one fact.
+    private func findPicker(timeout: TimeInterval = 30) -> (name: String, app: XCUIApplication)? {
+        // One query per host per pass, not one per label. `.exists` takes a fresh snapshot of
+        // that process's whole accessibility tree every time it is asked, so five labels across
+        // four processes would be twenty snapshots a pass — which is how a poll turns into the
+        // thing it was waiting for.
+        let anyMark = NSPredicate(format: "label IN %@", pickerMarks)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            for host in pickerHosts {
+                let mark = host.app.descendants(matching: .any).matching(anyMark).firstMatch
+                if mark.exists {
+                    print("the picker is in \(host.name) — found it by '\(mark.label)'")
+                    return host
+                }
+            }
+        }
+
+        for host in pickerHosts {
+            print("""
+
+            ===== \(host.name), state \(host.app.state.rawValue) =====
+            \(host.app.debugDescription)
+            """)
+        }
+        return nil
     }
 
     /// The folder `place_the_folder()` writes into the Files app's container.
@@ -82,22 +133,30 @@ final class CrossSourceUITests: XCTestCase {
         guard add.exists else { return }
         add.tap()
 
-        // The picker is a different process. Everything from here is Apple's UI, so it is
-        // addressed by label and given room to appear.
-        XCTAssertTrue(
-            picker.wait(for: .runningForeground, timeout: 30),
-            "the document picker never came to the front"
-        )
+        // Everything from here is Apple's UI, addressed by label, in whichever process turns
+        // out to own it.
+        guard let host = findPicker() else {
+            XCTFail("no document picker appeared anywhere after tapping Add a folder — every tree above")
+            return
+        }
+        let hostName = host.name
+        let picker = host.app
 
         for step in ["Browse", "On My iPhone", folderName] {
-            let target = picker.descendants(matching: .any)[step].firstMatch
+            // By label *or* identifier. The subscript matches on identifier, and none of
+            // Apple's picker chrome has one — "Browse" is a label. `folderName` is a filename,
+            // which the picker may publish as either.
+            let target = picker.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier == %@ OR label == %@", step, step))
+                .firstMatch
             guard target.waitForExistence(timeout: 20) else {
                 // Only the ones that are genuinely optional: the picker opens wherever it was
                 // last, so "Browse" and "On My iPhone" may already be where we are. The folder
                 // itself is not optional.
                 if step == folderName {
                     XCTFail(
-                        "'\(step)' was not in the picker. What it was showing:\n\n\(picker.debugDescription)"
+                        "'\(step)' was not in the picker (\(hostName)). What it was showing:"
+                        + "\n\n\(picker.debugDescription)"
                     )
                     return
                 }
