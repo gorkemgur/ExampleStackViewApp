@@ -1,8 +1,8 @@
 # State of play
 
-Written 13 September 2026, updated after CI run 146 — the first fully green run — and again
-when the cross-source proof was moved out of the idb driver and into XCUITest. Branch
-`claude/selam-dr571g`.
+Written 13 September 2026. Updated after CI run 146, the first fully green run, and again
+after **run 157 — the first run in which the app's one distinctive claim was proven against a
+real device rather than asserted.** Branch `claude/selam-dr571g`.
 
 This is a handover, not a summary. It is organised by *how much we know*, because that turned
 out to be the thing that mattered: this project has repeatedly had code that worked and code
@@ -34,14 +34,16 @@ These run in CI on every push, through the real system frameworks.
 | No false positives | no singleton has ever been offered |
 | `GrayImageRenderer`, `VideoFrameSampler`, `FileSystemOriginalExporter` | `AdapterTests`, 13 tests, real H.264 written by `AVAssetWriter` |
 | Fingerprint agreement across halves | `ResendFingerprintTests.testBothHalvesFingerprintTheSamePictureTheSameWay` |
+| **Cross-source duplicates (the "C" feature)** | `crossing` job: a real folder granted through Apple's own document picker, 31 real items scanned, and a group that holds a library photograph and its folder copy *and says so*. Green from run 157 |
 | `DupeCore` logic | 301 tests |
 | Every screen and the whole path through them | 23 UI tests, all green in run 146 |
 
 Test counts by target: **DupeCore 301**, **DupeSpaceTests 172**, **DupeSpaceUITests 23**.
 
-### The two bugs the `real` job found that nothing else could
+### The three bugs the device jobs found that nothing else could
 
-Both were invisible to 468 passing tests, because no test ran the code.
+All three were invisible to a green test suite, because no test ran the code the way the app
+runs it.
 
 **The filename was in the content hash.** `PhotoKitAssetAnalyzer.contentDigest` hashed
 `"r\(type):\(originalFilename)|"`, so two photographs sharing every byte came out with
@@ -50,6 +52,19 @@ not a corner one (`IMG_4021.JPG` and `IMG_4021 1.JPG`). The tier the app opens w
 "Identical copies — costs nothing", the one it pre-ticks because deletion provably costs
 nothing, could never fire for a photograph. Fixed in `219d341`. The *file* half had always been
 tested for exactly this property; the photo half had no test at all.
+
+**The keeper was not counted, so the crossing was never announced.** Found by the `crossing`
+job in run 156. `ReviewGroup.items` is not the group's media, it is the *candidates'* — the
+builder fills it with `ordered.compactMap { items[$0.id] }`, and `ordered` is the candidate
+list, which by definition excludes the copy that is staying. `spansLibraryAndFolders` iterated
+only that, so the commonest crossing there is — a library photograph keeping, one folder copy
+on offer, which is exactly what "exported once" looks like — saw one source and returned false.
+The flag could only fire when the line was crossed *among the candidates*, the rarer case.
+
+Four unit tests covered the flag and all four passed: their helper built groups with
+`items: items`, keeper included, which is not the shape `ReviewBuilder` produces. **A fixture
+more generous than the code hides the bug it was written to catch.** The helper now builds what
+the builder builds, and three tests cover the real shapes.
 
 **Two downsamplers, one matcher.** `edges(hashes:)` compares every fingerprint against every
 other in one sweep and does not know which analyzer produced each. `FileAssetAnalyzer` decoded
@@ -64,31 +79,6 @@ original resource when PhotoKit returns nothing hashable.
 ## 2. Built, but not proven
 
 Code is written and reviewed. Nothing has run it end to end.
-
-**Cross-source duplicates (the "C" feature).** `ReviewGroup.spansLibraryAndFolders` with four
-DupeCore tests (two of which assert it is *not* set — a claim printed unconditionally is
-decoration). A "Where" row in the comparison table, and a line on the group screen when a group
-holds both. The engine change underneath it is proven; *that a library item and a folder item
-actually land in one group* is not — see §4 for why it could not be, and for the route that is
-now taken.
-
-The proof itself is written and wired up: `DupeSpaceUITests/CrossSourceUITests` and the
-`crossing` CI job, and **it has already earned its keep.** Run 156 drove the real picker,
-granted a real folder, scanned 31 real items and swept the review list, and found
-`crossing-21.jpg` offered with one other copy — the matcher does cross the line — while no
-screen said so.
-
-The reason: `ReviewGroup.items` holds the *candidates'* media, not the group's, because
-`ReviewBuilder` fills it with `ordered.compactMap { items[$0.id] }` and `ordered` is the
-candidate list. `spansLibraryAndFolders` iterated only that, so the commonest crossing there is
-— a library photograph keeping, one folder copy on offer — showed one source and returned
-false. Four unit tests covered the flag and all four passed, because the helper that built
-their groups passed every item as `items`, keeper included, which is not the shape the builder
-produces. **A fixture more generous than the code hides the bug it was written to catch.**
-
-Fixed by counting the keeper, with three more tests including the exact shape the app makes.
-This paragraph stays in §2 until the `crossing` job is green — a test that has never passed is
-still a plan.
 
 **The five UI tests are green** as of run 146, and what they cost is worth keeping. Three
 separate causes, none of which was the thing it looked like:
@@ -162,10 +152,12 @@ older than X".
 
 ## 4. Tried, and does not work
 
-**A populated folder cannot be granted on a simulator through idb.** Two halves, and only one
-of them failed:
+**A populated folder cannot be granted on a simulator through idb** — and that is the *only*
+thing here that stayed impossible. The folder is granted, by XCUITest, every run; what follows
+is the record of what each half cost to learn. Two halves, and only one of them failed:
 
-- Getting files onto the device: **not yet, and the log said otherwise for days.** There is no
+- Getting files onto the device: **solved, but the log said it was solved for days before it
+  was.** There is no
   `simctl addfile` and the picker can create an empty folder but not fill one, so the route is
   to write into a file provider's storage from the host. The path used was the Files app's own
   container (`simctl get_app_container <udid> com.apple.DocumentsApp data`, then
@@ -291,7 +283,7 @@ a script driving a simulator. No person has held this app.
 
 ## 7. The pipeline
 
-Eight jobs (`.github/workflows/ci.yml`). `concurrency.cancel-in-progress: true` — **a push
+Eight jobs (`.github/workflows/ci.yml`). Run 157's wall clock was **14 m 35**. `concurrency.cancel-in-progress: true` — **a push
 cancels the run in flight**, which cost five separate answers in one day. Batch changes; push
 once. The times below are the jobs' own; run 140 sat in the queue for eighteen minutes before
 any of them started, which no table can predict.
@@ -303,7 +295,7 @@ any of them started, which no table can predict.
 | `compile` | the one-minute verdict, and the only Release build | 2 m 20 |
 | `app` | simulator unit tests, 172 tests | 6 m 00 |
 | `ui` ×2 | XCUITest, sharded by measured cost | 6 m 48 / 7 m 14 |
-| `crossing` | the library/folder line, through the real document picker | 7 m 39 |
+| `crossing` | the library/folder line, through the real document picker | 11 m 22 |
 | `real` | **the one that finds real bugs** — real media, real PhotoKit, real deletion | 10 m 52 |
 | `idb` | screenshots and the layout/motion audit | 11 m 59 |
 
@@ -405,19 +397,15 @@ thing; 7 jobs should be 4–5.
 In order, and the first one is the one that matters:
 
 1. ~~Get `ui` green.~~ Done in run 146.
-2. ~~Move the folder grant into `DupeSpaceUITests`.~~ Written, and it drives the real picker:
-   runs 148 and 149 settled which process hosts it and what its elements are called. **What is
-   still open is the fixture, not the test.** "On My iPhone" is served by
-   `com.apple.FileProvider.LocalStorage` and the folder was being written somewhere else, so
-   the picker had nothing to grant. The driver now finds every `File Provider Storage`
-   directory on the device and writes into all of them, which reaches the picker. **The app
-   takes the grant** — run 151 came back with a folder on the overview. Runs 151 and 152 were
-   then both spent on *which* folder: Open grants the directory you are standing in, and the
-   picker would not move into the fixture. That stopped being asserted in the end, because it
-   never mattered — `FileMediaLibrary` enumerates recursively, so a grant on the fixture's
-   parent contains the fixture. Nothing past the grant — the scan, and whether a group says it
-   spans both halves — has been reached yet.
-3. Fix `real-library-check.py` so it stops reporting the clips as missing — or find out they
+2. ~~Move the folder grant into `DupeSpaceUITests` and close the cross-source proof.~~ **Done,
+   green from run 157**, and it found a real bug on the way (§1). Nine runs, 148–157: four of
+   them learning what Apple does not document — which process hosts the picker, where "On My
+   iPhone" is served from, what Open actually grants — and five of them my own mistakes, of
+   which the sharpest was reading a `LazyVStack` without scrolling it, a rule written in §5 of
+   this very document. **On a machine with Xcode this would have been half an hour.** Every
+   question here costs a fifteen-minute round trip; that is the single biggest tax on this
+   project and the reason to run the suite locally at least once before trusting it.
+3. **Now the first item.** Fix `real-library-check.py` so it stops reporting the clips as missing — or find out they
    genuinely are.
 4. Run it on a phone and answer the trashing question.
 5. Then RAW+JPEG, then Live Photo, then screenshots.
