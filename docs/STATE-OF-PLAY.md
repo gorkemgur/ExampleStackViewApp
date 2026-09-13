@@ -1,6 +1,7 @@
 # State of play
 
-Written 13 September 2026, updated after CI run 140. Branch `claude/selam-dr571g`.
+Written 13 September 2026, updated after CI run 146 — the first fully green run. Branch
+`claude/selam-dr571g`.
 
 This is a handover, not a summary. It is organised by *how much we know*, because that turned
 out to be the thing that mattered: this project has repeatedly had code that worked and code
@@ -33,6 +34,7 @@ These run in CI on every push, through the real system frameworks.
 | `GrayImageRenderer`, `VideoFrameSampler`, `FileSystemOriginalExporter` | `AdapterTests`, 13 tests, real H.264 written by `AVAssetWriter` |
 | Fingerprint agreement across halves | `ResendFingerprintTests.testBothHalvesFingerprintTheSamePictureTheSameWay` |
 | `DupeCore` logic | 301 tests |
+| Every screen and the whole path through them | 23 UI tests, all green in run 146 |
 
 Test counts by target: **DupeCore 301**, **DupeSpaceTests 172**, **DupeSpaceUITests 23**.
 
@@ -68,38 +70,31 @@ decoration). A "Where" row in the comparison table, and a line on the group scre
 holds both. The engine change underneath it is proven; *that a library item and a folder item
 actually land in one group* is not. See §4 for why.
 
-**The five UI tests.** Run 140 was the first run allowed to finish, and the element tree the
-new `require(_:in:)` prints answered it: 18 passed, 5 failed, **three separate causes, and the
-largest was a bug in the app rather than in the tests.**
+**The five UI tests are green** as of run 146, and what they cost is worth keeping. Three
+separate causes, none of which was the thing it looked like:
 
 *An `accessibilityIdentifier` on a container is inherited by everything inside it and overrides
-the identifiers set there.* Two containers were swallowing their children:
+the identifiers set there.* Ten elements wore the name `scan.plan` and four wore `review.order`,
+so `scan.plan.summary` and `review.order.biggest` — both set in the source, both waited for by a
+test — did not exist on the screen at all. `.accessibilityElement(children: .contain)` on the
+container is the fix. **An accessibility defect, not only a test problem:** VoiceOver read those
+two rows as flattened as the query did, and no screenshot or layout audit could have caught it.
+Sweeping the element tree for identifiers worn by more than one element found exactly these two;
+worth re-running whenever a container gets a name.
 
-```
-Button, identifier: 'review.order', label: 'Biggest'
-Button, identifier: 'review.order', label: 'Oldest'
-Button, identifier: 'review.order', label: 'Newest'
-StaticText, identifier: 'scan.plan', label: '27 of 28 will be opened'
-StaticText, identifier: 'scan.plan', label: '24 · 80.2 MB'
-```
+*`confirmationDialog`'s Cancel is not in the element tree.* `GroupDetailView` passes
+`Button("Cancel", role: .cancel)` and the dialog comes back as a `Sheet` holding its title, its
+message and `Select them all` — nothing else. The system owns that affordance and does not
+publish it where a query can reach. The test backs out with a tap above the sheet, the way a
+person would, and then checks the sheet actually went away.
 
-Ten elements wore the name `scan.plan`, four wore `review.order`, and `review.order.biggest`
-and `scan.plan.summary` did not exist on the screen at all. `.accessibilityElement(children:
-.contain)` on both containers is the fix. Sweeping the whole tree for identifiers worn by more
-than one element found exactly these two and nothing else — worth re-running as a check.
+*Two "failures" were the runner giving up* — `Failed to launch <XCUIApplicationImpl…>` and
+`Error getting main window kAXErrorServerNotFound`. Resource pressure wearing a test failure's
+clothes: two shards times two parallel workers is four cloned simulators across two runners.
+One simulator per shard, no clones. See §7.
 
-This is an accessibility defect, not only a test problem: VoiceOver navigation of those two
-rows was as flattened as the query was.
-
-*The confirmation dialog's Cancel is not in the element tree.* `GroupDetailView` passes
-`Button("Cancel", role: .cancel)` to `confirmationDialog` and the dialog comes back as a
-`Sheet` holding its title, its message and `Select them all` — nothing else. The system owns
-that affordance and does not publish it where a query can reach. The test backs out with a tap
-above the sheet now, the way a person would, and then checks the sheet actually went away.
-
-*One history test failed after 194 seconds saying `XCTAssertTrue failed`* and nothing more —
-four unlabelled waits on that path, one of which timed out, with no way to tell which. They
-are all `require(_:in:)` now. **Cause still unknown**; the next run will name it.
+*And one was arithmetic*: `("43.99999999999994") is less than ("44.0")`. A point is not an
+integer on a 3x screen.
 
 **`Badge`, the Paper palette, the budget fader rework** — screenshotted and audited (0 findings
 in `docs/ui-audit.md`), never used by a person.
@@ -242,15 +237,21 @@ cancels the run in flight**, which cost five separate answers in one day. Batch 
 once. The times below are the jobs' own; run 140 sat in the queue for eighteen minutes before
 any of them started, which no table can predict.
 
-| Job | What it is for | Rough time |
+| Job | What it is for | Run 146 |
 |---|---|---|
-| `compile` | the one-minute verdict, and the only Release build | 4 min |
-| `core` | `DupeCore`, platform-free, 301 tests | 30 s |
-| `app` | simulator unit tests, 172 tests | 5 min |
-| `ui` | XCUITest, parallel over two cloned simulators | 20 min |
-| `site` | `docs/index.html` structure check | 5 s |
-| `real` | **the one that finds real bugs** — real media, real PhotoKit, real deletion | 9 min |
-| `idb` | screenshots and the layout/motion audit | ~11 min |
+| `site` | `docs/index.html` structure check | 7 s |
+| `core` | `DupeCore`, platform-free, 301 tests | 43 s |
+| `compile` | the one-minute verdict, and the only Release build | 2 m 20 |
+| `app` | simulator unit tests, 172 tests | 6 m 00 |
+| `ui` ×2 | XCUITest, sharded by measured cost | 6 m 48 / 7 m 14 |
+| `real` | **the one that finds real bugs** — real media, real PhotoKit, real deletion | 10 m 52 |
+| `idb` | screenshots and the layout/motion audit | 11 m 59 |
+
+Wall clock for the whole run: **12 m 32**, against roughly 25 minutes before the trim. What
+bought it, in order: deleting the recordings and the GIF conversion (−15 min off `idb`),
+sharding the UI suite and dropping the simulator clones (14 min → two parallel ~7s), and
+removing the document-picker walk from `real` (−4 min). Two of my other "optimisations" made
+things worse and were reverted; see the commit log for both.
 
 `app` and `ui` were one job until `56bc3c9`. GitHub serves a job's log only once the job has
 *finished*, so a unit verdict known at minute six could not be read until minute twenty-six.
@@ -314,8 +315,7 @@ thing; 7 jobs should be 4–5.
 
 In order, and the first one is the one that matters:
 
-1. Get `ui` green. Run 140 named all five failures; the fixes for four of them are written and
-   unrun, and the fifth is only instrumented.
+1. ~~Get `ui` green.~~ Done in run 146.
 2. Move the folder grant into `DupeSpaceUITests` using
    `XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore")`. That closes the
    cross-source proof, which is the app's one distinctive claim.
