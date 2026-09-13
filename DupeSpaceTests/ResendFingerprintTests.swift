@@ -179,6 +179,58 @@ final class ResendFingerprintTests: XCTestCase {
         )
     }
 
+    /// The step the tests above skip, and the only thing left between them and the real path.
+    ///
+    /// `ResendFingerprintTests` above draws the fingerprint from the full-size picture. The app
+    /// never sees a full-size picture: `PhotoKitAssetAnalyzer` asks `PHImageManager` for the
+    /// asset at `GrayImageRenderer.renderSize` — 64 points — and hashes whatever comes back. So
+    /// there are two resamplings in the real path and one in the test, and the first of them
+    /// throws away everything the second would have had to work with.
+    ///
+    /// That matters most for dHash, which compares neighbouring pixels. At sixty-four pixels
+    /// across, a 2400-wide original and a 1200-wide copy have been through different amounts of
+    /// decimation and carry different aliasing, and on a smooth picture the neighbour
+    /// differences the hash is reading are the same size as that noise.
+    ///
+    /// So: the same pair, through the same two stages the app puts it through, at the size the
+    /// app asks for — and the distance at the larger sizes printed beside it, because if this
+    /// fails the next question is immediately "how much larger does the request have to be".
+    func testThePairStillMatchesAfterTheThumbnailStepTheAppActuallyTakes() throws {
+        let full = try draw(scene: 3, width: 2400, height: 1800)
+        let small = try scaled(full, width: 1200, height: 900)
+        let one = try roundTripped(full, quality: 0.95, named: "thumb-full.jpg")
+        let two = try roundTripped(small, quality: 0.45, named: "thumb-resend.jpg")
+        let limit = ScanStrictness.balanced.configuration.similarDistance
+
+        /// What `PHImageManager` returns for a square target and `contentMode: .aspectFit`:
+        /// the picture scaled to fit inside that box, so a 4:3 photograph comes back
+        /// `side` by `side * 3 / 4`.
+        func throughAThumbnail(_ image: CGImage, side: Int) throws -> PerceptualHashes {
+            try fingerprint(scaled(image, width: side, height: side * 3 / 4))
+        }
+
+        var measured: [String] = []
+        for side in [64, 128, 256, 512] {
+            let a = try throughAThumbnail(one, side: side)
+            let b = try throughAThumbnail(two, side: side)
+            measured.append(
+                "\(side)pt: dHash \(hammingDistance(a.dHash, b.dHash)), pHash \(hammingDistance(a.pHash, b.pHash))"
+            )
+        }
+        let evidence = measured.joined(separator: "   ")
+
+        let asked = try throughAThumbnail(one, side: GrayImageRenderer.renderSize)
+        let gets = try throughAThumbnail(two, side: GrayImageRenderer.renderSize)
+        let d = hammingDistance(asked.dHash, gets.dHash)
+        let p = hammingDistance(asked.pHash, gets.pHash)
+
+        XCTAssertLessThanOrEqual(
+            max(d, p), limit,
+            "at the \(GrayImageRenderer.renderSize)pt the analyzer asks for, the pair is "
+            + "\(d)/\(p) bits apart and a balanced scan matches at \(limit).   \(evidence)"
+        )
+    }
+
     /// Scale alone, with no quality loss, to separate the two halves of what a re-send does.
     ///
     /// If this passes and the pair above fails, the size change is survivable and the JPEG
