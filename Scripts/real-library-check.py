@@ -141,6 +141,32 @@ def scroll_to(identifier, attempts=10):
     return None
 
 
+def labels(tree, limit=40):
+    """Every readable line on the screen, in order."""
+    out = []
+    for element in tree:
+        label = element.get("AXLabel")
+        if isinstance(label, str) and label.strip():
+            out.append(label.strip())
+        if len(out) >= limit:
+            break
+    return out
+
+
+def show(reason, tree):
+    """Print what a screen says.
+
+    Three photographs pairs went missing on the first end-to-end run and the log could say only
+    that they were not offered. Whether Photos de-duplicated them on import, or the analyzer
+    returned nothing for images, or the scan never reached them, are three different bugs with
+    three different fixes — and the screen says which, if anyone reads it.
+    """
+    print(f"--- {reason}")
+    for line in labels(tree):
+        print(f"    {line}")
+    print("--- end")
+
+
 def dump_tree(reason):
     """Print what is actually on the screen.
 
@@ -236,6 +262,10 @@ def main():
         failures.append("the scan screen did not open")
         return report()
     shot("02-plan.png")
+    # The plan states how many of each kind are indexed and how many will actually be opened.
+    # If Photos de-duplicated the byte-identical pairs on import, the count is short here and
+    # nothing further along is worth reading.
+    show("what the scan says it is about to do", describe())
     tap(start, settle=1)
 
     which, _ = wait_for_any(["scan.total", "scan.empty"], timeout=300)
@@ -244,6 +274,7 @@ def main():
         failures.append("the scan never finished against the real library")
         return report()
     shot("03-results.png")
+    show("what the scan found", describe())
 
     if which == "scan.empty":
         failures.append("the scan found nothing at all — the two byte-identical pairs are in there")
@@ -261,6 +292,7 @@ def main():
         failures.append("the review screen did not open")
         return report()
     shot("04-review.png")
+    show("what is on offer", tree)
 
     groups = [
         element for element in tree
