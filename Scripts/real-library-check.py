@@ -556,7 +556,9 @@ def main():
     groups = sorted(group_ids)
     labels = offered
 
-    notes.append(f"{len(groups)} groups on the review screen")
+    # "the sweep reached", not "there are". Run 159 printed this as a bare count and I read it
+    # as the app's result: four, when the app was offering eight.
+    notes.append(f"{len(groups)} group rows the sweep could reach")
 
     # THE COUNT, which is the one reading that does not depend on the sweep reaching a row.
     #

@@ -411,7 +411,23 @@ In order, and the first one is the one that matters:
    this very document. **On a machine with Xcode this would have been half an hour.** Every
    question here costs a fifteen-minute round trip; that is the single biggest tax on this
    project and the reason to run the suite locally at least once before trusting it.
-3. **Now the first item.** Fix `real-library-check.py` so it stops reporting the clips as missing — or find out they
-   genuinely are.
-4. Run it on a phone and answer the trashing question.
-5. Then RAW+JPEG, then Live Photo, then screenshots.
+3. ~~Fix `real-library-check.py` so it stops reporting the clips as missing.~~ Answered in runs
+   159 and 160: the clips were never missing. The app offers all eight items the fixture builds
+   — both byte-identical photographs, both photo re-sends, all three clip re-sends and the
+   byte-identical clip — and `sweep()` could only reach four of the group rows, so it named the
+   four it could not see as failures. The count on the "Everything" chip is the assertion now
+   and it passes; the per-name lines say "not seen by the sweep".
+
+   **What is left of it is small and bounded**: the kind chips sit in a horizontal `ScrollView`
+   and idb cannot reach the Videos one, so the video sections are still unswept. Nothing about
+   the app depends on that — the count covers it — but a driver that could reach them would let
+   the per-name checks mean something again.
+4. **Now the first item, and it cannot be done from here.** Run it on a phone and answer the
+   trashing question in §5 — whether a Files provider allows `trashItem` where an app's own
+   container does not. That decides whether folder deletion can offer the 30-day undo the photo
+   half already has, and it is the most valuable unanswered question left.
+   `docs/RUN-ON-YOUR-PHONE.md` and `Scripts/for-my-phone.sh` are ready for it; §9 says what a
+   person has to do.
+5. Then RAW+JPEG, then Live Photo, then screenshots by age.
+6. And the standing one: **nobody has used this app.** 470-odd tests, a green pipeline and a
+   measured layout are not the same as one person with ten thousand photographs of their own.
