@@ -4,23 +4,23 @@ Layout is measured from the accessibility tree; animation from a screen
 recording taken across each transition and read frame by frame. See
 `Scripts/audit-ui.py` for what each number can and cannot say.
 
-## Findings (0)
+## Findings (1)
 
-- Nothing overflowed, nothing was untappable, nothing failed to move.
+- animation: scan screen pushing in went from one screen to the next in 2 frame(s) — that is a cut, not a transition
 
 ## Measurements
 
-- animation: cards entering on launch — 96 frames at ~21fps, 6 moving (peak 74.5 levels), last movement at 4.41s [animated]
+- animation: cards entering on launch — 137 frames at ~30fps, 11 moving (peak 79.8 levels), last movement at 4.47s [animated]
 - overview: Button "History" is 100.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - overview: 71 named elements checked against a 440pt screen
-- animation: live surfaces sheet presenting — 46 frames at ~13fps, 10 moving (peak 84.9 levels), last movement at 0.84s [animated]
+- animation: live surfaces sheet presenting — 59 frames at ~17fps, 11 moving (peak 87.8 levels), last movement at 0.71s [animated]
 - live surfaces: Button "Close" is 67.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - live surfaces: 45 named elements checked against a 440pt screen
-- animation: scan screen pushing in — 95 frames at ~27fps, 3 moving (peak 19.0 levels), last movement at 0.15s [animated]
+- animation: scan screen pushing in — 63 frames at ~18fps, 2 moving (peak 9.9 levels), last movement at 0.17s [one step only]
 - scan: 21 named elements checked against a 440pt screen
-- animation: progress card replacing the intro — 11 frames at ~3fps, 3 moving (peak 15.6 levels), last movement at 2.55s [animated]
+- animation: progress card replacing the intro — 12 frames at ~3fps, 3 moving (peak 16.3 levels), last movement at 1.67s [animated]
 - results: 35 named elements checked against a 440pt screen
-- animation: review screen pushing in — 23 frames at ~7fps, 4 moving (peak 22.3 levels), last movement at 0.76s [animated]
+- animation: review screen pushing in — 22 frames at ~6fps, 4 moving (peak 23.6 levels), last movement at 0.80s [animated]
 - review: 46 named elements checked against a 440pt screen
 - overview at accessibility text size: Button "History" is 119.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - overview at accessibility text size: 71 named elements checked against a 440pt screen
