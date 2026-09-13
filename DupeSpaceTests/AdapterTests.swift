@@ -195,11 +195,15 @@ final class AdapterTests: XCTestCase {
         let original = try await writeClip(named: "trip.mov", seed: 4, width: 480, height: 360, bitrate: 2_000_000)
         let resend = try await writeClip(named: "trip-resend.mov", seed: 4, width: 320, height: 240, bitrate: 400_000)
 
-        let a = try XCTUnwrap(await VideoFrameSampler.signature(for: AVURLAsset(url: original)))
-        let b = try XCTUnwrap(await VideoFrameSampler.signature(for: AVURLAsset(url: resend)))
+        // Awaited into a local before unwrapping: `XCTUnwrap` takes an autoclosure, and an
+        // autoclosure cannot carry an `await`.
+        let first = await VideoFrameSampler.signature(for: AVURLAsset(url: original))
+        let second = await VideoFrameSampler.signature(for: AVURLAsset(url: resend))
+        let a = try XCTUnwrap(first, "the original produced no signature")
+        let b = try XCTUnwrap(second, "the re-encode produced no signature")
 
         let comparison = try XCTUnwrap(
-            VideoSignature.compare(a, b),
+            VideoMatcher.compare(a, b),
             "two full signatures did not even overlap enough to be compared"
         )
         XCTAssertLessThan(
@@ -214,10 +218,12 @@ final class AdapterTests: XCTestCase {
         let one = try await writeClip(named: "a.mov", seed: 2)
         let other = try await writeClip(named: "b.mov", seed: 5)
 
-        let a = try XCTUnwrap(await VideoFrameSampler.signature(for: AVURLAsset(url: one)))
-        let b = try XCTUnwrap(await VideoFrameSampler.signature(for: AVURLAsset(url: other)))
+        let first = await VideoFrameSampler.signature(for: AVURLAsset(url: one))
+        let second = await VideoFrameSampler.signature(for: AVURLAsset(url: other))
+        let a = try XCTUnwrap(first, "the first clip produced no signature")
+        let b = try XCTUnwrap(second, "the second clip produced no signature")
 
-        let comparison = try XCTUnwrap(VideoSignature.compare(a, b))
+        let comparison = try XCTUnwrap(VideoMatcher.compare(a, b))
         XCTAssertGreaterThan(
             comparison.averageDistance, 8,
             "two unrelated clips averaged only \(comparison.averageDistance) apart"

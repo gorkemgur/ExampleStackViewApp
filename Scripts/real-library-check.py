@@ -71,15 +71,6 @@ def find(tree, identifier):
     return None
 
 
-def by_label(tree, needle):
-    needle = needle.lower()
-    for element in tree:
-        label = element.get("AXLabel")
-        if isinstance(label, str) and needle in label.lower():
-            return element
-    return None
-
-
 def tap(element, settle=1.5):
     frame = element.get("frame") or {}
     x = int(frame.get("x", 0) + frame.get("width", 0) / 2)
@@ -93,6 +84,36 @@ def shot(name):
     run(["xcrun", "simctl", "io", UDID, "screenshot", os.path.join(OUT_DIR, name)])
 
 
+#: The buttons that grant what the app is asking for, in the order it is worth trying them.
+#: "Allow Full Access" is the library; "Allow" covers the deletion alert and the older wording.
+CONSENT = ["allow full access", "allow", "delete"]
+
+
+def answer_system_prompt(tree):
+    """Tap through a system permission dialog if one is on the screen.
+
+    `simctl privacy grant photos` exits 0 and iOS asks anyway — the first run of this job spent
+    two minutes waiting for an overview that was behind *"DupeSpace would like full access to
+    your Photo Library"* the whole time.
+
+    Tapping it is the better answer regardless. The permission flow is part of the real path,
+    and a job whose whole point is that nothing here is a stub should not be skipping the one
+    dialog a real user has to answer.
+    """
+    for wanted in CONSENT:
+        for element in tree:
+            label = element.get("AXLabel")
+            if (
+                element.get("type") == "Button"
+                and isinstance(label, str)
+                and label.strip().lower() == wanted
+            ):
+                print(f"answering the system: {label!r}")
+                tap(element, settle=2.5)
+                return True
+    return False
+
+
 def wait_for_any(identifiers, timeout=300):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -101,6 +122,8 @@ def wait_for_any(identifiers, timeout=300):
             element = find(tree, identifier)
             if element is not None:
                 return identifier, element
+        # Nothing yet — but it may be that the app is behind a dialog rather than still working.
+        answer_system_prompt(tree)
         time.sleep(2)
     return None, None
 
@@ -278,17 +301,15 @@ def main():
 
     # PhotoKit puts its own alert up, outside the app, and nothing in this repository has ever
     # had to answer one. This is the whole point of the exercise.
-    alert = None
-    for _ in range(10):
+    answered = False
+    for _ in range(12):
         tree = describe()
-        alert = by_label(tree, "delete") or by_label(tree, "sil")
-        if alert is not None and (alert.get("frame") or {}).get("y", 0) > 300:
+        shot("06-system-alert.png")
+        if answer_system_prompt(tree):
+            answered = True
             break
-        time.sleep(1)
-    shot("06-system-alert.png")
-    if alert is not None:
-        tap(alert, settle=4)
-    else:
+        time.sleep(1.5)
+    if not answered:
         notes.append("no system alert was found; the deletion may have gone through without one")
 
     which, _ = wait_for_any(["review.freed", "review.result"], timeout=90)
