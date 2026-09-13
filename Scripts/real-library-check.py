@@ -141,7 +141,37 @@ def scroll_to(identifier, attempts=10):
     return None
 
 
-def labels(tree, limit=40):
+def sweep(swipes=6):
+    """Every label on a scrolling screen, and every group id on it.
+
+    `idb ui describe-all` returns what is laid out, and a review list of seven groups is taller
+    than the glass. The first end-to-end run reported three video pairs MISSED while the
+    screenshot taken beside it showed their section header and their byte figure — the rows
+    were simply below the fold. A membership check that only sees the top of a scroll view is a
+    check that gets more wrong the more the app finds, which is the worst direction for it to
+    be wrong in.
+
+    Swipes down collecting, then swipes back up, because the delete key and every screenshot
+    after this expect the list where they left it.
+    """
+    said = []
+    groups = set()
+    for _ in range(swipes):
+        tree = describe()
+        said.extend(str(element.get("AXLabel") or "") for element in tree)
+        for element in tree:
+            identifier = element.get("AXUniqueId")
+            if isinstance(identifier, str) and identifier.startswith("review.group."):
+                groups.add(identifier)
+        run(["idb", "ui", "swipe", "--udid", UDID, "200", "700", "200", "260"])
+        time.sleep(0.8)
+    for _ in range(swipes + 2):
+        run(["idb", "ui", "swipe", "--udid", UDID, "200", "260", "200", "700"])
+        time.sleep(0.4)
+    return " ".join(said).lower(), groups
+
+
+def labels(tree, limit=120):
     """Every readable line on the screen, in order."""
     out = []
     for element in tree:
@@ -294,14 +324,9 @@ def main():
     shot("04-review.png")
     show("what is on offer", tree)
 
-    groups = [
-        element for element in tree
-        if isinstance(element.get("AXUniqueId"), str)
-        and element["AXUniqueId"].startswith("review.group.")
-    ]
-    labels = " ".join(
-        str(element.get("AXLabel") or "") for element in tree
-    ).lower()
+    offered, group_ids = sweep()
+    groups = sorted(group_ids)
+    labels = offered
 
     notes.append(f"{len(groups)} groups on the review screen")
 

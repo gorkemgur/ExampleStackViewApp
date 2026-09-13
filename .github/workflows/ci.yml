@@ -271,7 +271,7 @@ jobs:
           grep -nE "error:" xcodebuild.log | grep -v "Checking existence" | sort -u | head -40 || echo "none"
           echo "::endgroup::"
           echo "::group::Test failures"
-          grep -nE "XCTAssert|' failed \(|Failing tests:" xcodebuild.log | head -40 || echo "none"
+          python3 Scripts/why-tests-failed.py TestResults.xcresult xcodebuild.log
           echo "::endgroup::"
           echo "::group::Verdict"
           grep -nE "\*\* [A-Z ]+ \*\*" xcodebuild.log | tail -5 || true
