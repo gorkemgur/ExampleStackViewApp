@@ -154,6 +154,24 @@ struct GroupDetailView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            // Only when it is true, and then said plainly. This is the one thing the app found
+            // that neither Photos nor a file manager could have: Duplicates stops at the photo
+            // library's edge, and a file browser cannot see inside it at all.
+            if group.spansLibraryAndFolders {
+                Text("This picture is in your photo library **and** in a folder you added. Neither Photos nor Files can see across that line — this is the copy people are most certain they do not have.")
+                    .font(.caption)
+                    .foregroundStyle(DS.onSlab)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: DS.controlCorner, style: .continuous)
+                            .fill(DS.deep.opacity(0.10))
+                    )
+                    .accessibilityIdentifier("group.spansSources")
+            }
         }
     }
 

@@ -29,6 +29,7 @@ assert before anyone has seen one.
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -37,6 +38,10 @@ UDID = sys.argv[1]
 LIBRARY = sys.argv[2]
 OUT_DIR = sys.argv[3] if len(sys.argv) > 3 else "artifacts/real"
 BUNDLE_ID = "com.gorkemgur.dupespace"
+
+# The folder half's name on the device, which is also what the picker shows and what the
+# app puts on the overview once it has been granted.
+FOLDER_NAME = "DupeSpace Fixture"
 
 #: Files built with no partner. If any of these is offered for deletion, the matcher has
 #: grouped two things it never compared, and that is a stop-the-line failure.
@@ -196,6 +201,109 @@ def sweep():
     return " ".join(said).lower(), groups
 
 
+def is_on_glass(element, height=940.0):
+    """Is this element actually where it says it is?
+
+    `describe-all` reports scroll-view children that are below the bottom of the screen with the
+    frame they *would* have, so tapping such an element's centre is a no-op that looks like a
+    tap. `capture-screens.py` learned this the hard way and `audit-ui.py` after it; the document
+    picker is a long scrolling list, so this file needs it too.
+    """
+    frame = element.get("frame") or {}
+    middle = frame.get("y", 0) + frame.get("height", 0) / 2
+    return 0 < middle < height
+
+
+def place_the_folder():
+    """Put the folder half where the document picker can reach it.
+
+    The Files app's own local storage lives inside its container, under `File Provider
+    Storage` — which is what "On My iPhone" shows. `simctl` will hand over that container path,
+    and writing into it from the host is the only way to get a populated folder onto a
+    simulator: there is no `simctl addfile`, and the picker can create an empty folder but not
+    fill one.
+
+    Returns the folder's name on the device, or None. None is a note and not a failure: this is
+    the first run that has ever tried it, and a technique that turns out not to work must say
+    so plainly rather than take the rest of the check down with it.
+    """
+    source = os.path.join(LIBRARY, "folder")
+    if not os.path.isdir(source):
+        print("no folder half was generated")
+        return None
+
+    found = run(["xcrun", "simctl", "get_app_container", UDID, "com.apple.DocumentsApp", "data"])
+    if found.returncode != 0:
+        print(f"the Files app has no container here: {found.stderr.strip()[:200]}")
+        return None
+
+    storage = os.path.join(found.stdout.strip(), "File Provider Storage")
+    try:
+        os.makedirs(storage, exist_ok=True)
+        target = os.path.join(storage, FOLDER_NAME)
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
+    except OSError as error:
+        print(f"could not write into the Files app's storage: {error}")
+        return None
+
+    print(f"put {len(os.listdir(target))} files in On My iPhone / {FOLDER_NAME}")
+    return FOLDER_NAME
+
+
+def grant_the_folder():
+    """Walk the app's own affordance and Apple's picker to hand that folder over.
+
+    Every tap here is against UIKit's document picker rather than this app, so it is the least
+    predictable part of the run — which is why each step dumps what it saw before giving up,
+    and why failing here is a note. The cross-source assertions are simply skipped if the grant
+    does not land; nothing is claimed that was not seen.
+    """
+    add = scroll_to("folders.add")
+    if add is None:
+        print("the app's add-folder control was not reachable")
+        return False
+    tap(add, settle=3)
+
+    # The picker opens wherever it was last, so get to Browse and then into On My iPhone.
+    for label in ["Browse", "On My iPhone", FOLDER_NAME]:
+        target = None
+        for _ in range(12):
+            tree = describe()
+            target = next(
+                (
+                    element for element in tree
+                    if str(element.get("AXLabel") or "").strip() == label
+                    and is_on_glass(element)
+                ),
+                None
+            )
+            if target is not None:
+                break
+            time.sleep(1)
+        if target is None:
+            dump_tree(f"looking for '{label}' in the picker")
+            return False
+        tap(target, settle=2)
+
+    # The picker's confirm key is labelled for the selection; both spellings have shipped.
+    for label in ["Open", "Done", f"Open \"{FOLDER_NAME}\""]:
+        confirm = next(
+            (
+                element for element in describe()
+                if str(element.get("AXLabel") or "").strip() == label and is_on_glass(element)
+            ),
+            None
+        )
+        if confirm is not None:
+            tap(confirm, settle=3)
+            return True
+
+    dump_tree("looking for the picker's confirm key")
+    return False
+
+
 def labels(tree, limit=120):
     """Every readable line on the screen, in order."""
     out = []
@@ -305,6 +413,29 @@ def main():
         return report()
     shot("01-overview.png")
 
+    # THE CROSSING. The one comparison nothing else on this phone can make: Apple's Duplicates
+    # stops at the photo library's edge and a file browser cannot see inside it at all. So the
+    # same picture, once in the library and once in a folder somebody handed over, is invisible
+    # to both — and until the two analyzers were made to share a decoder it was invisible to
+    # this app as well.
+    #
+    # Everything here is a note rather than a failure. It is the first run that has tried to
+    # populate and grant a folder on a simulator, and a technique that does not work has to say
+    # so without taking down the half of the check that has been working for days.
+    stage("handing over a folder as well")
+    granted_folder = False
+    if place_the_folder() is not None:
+        granted_folder = grant_the_folder()
+    if granted_folder:
+        shot("01b-folder.png")
+        print(f"granted On My iPhone / {FOLDER_NAME}")
+        # The app rescans on a grant; give the folder read time before the plan is read.
+        time.sleep(6)
+    else:
+        notes.append(
+            "the folder could not be granted, so nothing across the library/folder line was checked"
+        )
+
     stage("scanning a library nobody stubbed")
     entry = scroll_to("root.scan")
     if entry is None:
@@ -364,6 +495,26 @@ def main():
 
     for stem in ["photo-3", "photo-4", "clip-11", "clip-12", "clip-13"]:
         notes.append(f"{'found' if stem in labels else 'MISSED'}  {stem} (perceptual pair)")
+
+    if granted_folder:
+        # Hard, both ways. A pair that crosses the line has to be found — it is the app's one
+        # distinctive claim, and a claim nobody checks is a slogan. And the folder file with no
+        # partner anywhere has to stay out, because a matcher that simply paired things across
+        # the line would satisfy the first assertion and be worthless.
+        for stem in ["exported-21", "exported-22"]:
+            if stem not in labels:
+                failures.append(
+                    f"{stem} is the same picture as its copy in the photo library and was not offered"
+                )
+        if "folder-only-23" in labels:
+            failures.append(
+                "folder-only-23 has no partner in either half and was offered for deletion"
+            )
+        if "group.spanssources" not in labels and "photo library" not in labels:
+            notes.append(
+                "a crossing pair was offered but no screen said it crossed — the claim is "
+                "true and unstated"
+            )
 
     stage("deleting, for real")
     before = len(groups)

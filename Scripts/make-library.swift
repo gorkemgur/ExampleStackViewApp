@@ -96,14 +96,50 @@ func draw(scene: Int, width: Int, height: Int) -> CGImage? {
 
 func CGColorSpaceDeviceRGB() -> CGColorSpace { CGColorSpaceCreateDeviceRGB() }
 
+/// Dates, because everything in this fixture used to be born the second it was written.
+///
+/// `simctl addmedia` reads EXIF and gives the asset that `creationDate`, so a picture written
+/// with a date in 2019 arrives in the library as a picture from 2019. Without it every asset in
+/// the fixture shared one timestamp to the second, which quietly made three things untestable:
+/// "Oldest" and "Newest" sorted a pile that had no order, the keeper scorer's age tie-break
+/// never ran, and a library that looks nothing like anybody's real one was the only library
+/// this app had ever been run against.
+let calendar = Calendar(identifier: .gregorian)
+
+func taken(yearsAgo: Int, day: Int) -> Date {
+    var components = DateComponents()
+    components.year = calendar.component(.year, from: Date()) - yearsAgo
+    components.month = 1 + (day % 12)
+    components.day = 1 + (day % 27)
+    components.hour = 9 + (day % 10)
+    components.minute = day % 60
+    return calendar.date(from: components) ?? Date()
+}
+
+let exifFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    return formatter
+}()
+
 @discardableResult
-func writeJPEG(_ image: CGImage, to url: URL, quality: Double) -> Bool {
+func writeJPEG(_ image: CGImage, to url: URL, quality: Double, taken date: Date? = nil) -> Bool {
     guard let destination = CGImageDestinationCreateWithURL(
         url as CFURL, UTType.jpeg.identifier as CFString, 1, nil
     ) else { return false }
-    CGImageDestinationAddImage(destination, image, [
-        kCGImageDestinationLossyCompressionQuality: quality
-    ] as CFDictionary)
+
+    var properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: quality]
+    if let date {
+        let stamp = exifFormatter.string(from: date)
+        properties[kCGImagePropertyExifDictionary] = [
+            kCGImagePropertyExifDateTimeOriginal: stamp,
+            kCGImagePropertyExifDateTimeDigitized: stamp
+        ]
+        properties[kCGImagePropertyTIFFDictionary] = [kCGImagePropertyTIFFDateTime: stamp]
+    }
+
+    CGImageDestinationAddImage(destination, image, properties as CFDictionary)
     return CGImageDestinationFinalize(destination)
 }
 
@@ -182,11 +218,19 @@ func note(_ line: String) {
     print(line)
 }
 
+/// The half that goes into a folder the user hands over, rather than into the photo library.
+///
+/// `addmedia` takes the first; the second is copied into a directory the app is granted through
+/// the document picker. Two piles, built from one generator, so the *same picture* can exist on
+/// both sides of the line the app is claiming to see across.
+let folder = directory.appendingPathComponent("folder", isDirectory: true)
+try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
 // Photographs. Scenes 1-4 have partners; 5-8 do not.
 for scene in 1...8 {
     guard let full = draw(scene: scene, width: 2400, height: 1800) else { continue }
     let original = directory.appendingPathComponent("photo-\(scene).jpg")
-    writeJPEG(full, to: original, quality: 0.95)
+    writeJPEG(full, to: original, quality: 0.95, taken: taken(yearsAgo: 1 + scene % 5, day: scene * 7))
 
     switch scene {
     case 1, 2:
@@ -199,11 +243,53 @@ for scene in 1...8 {
         // Half the size, a third of the quality: nothing in the metadata says these are the
         // same picture. Only the perceptual hash can say it.
         if let small = scaled(full, width: 1200, height: 900) {
-            writeJPEG(small, to: directory.appendingPathComponent("photo-\(scene)-resend.jpg"), quality: 0.45)
+            writeJPEG(
+                small,
+                to: directory.appendingPathComponent("photo-\(scene)-resend.jpg"),
+                quality: 0.45,
+                taken: taken(yearsAgo: 1, day: scene * 3)
+            )
             note("resend   photo-\(scene).jpg ≈ photo-\(scene)-resend.jpg")
         }
     default:
         note("single   photo-\(scene).jpg")
+    }
+}
+
+// THE CROSSING. Scenes 21-22 go into the photo library and, as a *different encoding of the
+// same picture*, into the folder — which is what actually happens to a photograph somebody
+// exported once: it comes back smaller, renamed, and with a new date.
+//
+// Scene 23 is the control: it exists only in the folder, so it has no partner anywhere and
+// must produce no group. Without it a matcher that simply paired everything across the line
+// would pass.
+for scene in 21...23 {
+    guard let full = draw(scene: scene, width: 2400, height: 1800) else { continue }
+
+    if scene <= 22 {
+        writeJPEG(
+            full,
+            to: directory.appendingPathComponent("crossing-\(scene).jpg"),
+            quality: 0.95,
+            taken: taken(yearsAgo: 3, day: scene)
+        )
+        if let small = scaled(full, width: 1600, height: 1200) {
+            writeJPEG(
+                small,
+                to: folder.appendingPathComponent("exported-\(scene).jpg"),
+                quality: 0.6,
+                taken: taken(yearsAgo: 1, day: scene)
+            )
+        }
+        note("crossing crossing-\(scene).jpg (library) ≈ exported-\(scene).jpg (folder)")
+    } else {
+        writeJPEG(
+            full,
+            to: folder.appendingPathComponent("folder-only-\(scene).jpg"),
+            quality: 0.9,
+            taken: taken(yearsAgo: 2, day: scene)
+        )
+        note("single   folder-only-\(scene).jpg (folder, no partner anywhere)")
     }
 }
 
@@ -226,8 +312,10 @@ for scene in 11...15 {
 let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
 let photos = files.filter { $0.hasSuffix(".jpg") }.count
 let videos = files.filter { $0.hasSuffix(".mov") }.count
+let granted = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
 note("")
-note("\(photos) photos and \(videos) videos; 7 groups expected, 7 items on offer")
+note("\(photos) photos and \(videos) videos for the library, \(granted.count) files for the folder")
+note("9 groups expected once the folder is granted, 9 items on offer")
 
 try? manifest.joined(separator: "\n").write(
     to: directory.appendingPathComponent("EXPECTED.txt"), atomically: true, encoding: .utf8

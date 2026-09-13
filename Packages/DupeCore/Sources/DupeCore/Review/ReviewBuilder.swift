@@ -25,6 +25,33 @@ public struct ReviewGroup: Sendable, Identifiable, Equatable {
 
     public var bytes: Int64 { candidates.reduce(Int64(0)) { $0 + $1.bytes } }
     public var candidateIDs: [String] { candidates.map(\.id) }
+
+    /// True when this group holds the same picture in the photo library *and* in a folder the
+    /// user handed over.
+    ///
+    /// The one comparison nothing else on the phone makes. Apple's Duplicates looks inside the
+    /// photo library and stops at its edge; a file manager looks at files and cannot see the
+    /// library at all. So the copy you exported to Files, or saved out of a chat, or pulled off
+    /// a camera into a folder, is invisible to both — and it is the duplicate people are most
+    /// sure they do not have.
+    ///
+    /// It was invisible to this app too, for a subtler reason: the two halves fingerprinted
+    /// pictures with two different downsamplers, so the same photograph indexed both ways did
+    /// not necessarily land on the same fingerprint. That is fixed; this is the flag that says
+    /// so on screen, and the sentence beside it is the only reason a person would believe the
+    /// app looked anywhere their own eyes had not.
+    public var spansLibraryAndFolders: Bool {
+        var sawLibrary = false
+        var sawFolder = false
+        for item in items {
+            switch item.source {
+            case .photoLibrary: sawLibrary = true
+            case .fileFolder: sawFolder = true
+            }
+            if sawLibrary && sawFolder { return true }
+        }
+        return false
+    }
 }
 
 /// A tier's worth of groups.

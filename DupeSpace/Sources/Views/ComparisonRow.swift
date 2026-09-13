@@ -37,8 +37,26 @@ enum ComparisonMetrics {
                 label: "Kept because",
                 keeperValue: keepReason(keeper),
                 candidateValue: keepReason(candidate)
+            ),
+            // Last, and usually the same on both sides — which is exactly why it earns a row.
+            // When it *differs* the highlights above pull it out on their own, and that is the
+            // one comparison in this app that nothing else on the phone can make: Apple's own
+            // Duplicates looks inside the photo library and stops there. The copy you exported
+            // to Files and forgot about is invisible to it and, until this row existed, to
+            // anyone reading this table too.
+            ComparisonMetric(
+                label: "Where",
+                keeperValue: whereItLives(keeper),
+                candidateValue: whereItLives(candidate)
             )
         ]
+    }
+
+    static func whereItLives(_ item: MediaItem) -> String {
+        switch item.source {
+        case .photoLibrary: return "Photo library"
+        case .fileFolder: return "A folder you added"
+        }
     }
 
     private static let dateFormatter: DateFormatter = {
