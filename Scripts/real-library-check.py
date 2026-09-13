@@ -25,7 +25,7 @@ bitrate — are reported rather than required on this first pass. They depend on
 and a threshold is a judgement to be looked at with real numbers in front of it, not a thing to
 assert before anyone has seen one.
 
-  python3 Scripts/real-library-check.py <udid> <library dir> <artifacts dir>
+  python3 Scripts/real-library-check.py <udid> <library dir> <artifacts dir> [--setup-only]
 """
 import json
 import os
@@ -34,9 +34,17 @@ import subprocess
 import sys
 import time
 
-UDID = sys.argv[1]
-LIBRARY = sys.argv[2]
-OUT_DIR = sys.argv[3] if len(sys.argv) > 3 else "artifacts/real"
+#: `--setup-only` loads the device and stops: media into Photos, the permission granted, the
+#: folder half written into the Files app's storage. It exists because the one thing this
+#: driver cannot do — hand that folder over through Apple's document picker — has to be done
+#: by `DupeSpaceUITests/CrossSourceUITests`, which needs the device already loaded and needs
+#: to run before anything deletes from it.
+SETUP_ONLY = "--setup-only" in sys.argv
+POSITIONAL = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
+
+UDID = POSITIONAL[0]
+LIBRARY = POSITIONAL[1]
+OUT_DIR = POSITIONAL[2] if len(POSITIONAL) > 2 else "artifacts/real"
 BUNDLE_ID = "com.gorkemgur.dupespace"
 
 # The folder half's name on the device, which is also what the picker shows and what the
@@ -253,7 +261,16 @@ def place_the_folder():
         print("no folder half was generated")
         return None
 
+    # A simulator that has never shown the Files app has no container to write into, and
+    # `get_app_container` says "No such file or directory" rather than anything about Files.
+    # Launching it once creates the container; terminating it means the copy below is not
+    # racing a running file provider.
     found = run(["xcrun", "simctl", "get_app_container", UDID, "com.apple.DocumentsApp", "data"])
+    if found.returncode != 0:
+        run(["xcrun", "simctl", "launch", UDID, "com.apple.DocumentsApp"])
+        time.sleep(3)
+        run(["xcrun", "simctl", "terminate", UDID, "com.apple.DocumentsApp"])
+        found = run(["xcrun", "simctl", "get_app_container", UDID, "com.apple.DocumentsApp", "data"])
     if found.returncode != 0:
         print(f"the Files app has no container here: {found.stderr.strip()[:200]}")
         return None
@@ -351,6 +368,19 @@ def main():
     if granted.returncode != 0:
         notes.append(f"privacy grant exited {granted.returncode}")
 
+    # Placed here rather than after launch because it has nothing to do with the app: it is a
+    # write into another process's container, and `--setup-only` has to be able to stop
+    # immediately after it.
+    stage("putting the folder half where a picker could reach it")
+    placed = place_the_folder() is not None
+
+    if SETUP_ONLY:
+        # The device is loaded. Whatever runs next — CrossSourceUITests — does the part this
+        # driver cannot.
+        if not placed:
+            notes.append("the folder half was not placed, so the crossing test has nothing to grant")
+        return report()
+
     stage("launching with no fixtures at all")
     run(["xcrun", "simctl", "terminate", UDID, BUNDLE_ID])
     time.sleep(1)
@@ -384,35 +414,33 @@ def main():
         return report()
     shot("01-overview.png")
 
-    # THE CROSSING. The one comparison nothing else on this phone can make: Apple's Duplicates
-    # stops at the photo library's edge and a file browser cannot see inside it at all. So the
-    # same picture, once in the library and once in a folder somebody handed over, is invisible
-    # to both — and until the two analyzers were made to share a decoder it was invisible to
-    # this app as well.
-    #
-    # Everything here is a note rather than a failure. It is the first run that has tried to
-    # populate and grant a folder on a simulator, and a technique that does not work has to say
-    # so without taking down the half of the check that has been working for days.
-    stage("putting the folder half where a picker could reach it")
-    # Placed, not granted. Writing into the Files app's container works and the files are on
-    # the device; walking Apple's document picker afterwards does not, and cannot:
-    # `UIDocumentPickerViewController` is hosted out of process and `idb describe-all` sees only
-    # the application under test. The tree at the failing step was one line long.
+    # Did the crossing test get the folder handed over before this driver started? Read it off
+    # the screen rather than assume it: `CrossSourceUITests` reinstalls the app to run, and
+    # whether a grant made in that run survives into this one is exactly the sort of thing that
+    # must be observed rather than believed.
+    granted_folder = FOLDER_NAME.lower() in " ".join(labels(describe(), limit=400)).lower()
+    print(
+        f"the folder half is {'granted' if granted_folder else 'not granted'} in this run"
+        + ("" if granted_folder else " — nothing across the library/folder line will be checked")
+    )
+    if not granted_folder:
+        notes.append(
+            "no granted folder was on the overview, so nothing across the library/folder line "
+            "was checked here; CrossSourceUITests is what proves that half"
+        )
+
+    # THE CROSSING is no longer walked from here. Writing the folder into the Files app's
+    # container works and happens above; walking Apple's document picker afterwards does not,
+    # and cannot: `UIDocumentPickerViewController` is hosted out of process and
+    # `idb describe-all` sees only the application under test. The tree at the failing step was
+    # one line long.
     #
     #     --- what was on the screen at looking for 'Browse' in the picker: 1 elements
     #         Application: id=None label='DupeSpace'
     #
-    # So the walk is gone. It was searching for three labels twelve times apiece, every run,
-    # to arrive at a conclusion we already have — about a minute of a job that had grown to
-    # fourteen. The placement stays because it works, and whatever drives the picker next
-    # (XCUITest can reach system UI by bundle identifier; idb cannot) will need the files
-    # already sitting there.
-    granted_folder = False
-    if place_the_folder() is not None:
-        notes.append(
-            f"the folder half is on the device at On My iPhone / {FOLDER_NAME}; granting it "
-            "needs XCUITest rather than idb, so nothing across the library/folder line was checked"
-        )
+    # XCUITest can address system UI by bundle identifier. So the granting moved to
+    # `DupeSpaceUITests/CrossSourceUITests`, which runs on this same device before this driver
+    # does, and the placement stayed here because it works.
 
     stage("scanning a library nobody stubbed")
     entry = scroll_to("root.scan")

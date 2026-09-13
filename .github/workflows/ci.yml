@@ -392,6 +392,117 @@ jobs:
       - name: Check the page
         run: python3 Scripts/check-site.py docs/index.html
 
+  crossing:
+    name: A folder and a library, crossed
+    runs-on: macos-15
+    # The app's one distinctive claim, on its own runner.
+    #
+    # The same picture in the photo library and in a folder somebody handed over. Apple's
+    # Duplicates stops at the library's edge; a file browser cannot see inside it at all. So
+    # until this job existed, the only thing in this repository that proved the crossing was a
+    # unit test over hand-built fixtures — the matcher's arithmetic, never the two real
+    # analyzers reading two real files through two different frameworks.
+    #
+    # It is not folded into `real` because that job deletes from the library it just built, and
+    # a proof that has to run before the deletions is a proof that has to run somewhere else.
+    # Nothing here waits on anything: it is ~7 minutes beside a 12-minute critical path.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick a simulator
+        id: simulator
+        run: echo "udid=$(python3 Scripts/pick-simulator.py)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .derived
+          key: crossing-derived-${{ runner.os }}-${{ hashFiles('DupeSpace/Sources/**/*.swift', 'Shared/**/*.swift', 'DupeSpaceWidgets/**/*.swift', 'Packages/DupeCore/Sources/**/*.swift', 'project.yml') }}
+          restore-keys: |
+            crossing-derived-${{ runner.os }}-
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath .derived \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee xcodebuild.log
+
+      # The same fixture the `real` job uses, and the crossing pair is the point of it:
+      # `crossing-21` goes into the photo library, `exported-21` — the same picture, smaller,
+      # renamed, redated — into the folder half, and `folder-only-23` into the folder with no
+      # partner anywhere, so that a matcher which simply paired things across the line would
+      # be caught rather than congratulated.
+      - name: Build a library with a crossing pair in it
+        run: swift Scripts/make-library.swift artifacts/library
+
+      # `--setup-only`: media into Photos, the permission granted, and the folder half written
+      # into the Files app's own container under `File Provider Storage`, which is what "On My
+      # iPhone" shows. There is no `simctl addfile`, and the picker can create an empty folder
+      # but not fill one — writing into that container from the host is the only way in.
+      # No idb here: every one of those is `simctl`, so this job skips the idb-companion bottle
+      # and the pipx install entirely.
+      - name: Load the device
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
+          xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
+          python3 Scripts/real-library-check.py "${{ steps.simulator.outputs.udid }}" artifacts/library artifacts/crossing --setup-only
+
+      # The part idb cannot do. `UIDocumentPickerViewController` is hosted out of process, so
+      # `idb describe-all` sees a one-line tree with only the app in it; XCUITest addresses
+      # system UI by bundle identifier and walks the real picker.
+      - name: Grant the folder and scan across it
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath .derived \
+            -resultBundlePath TestResults.xcresult \
+            -only-testing:DupeSpaceUITests/CrossSourceUITests \
+            -parallel-testing-enabled NO \
+            -enableCodeCoverage NO \
+            2>&1 | tee -a xcodebuild.log
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-crossing
+          path: TestResults.xcresult
+          retention-days: 7
+
+      - name: What actually failed
+        if: failure()
+        run: |
+          echo "::group::Compile errors"
+          grep -nE "error:" xcodebuild.log | grep -v "Checking existence" | sort -u | head -40 || echo "none"
+          echo "::endgroup::"
+          echo "::group::Test failures"
+          python3 Scripts/why-tests-failed.py TestResults.xcresult xcodebuild.log
+          echo "::endgroup::"
+          echo "::group::Verdict"
+          grep -nE "\*\* [A-Z ]+ \*\*" xcodebuild.log | tail -5 || true
+          echo "::endgroup::"
+
   real:
     name: A real Photos library
     runs-on: macos-15

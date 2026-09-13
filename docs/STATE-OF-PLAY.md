@@ -1,6 +1,7 @@
 # State of play
 
-Written 13 September 2026, updated after CI run 146 — the first fully green run. Branch
+Written 13 September 2026, updated after CI run 146 — the first fully green run — and again
+when the cross-source proof was moved out of the idb driver and into XCUITest. Branch
 `claude/selam-dr571g`.
 
 This is a handover, not a summary. It is organised by *how much we know*, because that turned
@@ -68,7 +69,13 @@ Code is written and reviewed. Nothing has run it end to end.
 DupeCore tests (two of which assert it is *not* set — a claim printed unconditionally is
 decoration). A "Where" row in the comparison table, and a line on the group screen when a group
 holds both. The engine change underneath it is proven; *that a library item and a folder item
-actually land in one group* is not. See §4 for why.
+actually land in one group* is not — see §4 for why it could not be, and for the route that is
+now taken.
+
+The proof itself is written and wired up: `DupeSpaceUITests/CrossSourceUITests` and the
+`crossing` CI job. **It has not returned a verdict yet.** Until it does, this paragraph stays
+in §2, because a test that has never run is a plan. When it goes green it moves to §1 and the
+"C" feature stops being a claim.
 
 **The five UI tests are green** as of run 146, and what they cost is worth keeping. Three
 separate causes, none of which was the thing it looked like:
@@ -161,9 +168,18 @@ of them failed:
   the application under test. The picker's own UI is invisible to it. This is not a timing or
   scrolling problem and no amount of waiting fixes it.
 
-  **The lead worth trying next:** XCUITest *can* reach system UI via
-  `XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore")`. So the cross-source
-  proof probably belongs in `DupeSpaceUITests`, not in the idb driver. Untried.
+  **The split that came out of it.** XCUITest *can* reach system UI by bundle identifier, so
+  the work is divided along the line the tools actually draw: the Python driver keeps the
+  placement, because writing into another process's container is a `simctl` job and it works,
+  and `DupeSpaceUITests/CrossSourceUITests` does the granting, because walking Apple's picker
+  needs `XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore")`.
+
+  `real-library-check.py --setup-only` is the seam: media into Photos, the permission granted,
+  the folder written, stop. The `crossing` job runs that, then the XCUITest, on its own
+  simulator — not folded into `real`, because `real` deletes from the library it just built and
+  a proof that must run *before* the deletions has to run somewhere else. The picker walk was
+  deleted from the driver rather than left failing: it was searching for three labels twelve
+  times apiece, every run, to reach a conclusion already in hand.
 
 **iOS has no trash inside an app's container.** `FileManager.trashItem` refuses with
 `NSCocoaErrorDomain` 3328, *"Trashing is not supported since this is a non-public location"*,
@@ -232,7 +248,7 @@ a script driving a simulator. No person has held this app.
 
 ## 7. The pipeline
 
-Seven jobs (`.github/workflows/ci.yml`). `concurrency.cancel-in-progress: true` — **a push
+Eight jobs (`.github/workflows/ci.yml`). `concurrency.cancel-in-progress: true` — **a push
 cancels the run in flight**, which cost five separate answers in one day. Batch changes; push
 once. The times below are the jobs' own; run 140 sat in the queue for eighteen minutes before
 any of them started, which no table can predict.
@@ -244,6 +260,7 @@ any of them started, which no table can predict.
 | `compile` | the one-minute verdict, and the only Release build | 2 m 20 |
 | `app` | simulator unit tests, 172 tests | 6 m 00 |
 | `ui` ×2 | XCUITest, sharded by measured cost | 6 m 48 / 7 m 14 |
+| `crossing` | the library/folder line, through the real document picker | first run |
 | `real` | **the one that finds real bugs** — real media, real PhotoKit, real deletion | 10 m 52 |
 | `idb` | screenshots and the layout/motion audit | 11 m 59 |
 
@@ -316,9 +333,12 @@ thing; 7 jobs should be 4–5.
 In order, and the first one is the one that matters:
 
 1. ~~Get `ui` green.~~ Done in run 146.
-2. Move the folder grant into `DupeSpaceUITests` using
-   `XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore")`. That closes the
-   cross-source proof, which is the app's one distinctive claim.
+2. ~~Move the folder grant into `DupeSpaceUITests`.~~ Written: `CrossSourceUITests` and the
+   `crossing` job. **Read its first run before believing it.** The parts most likely to be
+   wrong are Apple's own, and neither can be checked from here: whether the picker opens on
+   *Browse* or somewhere else on a fresh simulator, and whether the folder written into the
+   Files container shows up under *On My iPhone* at all. Both failure paths dump the picker's
+   element tree, so one run should say which.
 3. Fix `real-library-check.py` so it stops reporting the clips as missing — or find out they
    genuinely are.
 4. Run it on a phone and answer the trashing question.
