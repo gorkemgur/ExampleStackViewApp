@@ -463,6 +463,13 @@ jobs:
           set -euo pipefail
           xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
           xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
+          # INSTALLED FIRST, AND THAT IS THE POINT. `simctl privacy grant photos <bundle>` has
+          # nothing to grant to if the app is not on the device, and in this job xcodebuild
+          # installs it later, during the test step. So the grant was a no-op on every run: the
+          # app came up against its permission wall, read a short library, and offered two
+          # groups where the `real` job — which installs before it grants — offers four.
+          xcrun simctl install "${{ steps.simulator.outputs.udid }}" \
+            .derived/Build/Products/Debug-iphonesimulator/DupeSpace.app
           mkdir -p artifacts/crossing
           # Kept, because the tail is the only part of a log anybody reads first and this step's
           # output is two thousand lines above it. Which provider directory "On My iPhone" is

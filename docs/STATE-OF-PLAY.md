@@ -339,6 +339,11 @@ thing; 7 jobs should be 4–5.
   because both sides of every comparison are flipped identically.
 - `try XCTUnwrap(await …)` does not compile: autoclosures cannot carry `await`.
 - GitHub refuses any file over 100 MB. Do not commit `.mov`.
+- **`simctl privacy grant <service> <bundle>` needs the app already installed.** It exits 0
+  either way. The `crossing` job granted photo access before xcodebuild installed the app, so
+  every run of it scanned from behind the permission wall and offered two groups where the
+  `real` job — which installs first — offers four. A short library looks exactly like a broken
+  matcher.
 - The DupeCore test factory is `Fixtures`, not `TestSupport`.
 - **"On My iPhone" is not the Files app's data container.** It is served by
   `com.apple.FileProvider.LocalStorage`, and on a simulator the directories are

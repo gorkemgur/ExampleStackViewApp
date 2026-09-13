@@ -127,6 +127,24 @@ final class CrossSourceUITests: XCTestCase {
 
         require("storage.headline", in: app, timeout: 120, "the app never got past launch")
 
+        // MARK: The permission, actually granted
+
+        // Belt and braces for the thing that made run 154 read a short library. The job grants
+        // photo access with `simctl` before this runs, but a grant is only as good as the app
+        // being installed when it is made, and a reinstall or a fresh container can lose it.
+        // Rather than trust it, look: the app draws this card whenever access is anything other
+        // than authorised, and a scan run behind it compares a fraction of the library and
+        // offers a fraction of the groups — which looks like a matcher fault and is not one.
+        if element("access.headline", in: app).exists {
+            let ask = element("access.button", in: app)
+            if ask.exists { ask.tap() }
+            _ = answerSystemPrompt(
+                ["Allow Full Access", "Allow Access to All Photos", "Allow"], timeout: 25
+            )
+        }
+        let wall = element("access.headline", in: app).exists
+        print("the permission wall is \(wall ? "still up — the library will be short" : "down")")
+
         // MARK: Hand the folder over
 
         let add = require("folders.add", in: app, timeout: 30, "no way to add a folder")
@@ -313,6 +331,20 @@ final class CrossSourceUITests: XCTestCase {
         guard scan.exists else { return }
         scan.tap()
 
+        // Read the ledger before starting, and keep it.
+        //
+        // This screen states how many items are indexed and how many will actually be opened,
+        // and that number is the one thing that separates the two ways this test can fail:
+        // either the granted folder's three files are not in the scan at all — a grant or an
+        // enumeration problem — or they are, and the matcher did not pair them across the line
+        // — a threshold problem. Run 154 failed at the very end with "Groups offered: 2", which
+        // is exactly the library's own byte-identical pairs, and could not say which of the two
+        // it was. Guessing between them costs a run either way, so it is carried to the
+        // failure instead.
+        let plan = element("scan.plan.summary", in: app)
+        let ledger = plan.waitForExistence(timeout: 30) ? plan.label : "(the plan never appeared)"
+        print("the scan is about to run: \(ledger)")
+
         let start = require("scan.start", in: app, timeout: 30, "the scan screen did not open")
         guard start.exists else { return }
         start.tap()
@@ -363,10 +395,34 @@ final class CrossSourceUITests: XCTestCase {
         // crossing pair that is never found means the app cannot do the one thing no other
         // cleaner does, and a crossing pair found but never announced means the person has no
         // reason to believe it looked anywhere their own eyes had not.
-        XCTAssertTrue(
-            crossed,
-            "no group on the review screen said it spanned the photo library and a folder, so "
-            + "nothing crossed the line the whole app is built on. Groups offered: \(rows.count)"
-        )
+        if !crossed {
+            // What was offered, by name, and what the scan had to work with. Between them these
+            // say which half is broken without anybody having to run it again.
+            let offered = (0 ..< min(rows.count, 20))
+                .map { rows.element(boundBy: $0) }
+                .filter { $0.exists }
+                .map { $0.label }
+            let fromTheFolder = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "label CONTAINS[c] 'exported-'"))
+                .firstMatch
+                .exists
+
+            XCTFail(
+                """
+                no group said it spanned the photo library and a folder, so nothing crossed the \
+                line the whole app is built on.
+
+                the scan's own ledger:   \(ledger)
+                groups offered:          \(rows.count) — \(offered)
+                anything named exported- on the review screen: \(fromTheFolder)
+                the permission wall was \(wall ? "UP — the library itself was short" : "down")
+
+                If the ledger counts the folder's three files and nothing named exported- is \
+                offered, the files were read and the matcher did not pair them: a threshold \
+                question. If the ledger does not count them, the grant is not reaching \
+                `FileMediaLibrary` and the matcher is innocent.
+                """
+            )
+        }
     }
 }
