@@ -78,6 +78,14 @@ struct RootView: View {
                             .cardEntrance()
                     }
 
+                    // Before the limits card, because this is weight the app *can* account for
+                    // and merely cannot remove — which is a different and more useful thing to
+                    // be told than what it cannot see at all.
+                    if !model.secondResources.isEmpty {
+                        SecondResourcesCardView(resources: model.secondResources)
+                            .cardEntrance()
+                    }
+
                     LimitsCardView(cloudOnlyBytes: model.cloudOnlyBytes)
                         .cardEntrance()
 

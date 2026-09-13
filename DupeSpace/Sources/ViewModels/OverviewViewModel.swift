@@ -17,6 +17,8 @@ final class OverviewViewModel: ObservableObject {
     @Published private(set) var storage: StorageSnapshot?
     @Published private(set) var items: [MediaItem] = []
     @Published private(set) var breakdown: [CategoryBreakdown] = []
+    /// What the library carries that nobody can remove. See `SecondResources`.
+    @Published private(set) var secondResources = SecondResources()
     @Published private(set) var folders: [GrantedFolder] = []
     /// Why the last folder someone picked was not taken. Cleared as soon as one is.
     @Published private(set) var folderMessage: String?
@@ -142,6 +144,7 @@ final class OverviewViewModel: ObservableObject {
                 let loaded = try await library.loadInventory()
                 items = loaded
                 breakdown = InventoryAnalyzer.breakdown(for: loaded)
+                secondResources = SecondResources.tally(loaded)
                 libraryBytes = InventoryAnalyzer.totalBytes(loaded)
                 cloudOnlyBytes = InventoryAnalyzer.cloudOnlyBytes(loaded)
                 largestItems = InventoryAnalyzer.largest(loaded, limit: 5)

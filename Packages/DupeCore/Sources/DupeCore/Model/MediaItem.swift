@@ -30,6 +30,16 @@ public struct MediaItem: Sendable, Hashable, Identifiable {
     /// Bytes of the paired Live Photo movie, if any.
     public var pairedVideoByteSize: Int64
 
+    /// The RAW half of a RAW+JPEG pair, in bytes. Zero for everything else.
+    ///
+    /// `byteSize` is the *primary* resource — the JPEG — so without this a ProRAW photograph
+    /// reports itself as the few megabytes of its preview while occupying twenty-five to
+    /// seventy-five. It is the largest single saving on an iPhone and Photos gives no way to
+    /// take it: the RAW is `PHAssetResourceTypeAlternatePhoto`, and `PHAssetChangeRequest` has
+    /// no request that removes one resource of an asset. So this number exists to be *said*,
+    /// not acted on. See `SecondResources`.
+    public var alternatePhotoByteSize: Int64
+
     public var pixelWidth: Int
     public var pixelHeight: Int
     /// Seconds. Zero for stills.
@@ -59,6 +69,7 @@ public struct MediaItem: Sendable, Hashable, Identifiable {
         displayName: String = "",
         byteSize: Int64 = 0,
         pairedVideoByteSize: Int64 = 0,
+        alternatePhotoByteSize: Int64 = 0,
         pixelWidth: Int = 0,
         pixelHeight: Int = 0,
         duration: Double = 0,
@@ -80,6 +91,7 @@ public struct MediaItem: Sendable, Hashable, Identifiable {
         self.displayName = displayName
         self.byteSize = byteSize
         self.pairedVideoByteSize = pairedVideoByteSize
+        self.alternatePhotoByteSize = alternatePhotoByteSize
         self.pixelWidth = pixelWidth
         self.pixelHeight = pixelHeight
         self.duration = duration

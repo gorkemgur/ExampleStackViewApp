@@ -34,6 +34,7 @@ These run in CI on every push, through the real system frameworks.
 | No false positives | no singleton has ever been offered |
 | `GrayImageRenderer`, `VideoFrameSampler`, `FileSystemOriginalExporter` | `AdapterTests`, 13 tests, real H.264 written by `AVAssetWriter` |
 | Fingerprint agreement across halves | `ResendFingerprintTests.testBothHalvesFingerprintTheSamePictureTheSameWay` |
+| Second resources — RAW halves and Live Photo video | `SecondResourcesTests`, 5 tests, including that an asset which *claims* to be a Live Photo but has no measured video is not counted |
 | **Cross-source duplicates (the "C" feature)** | `crossing` job: a real folder granted through Apple's own document picker, 31 real items scanned, and a group that holds a library photograph and its folder copy *and says so*. Green from run 157 |
 | `DupeCore` logic | 301 tests |
 | Every screen and the whole path through them | 23 UI tests, all green in run 146 |
@@ -115,25 +116,26 @@ in `docs/ui-audit.md`), never used by a person.
 
 Ordered. The first two share one mechanism, which is why they are ordered this way.
 
-**RAW + JPEG pairs.** The largest per-item saving on an iPhone and Apple offers no way to take
-it. In the RAW+JPEG model the JPEG is `PHAssetResourceType.photo` and the RAW is
-`.alternatePhoto`; a ProRAW file is 25–75 MB against a few MB for the JPEG. Photos has no
-command to delete one half — the only official route is export the pair and reimport the half
-you want.
+**RAW + JPEG and Live Photo weight — the half that could be built is built; the half that
+cannot, is not.** Both are the same sentence: *this asset carries a second resource you have
+never used.* In a RAW+JPEG asset the JPEG is `PHAssetResourceType.photo` and the RAW is
+`.alternatePhoto`, 25–75 MB against a few; a Live Photo carries ~3 s of video, typically 3–5×
+the still.
 
-**Live Photo video weight.** A Live Photo is a still plus ~3 s of video, typically 3–5× the
-still. `pairedVideoByteSize` is already read by the app and used only in arithmetic. Nobody
-tells you what it costs.
+**Built:** `SecondResources` in DupeCore tallies both (5 tests), `PhotoKitMediaLibrary` reads
+the `.alternatePhoto` size at inventory time — it was not being read at all, so a ProRAW
+photograph reported the few megabytes of its JPEG — and `SecondResourcesCardView` says the
+number on the overview, with what to do instead. No button, because there is nothing to press.
 
-Both are the same sentence — *this asset carries a second resource you have never used* — and
-the same mechanism: create a new asset from the resource you keep, carry over creation date,
-location and favourite, delete the original (which sits in Recently Deleted for 30 days).
-
-⚠️ **Unverified assumption in both.** I could not find an API that deletes a single resource in
-place; `PHAssetChangeRequest` does not appear to offer one. The recreate-and-delete route is the
-only one I can evidence, and it touches the library harder than deleting a copy does. There is
-an open Apple forum thread titled *"addResourceWithType not working for RAW + JPEG"* — that is
-about recreating the *pair*, which is not what we would do, but it has not been ruled out.
+**Not built, and now known to be unbuildable from here:** deleting one half.
+~~⚠️ Unverified assumption~~ — checked, September 2026. `PHAssetChangeRequest` has no request
+that removes one resource of an asset; nothing in PhotoKit does. And the recreate-and-delete
+workaround is worse than this document feared: the Apple forum thread
+*"addResourceWithType not working for RAW + JPEG"* reports that recreating such an asset does
+not work at all. So the only evidenceable route destroys somebody's original in order to
+rebuild it, on a path other developers report as broken — which is exactly what rule 1 forbids.
+**It needs a device, a real ProRAW library and a person who accepts the risk, or it needs an
+API Apple has not shipped.**
 
 **Screenshots by age.** Confirmed trivial:
 
@@ -215,6 +217,12 @@ is the record of what each half cost to learn. Two halves, and only one of them 
   a proof that must run *before* the deletions has to run somewhere else. The picker walk was
   deleted from the driver rather than left failing: it was searching for three labels twelve
   times apiece, every run, to reach a conclusion already in hand.
+
+**PhotoKit cannot delete one resource of an asset.** Checked rather than assumed, September
+2026: `PHAssetChangeRequest` offers no such request, and the workaround — recreate the asset
+from the resource you keep — is reported broken for RAW+JPEG in Apple's own forums. This is why
+§3 ships the sentence and not the button, and it is the difference between "we have not got to
+it" and "it is not there".
 
 **iOS has no trash inside an app's container.** `FileManager.trashItem` refuses with
 `NSCocoaErrorDomain` 3328, *"Trashing is not supported since this is a non-public location"*,

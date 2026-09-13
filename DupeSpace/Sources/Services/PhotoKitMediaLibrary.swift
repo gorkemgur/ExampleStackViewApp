@@ -71,6 +71,12 @@ final class PhotoKitMediaLibrary: MediaLibrary {
         let primary = resources.first { $0.type == .photo || $0.type == .video } ?? resources.first
         let pairedVideo = resources.first { $0.type == .pairedVideo || $0.type == .fullSizePairedVideo }
 
+        // The RAW half of a RAW+JPEG asset. `primary` picks `.photo`, which is the JPEG, so
+        // without this a ProRAW photograph reports the few megabytes of its JPEG and hides the
+        // fifty it is actually using. Read here because `assetResources(for:)` has already been
+        // fetched — asking again per asset would double the cost of the inventory pass.
+        let alternate = resources.first { $0.type == .alternatePhoto }
+
         // An edit leaves adjustment data and a rendered full-size resource behind.
         let isEdited = resources.contains {
             $0.type == .adjustmentData || $0.type == .fullSizePhoto || $0.type == .fullSizeVideo
@@ -83,6 +89,7 @@ final class PhotoKitMediaLibrary: MediaLibrary {
             displayName: primary?.originalFilename ?? asset.localIdentifier,
             byteSize: byteSize(of: primary),
             pairedVideoByteSize: byteSize(of: pairedVideo),
+            alternatePhotoByteSize: byteSize(of: alternate),
             pixelWidth: asset.pixelWidth,
             pixelHeight: asset.pixelHeight,
             duration: asset.duration,
