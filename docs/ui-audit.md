@@ -10,17 +10,17 @@ recording taken across each transition and read frame by frame. See
 
 ## Measurements
 
-- animation: cards entering on launch — 146 frames at ~32fps, 10 moving (peak 90.2 levels), last movement at 4.32s [animated]
+- animation: cards entering on launch — 103 frames at ~23fps, 12 moving (peak 90.2 levels), last movement at 4.24s [animated]
 - overview: Button "History" is 100.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - overview: 66 named elements checked against a 440pt screen
-- animation: live surfaces sheet presenting — 55 frames at ~16fps, 7 moving (peak 122.1 levels), last movement at 0.45s [animated]
+- animation: live surfaces sheet presenting — 48 frames at ~14fps, 6 moving (peak 136.1 levels), last movement at 0.44s [animated]
 - live surfaces: Button "Close" is 67.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - live surfaces: 45 named elements checked against a 440pt screen
-- animation: scan screen pushing in — 97 frames at ~28fps, 6 moving (peak 14.1 levels), last movement at 0.29s [animated]
+- animation: scan screen pushing in — 91 frames at ~26fps, 4 moving (peak 18.8 levels), last movement at 0.19s [animated]
 - scan: 21 named elements checked against a 440pt screen
-- animation: progress card replacing the intro — 15 frames at ~4fps, 5 moving (peak 10.3 levels), last movement at 2.40s [animated]
+- animation: progress card replacing the intro — 14 frames at ~4fps, 4 moving (peak 11.2 levels), last movement at 1.71s [animated]
 - results: 35 named elements checked against a 440pt screen
-- animation: review screen pushing in — 29 frames at ~8fps, 4 moving (peak 20.9 levels), last movement at 0.60s [animated]
+- animation: review screen pushing in — 23 frames at ~7fps, 3 moving (peak 22.2 levels), last movement at 0.61s [animated]
 - review: 46 named elements checked against a 440pt screen
 - overview at accessibility text size: Button "History" is 119.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - overview at accessibility text size: 66 named elements checked against a 440pt screen
