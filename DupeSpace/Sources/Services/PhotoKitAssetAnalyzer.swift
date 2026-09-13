@@ -75,6 +75,26 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
         }
     }
 
+    /// The fingerprint of a photograph, at four times the size the fingerprint itself is.
+    ///
+    /// TWO THINGS WERE WRONG HERE, and the real-library job found them by finding nothing: two
+    /// photographs put into a library as the same picture at half the size and a third of the
+    /// quality were never offered, while the byte-identical pairs and every video pair were.
+    ///
+    /// The first is the size asked for. This requested `GrayImageRenderer.renderSize` — 64,
+    /// which is the size of the *buffer the hash is computed on*. Handing the hasher something
+    /// that has already been reduced to 64 across leaves it nothing to average away: whatever
+    /// aliasing PhotoKit's own reduction introduced is now the signal. `FileAssetAnalyzer` has
+    /// asked for four times the render size since the day it was written, with the reasoning
+    /// spelled out next to it, and this file never got the memo.
+    ///
+    /// The second is worse and had nothing to do with the missing pairs. The matcher compares
+    /// every fingerprint against every other in one sweep — photo-library items and folder
+    /// items together — and the two halves were reducing pictures with two different
+    /// downsamplers at two different sizes. The same photograph, once in Photos and once in a
+    /// folder you handed over, could fail to match itself. So when PhotoKit cannot supply
+    /// something hashable, this falls back to reading the original resource and decoding it
+    /// with the same ImageIO path the folder half uses, and the two halves meet.
     func perceptualHashes(for item: MediaItem) async -> PerceptualHashes? {
         guard let asset = Self.asset(for: item.id) else { return nil }
 
@@ -85,7 +105,7 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
         options.isSynchronous = false
         options.version = .current
 
-        let side = CGFloat(GrayImageRenderer.renderSize)
+        let side = CGFloat(GrayImageRenderer.renderSize * 4)
 
         let image: UIImage? = await withCheckedContinuation { continuation in
             let resumeGuard = ResumeGuard()
@@ -103,17 +123,57 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
             }
         }
 
-        guard
-            let cgImage = image?.cgImage,
-            let gray = GrayImageRenderer.render(cgImage)
+        if let cgImage = image?.cgImage, let gray = GrayImageRenderer.render(cgImage) {
+            return PerceptualHashes(
+                dHash: PerceptualHasher.dHash(gray),
+                pHash: PerceptualHasher.pHash(gray)
+            )
+        }
+
+        return await Self.hashesFromTheOriginal(of: asset)
+    }
+
+    /// When `PHImageManager` returns nothing this code can hash.
+    ///
+    /// It returns `nil` for an asset whose rendition is not available locally, and a `UIImage`
+    /// with no `cgImage` behind it for some others. Either way the previous version of this
+    /// gave up and the scan simply never learned that photograph's fingerprint — silently, and
+    /// indistinguishably from a picture that genuinely matched nothing.
+    ///
+    /// Reading the original resource is more expensive than a cached thumbnail, which is why
+    /// it is the fallback and not the path. Nothing is downloaded: the same
+    /// `isNetworkAccessAllowed = false` applies, and a cloud-only original fails here too —
+    /// correctly, because the scan set those aside before it ever got this far.
+    private static func hashesFromTheOriginal(of asset: PHAsset) async -> PerceptualHashes? {
+        let resources = PHAssetResource.assetResources(for: asset)
+        guard let resource = resources.first(where: { $0.type == .photo })
+            ?? resources.first(where: { $0.type == .fullSizePhoto })
+            ?? resources.first
         else {
             return nil
         }
 
-        return PerceptualHashes(
-            dHash: PerceptualHasher.dHash(gray),
-            pHash: PerceptualHasher.pHash(gray)
-        )
+        let options = PHAssetResourceRequestOptions()
+        options.isNetworkAccessAllowed = false
+
+        let collector = ByteCollector()
+        let failed: Bool = await withCheckedContinuation { continuation in
+            let resumeGuard = ResumeGuard()
+            PHAssetResourceManager.default().requestData(
+                for: resource,
+                options: options,
+                dataReceivedHandler: { collector.append($0) },
+                completionHandler: { error in
+                    guard resumeGuard.claim() else { return }
+                    continuation.resume(returning: error != nil)
+                }
+            )
+        }
+
+        guard !failed else { return nil }
+        let data = collector.take()
+        guard !data.isEmpty else { return nil }
+        return FileAssetAnalyzer.hashes(of: data)
     }
 
     func videoSignature(for item: MediaItem) async -> VideoSignature? {
@@ -166,6 +226,26 @@ private final class DigestAccumulator: @unchecked Sendable {
     func finalize() -> ContentDigest {
         lock.lock(); defer { lock.unlock() }
         return ContentDigest(bytes: Array(hasher.finalize()))
+    }
+}
+
+/// Gathers a resource's bytes as they stream in.
+///
+/// Bounded by one original photograph, which is the only kind of resource this is used for —
+/// the digest path streams into a hasher instead precisely so a video never lands in memory.
+private final class ByteCollector: @unchecked Sendable {
+
+    private let lock = NSLock()
+    private var bytes = Data()
+
+    func append(_ chunk: Data) {
+        lock.lock(); defer { lock.unlock() }
+        bytes.append(chunk)
+    }
+
+    func take() -> Data {
+        lock.lock(); defer { lock.unlock() }
+        return bytes
     }
 }
 

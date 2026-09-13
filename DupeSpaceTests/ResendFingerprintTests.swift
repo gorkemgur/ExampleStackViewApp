@@ -231,6 +231,63 @@ final class ResendFingerprintTests: XCTestCase {
         )
     }
 
+    /// The two halves of the app have to agree about what a picture looks like.
+    ///
+    /// `edges(hashes:)` compares every fingerprint against every other in one sweep, and it
+    /// does not know or care which analyzer produced each one — a photograph from the library
+    /// and a file from a folder you handed over are two rows in the same array. So the same
+    /// picture, indexed both ways, has to come out with the same fingerprint, or the app fails
+    /// to find the most obvious duplicate there is: the photo you exported to Files and then
+    /// forgot about.
+    ///
+    /// It did not, and nobody had asked. `FileAssetAnalyzer` decodes a thumbnail at four times
+    /// the render size, with the reasoning written beside it; `PhotoKitAssetAnalyzer` asked
+    /// `PHImageManager` for the render size itself. Two downsamplers, two sizes, one matcher.
+    func testBothHalvesFingerprintTheSamePictureTheSameWay() throws {
+        let picture = try draw(scene: 3, width: 2400, height: 1800)
+        let url = root.appendingPathComponent("both-halves.jpg")
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(
+            url as CFURL, UTType.jpeg.identifier as CFString, 1, nil
+        ))
+        CGImageDestinationAddImage(destination, picture, [
+            kCGImageDestinationLossyCompressionQuality: 0.95
+        ] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+
+        let fromTheFolder = try XCTUnwrap(
+            FileAssetAnalyzer.hashes(of: url),
+            "the folder half produced no fingerprint at all"
+        )
+        let fromTheBytes = try XCTUnwrap(
+            FileAssetAnalyzer.hashes(of: try Data(contentsOf: url)),
+            "the photo half's fallback produced no fingerprint at all"
+        )
+
+        // Byte-for-byte the same decode, so nothing less than identical is acceptable here.
+        XCTAssertEqual(fromTheFolder.dHash, fromTheBytes.dHash)
+        XCTAssertEqual(fromTheFolder.pHash, fromTheBytes.pHash)
+
+        // And the pair still matches through that path, which is the point of having it.
+        let small = try scaled(picture, width: 1200, height: 900)
+        let resendURL = root.appendingPathComponent("both-halves-resend.jpg")
+        let second = try XCTUnwrap(CGImageDestinationCreateWithURL(
+            resendURL as CFURL, UTType.jpeg.identifier as CFString, 1, nil
+        ))
+        CGImageDestinationAddImage(second, small, [
+            kCGImageDestinationLossyCompressionQuality: 0.45
+        ] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(second))
+
+        let resend = try XCTUnwrap(FileAssetAnalyzer.hashes(of: resendURL))
+        let limit = ScanStrictness.balanced.configuration.similarDistance
+        let d = hammingDistance(fromTheFolder.dHash, resend.dHash)
+        let p = hammingDistance(fromTheFolder.pHash, resend.pHash)
+        XCTAssertLessThanOrEqual(
+            max(d, p), limit,
+            "through the shared decoder the re-send is \(d)/\(p) bits away and the limit is \(limit)"
+        )
+    }
+
     /// Scale alone, with no quality loss, to separate the two halves of what a re-send does.
     ///
     /// If this passes and the pair above fails, the size change is survivable and the JPEG

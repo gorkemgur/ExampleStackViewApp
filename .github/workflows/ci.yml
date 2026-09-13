@@ -142,7 +142,7 @@ jobs:
         run: swift test --package-path Packages/DupeCore
 
   app:
-    name: iOS build and simulator tests
+    name: Unit tests on a simulator
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -197,43 +197,19 @@ jobs:
             2>&1 | tee xcodebuild.log
 
       # The fast half, and the one that catches most of what goes wrong: no app launches, no
-      # scans, no waiting on an accessibility tree.
+      # scans, no waiting on an accessibility tree. Four minutes against the UI half's twenty.
+      #
+      # IT USED TO SHARE A JOB WITH THE SLOW HALF, and that was costing whole mornings. GitHub
+      # serves a job's log only once the job has *finished*, so a unit verdict that was known
+      # at minute six could not be read until minute twenty-six — and every one of those waits
+      # ended with a push that cancelled the run that was about to answer the next question.
+      # Its own job, its own runner, its own simulator. The build is paid twice and it is
+      # cached; the wait was paid every time.
+      #
+      # It also deletes a step. The two runs used to need the device shut down and rebooted
+      # between them, because the UI half clones the simulator and a clone taken from a live
+      # SpringBoard is denied by `SBMainWorkspace`. Separate jobs never share a device.
       - name: Unit tests
-        id: unit
-        run: |
-          set -o pipefail
-          xcodebuild test-without-building \
-            -project DupeSpace.xcodeproj \
-            -scheme DupeSpace \
-            -destination "id=${{ steps.simulator.outputs.udid }}" \
-            -derivedDataPath .derived \
-            -only-testing:DupeSpaceTests \
-            -enableCodeCoverage NO \
-            2>&1 | tee -a xcodebuild.log
-
-      # Between the two runs, because they are not independent.
-      #
-      # `TEST EXECUTE FAILED` with `SBMainWorkspace` denying the launch of
-      # `DupeSpaceUITests.xctrunner`, and not one assertion in the log: the UI half never
-      # started. The unit run leaves the device booted with the app installed and its process
-      # alive; the UI run then asks Xcode to *clone* that device twice, and a clone taken from
-      # a live SpringBoard is where this denial comes from.
-      #
-      # Shut down and boot again, so the clones are taken from a device at rest. Twenty
-      # seconds against a job that costs twelve minutes when it has to be run twice.
-      - name: Settle the simulator
-        if: always() && steps.unit.conclusion != 'skipped'
-        run: |
-          xcrun simctl shutdown "${{ steps.simulator.outputs.udid }}" || true
-          xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
-          xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b || true
-
-      # The slow half. Every one of these launches the app and scans the fixture from scratch,
-      # which is twenty seconds apiece — so they run two simulators at once. `if: always()`
-      # because a unit failure must not hide a UI failure: finding out about them one round
-      # trip at a time is the thing that has actually been costing us.
-      - name: UI tests
-        if: always() && steps.unit.conclusion != 'skipped'
         run: |
           set -o pipefail
           xcodebuild test-without-building \
@@ -242,9 +218,7 @@ jobs:
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath .derived \
             -resultBundlePath TestResults.xcresult \
-            -only-testing:DupeSpaceUITests \
-            -parallel-testing-enabled YES \
-            -maximum-parallel-testing-workers 2 \
+            -only-testing:DupeSpaceTests \
             -enableCodeCoverage NO \
             2>&1 | tee -a xcodebuild.log
 
@@ -254,7 +228,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: xcresult
+          name: xcresult-unit
           path: TestResults.xcresult
           retention-days: 7
 
@@ -276,7 +250,113 @@ jobs:
           echo "::group::Verdict"
           grep -nE "\*\* [A-Z ]+ \*\*" xcodebuild.log | tail -5 || true
           echo "::endgroup::"
+  ui:
+    name: UI tests on a simulator
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
 
+      - name: Select newest Xcode
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick a simulator
+        id: simulator
+        run: echo "udid=$(python3 Scripts/pick-simulator.py)" >> "$GITHUB_OUTPUT"
+
+      # A cold build is two and a half minutes of the six this job takes, every single push,
+      # to recompile files that did not change. The key moves with the sources so a hit is
+      # exact; `restore-keys` falls back to the most recent build of this branch, which is
+      # what makes the *incremental* case work — the common one, where two files changed.
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .derived
+          key: derived-${{ runner.os }}-${{ hashFiles('DupeSpace/Sources/**/*.swift', 'Shared/**/*.swift', 'DupeSpaceWidgets/**/*.swift', 'Packages/DupeCore/Sources/**/*.swift', 'project.yml') }}
+          restore-keys: |
+            derived-${{ runner.os }}-
+
+      # Built once, then run twice. `build-for-testing` is most of the cost of this job, and
+      # running it separately means the unit verdict and the UI verdict do not queue behind
+      # each other's compile.
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          # -enableCodeCoverage NO: instrumenting every file costs about a minute and nothing
+          # in this pipeline reads the coverage. -derivedDataPath: so the cache above has
+          # something to hold on to.
+          xcodebuild build-for-testing \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath .derived \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee xcodebuild.log
+
+      # The slow half. Every one of these launches the app and scans the fixture from scratch,
+      # which is twenty seconds apiece — so they run two simulators at once, which is also why
+      # this job cannot share a device with the unit half: XCTest *clones* the destination to
+      # parallelise, and a clone taken from a simulator the other run left live comes back as
+      # `SBMainWorkspace` denying the launch, with no assertion in the log to explain it.
+      #
+      # A parallel run prints only `Test case '...' failed on 'Clone 1 of ...'`. The assertion,
+      # the file and the line go into the result bundle, which is what `why-tests-failed.py`
+      # reads at the bottom of this job.
+      - name: UI tests
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project DupeSpace.xcodeproj \
+            -scheme DupeSpace \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath .derived \
+            -resultBundlePath TestResults.xcresult \
+            -only-testing:DupeSpaceUITests \
+            -parallel-testing-enabled YES \
+            -maximum-parallel-testing-workers 2 \
+            -enableCodeCoverage NO \
+            2>&1 | tee -a xcodebuild.log
+
+      # Only when something went wrong. It came back at 203 MB on a green run — a fifth of a
+      # gigabyte of coverage and attachment data uploaded so that nobody opens it.
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-ui
+          path: TestResults.xcresult
+          retention-days: 7
+
+      # Last, deliberately.
+      #
+      # This used to run inside the test step, which put it *above* the artifact upload and a
+      # hundred lines of Node deprecation notices — so the tail of the log, which is the only
+      # part anyone reads first, never contained the failure. The whole log is three thousand
+      # lines and the reason is four of them; those four belong at the bottom.
+      - name: What actually failed
+        if: failure()
+        run: |
+          echo "::group::Compile errors"
+          grep -nE "error:" xcodebuild.log | grep -v "Checking existence" | sort -u | head -40 || echo "none"
+          echo "::endgroup::"
+          echo "::group::Test failures"
+          python3 Scripts/why-tests-failed.py TestResults.xcresult xcodebuild.log
+          echo "::endgroup::"
+          echo "::group::Verdict"
+          grep -nE "\*\* [A-Z ]+ \*\*" xcodebuild.log | tail -5 || true
+          echo "::endgroup::"
   site:
     name: Landing page
     runs-on: ubuntu-latest

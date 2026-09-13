@@ -65,7 +65,29 @@ final class FileAssetAnalyzer: AssetAnalyzing {
     /// be unpacked in full to produce a 64-pixel fingerprint.
     static func hashes(of url: URL) -> PerceptualHashes? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return hashes(from: source)
+    }
 
+    /// The same, for bytes already in hand.
+    ///
+    /// `PhotoKitAssetAnalyzer` falls back to this when `PHImageManager` hands it nothing it
+    /// can hash, so a photograph in the library and the same photograph in a folder go through
+    /// one decoder rather than two. That matters more than it looks: the matcher compares
+    /// every fingerprint against every other, photo-library items and folder items in the same
+    /// sweep, so two downsamplers meant the same picture could fail to match itself across the
+    /// two halves of this app.
+    static func hashes(of data: Data) -> PerceptualHashes? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return hashes(from: source)
+    }
+
+    /// The decode both of those share.
+    ///
+    /// `renderSize * 4` and not `renderSize`: the fingerprint is 64 across, and handing the
+    /// hasher a buffer that was *already* 64 across leaves it nothing to average away. Four
+    /// times over is enough headroom that two encodings of one picture land on the same
+    /// fingerprint, and still small enough that nothing large is ever unpacked.
+    private static func hashes(from source: CGImageSource) -> PerceptualHashes? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
