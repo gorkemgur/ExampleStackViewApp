@@ -37,8 +37,8 @@ final class CrossSourceTests: XCTestCase {
 
     func testAGroupHoldingBothIsMarkedAsSuch() {
         let crossing = group([
-            TestSupport.item("in-the-library", source: .photoLibrary),
-            TestSupport.item("in-a-folder", source: .fileFolder)
+            Fixtures.item("in-the-library", source: .photoLibrary),
+            Fixtures.item("in-a-folder", source: .fileFolder)
         ])
         XCTAssertTrue(crossing.spansLibraryAndFolders)
     }
@@ -48,17 +48,17 @@ final class CrossSourceTests: XCTestCase {
     /// single most distinctive thing to say, so it has to be earned every time it is said.
     func testAGroupEntirelyInsideTheLibraryIsNot() {
         let inside = group([
-            TestSupport.item("one", source: .photoLibrary),
-            TestSupport.item("two", source: .photoLibrary),
-            TestSupport.item("three", source: .photoLibrary)
+            Fixtures.item("one", source: .photoLibrary),
+            Fixtures.item("two", source: .photoLibrary),
+            Fixtures.item("three", source: .photoLibrary)
         ])
         XCTAssertFalse(inside.spansLibraryAndFolders)
     }
 
     func testAGroupEntirelyInFoldersIsNotEither() {
         let outside = group([
-            TestSupport.item("one", source: .fileFolder),
-            TestSupport.item("two", source: .fileFolder)
+            Fixtures.item("one", source: .fileFolder),
+            Fixtures.item("two", source: .fileFolder)
         ])
         XCTAssertFalse(outside.spansLibraryAndFolders)
     }
@@ -68,9 +68,9 @@ final class CrossSourceTests: XCTestCase {
     /// and a third that was exported once.
     func testOneFolderCopyAmongLibraryOnesIsEnough() {
         let mixed = group([
-            TestSupport.item("one", source: .photoLibrary),
-            TestSupport.item("two", source: .photoLibrary),
-            TestSupport.item("exported-once", source: .fileFolder)
+            Fixtures.item("one", source: .photoLibrary),
+            Fixtures.item("two", source: .photoLibrary),
+            Fixtures.item("exported-once", source: .fileFolder)
         ])
         XCTAssertTrue(mixed.spansLibraryAndFolders)
     }
