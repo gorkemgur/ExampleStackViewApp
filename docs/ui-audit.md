@@ -10,18 +10,17 @@ recording taken across each transition and read frame by frame. See
 
 ## Measurements
 
-- animation: cards entering on launch — 128 frames at ~28fps, 7 moving (peak 90.2 levels), last movement at 3.80s [animated]
+- animation: cards entering on launch — 164 frames at ~36fps, 16 moving (peak 79.7 levels), last movement at 3.59s [animated]
 - overview: Button "History" is 100.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - overview: 66 named elements checked against a 440pt screen
-- animation: live surfaces sheet presenting — 33 frames at ~9fps, 6 moving (peak 108.7 levels), last movement at 0.64s [animated]
+- animation: live surfaces sheet presenting — 57 frames at ~16fps, 8 moving (peak 90.6 levels), last movement at 0.55s [animated]
 - live surfaces: Button "Close" is 67.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - live surfaces: 45 named elements checked against a 440pt screen
-- animation: scan screen pushing in — 45 frames at ~13fps, 3 moving (peak 20.1 levels), last movement at 0.31s [animated]
+- animation: scan screen pushing in — 96 frames at ~27fps, 6 moving (peak 14.9 levels), last movement at 0.26s [animated]
 - scan: 21 named elements checked against a 440pt screen
-- animation: progress card replacing the intro — 15 frames at ~4fps, 5 moving (peak 7.5 levels), last movement at 1.87s [animated]
+- animation: progress card replacing the intro — 15 frames at ~4fps, 5 moving (peak 9.4 levels), last movement at 1.87s [animated]
 - results: 35 named elements checked against a 440pt screen
-- animation: review screen pushing in — 23 frames at ~7fps, 2 moving (peak 25.4 levels), last movement at 0.30s [one step only]
-- animation: review screen pushing in — at ~7fps the clip cannot resolve a transition, so the step count says nothing
+- animation: review screen pushing in — 29 frames at ~8fps, 4 moving (peak 22.2 levels), last movement at 0.72s [animated]
 - review: 46 named elements checked against a 440pt screen
 - overview at accessibility text size: Button "History" is 119.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - overview at accessibility text size: 66 named elements checked against a 440pt screen
