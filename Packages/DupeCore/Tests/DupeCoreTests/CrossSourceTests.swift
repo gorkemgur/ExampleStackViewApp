@@ -31,7 +31,13 @@ final class CrossSourceTests: XCTestCase {
                     isPreSelected: true
                 )
             },
-            items: items
+            // THE CANDIDATES ONLY, because that is what `ReviewBuilder` puts here:
+            // `ordered.compactMap { items[$0.id] }`, where `ordered` is the candidate list.
+            // This helper used to pass every item, keeper included, so all four tests below
+            // passed against a group shape the app never builds — and the flag was false in
+            // the app for the commonest crossing there is. A fixture that is more generous
+            // than the code is a fixture that hides the bug it was written to catch.
+            items: Array(items.dropFirst())
         )
     }
 
@@ -73,5 +79,40 @@ final class CrossSourceTests: XCTestCase {
             Fixtures.item("exported-once", source: .fileFolder)
         ])
         XCTAssertTrue(mixed.spansLibraryAndFolders)
+    }
+
+    /// The shape the app actually produces, and the one that was broken.
+    ///
+    /// A photograph in the library with one copy of it in a folder: the library item is the
+    /// keeper, so the only thing in `items` is the folder copy. Run 156 found exactly this on a
+    /// real device — `crossing-21.jpg` offered with one other copy — and no screen said it had
+    /// crossed anything.
+    func testALibraryKeeperWithOneFolderCopyCounts() {
+        let exportedOnce = group([
+            Fixtures.item("crossing-21", source: .photoLibrary),
+            Fixtures.item("exported-21", source: .fileFolder)
+        ])
+        XCTAssertEqual(exportedOnce.items.count, 1, "the builder puts only candidates here")
+        XCTAssertTrue(
+            exportedOnce.spansLibraryAndFolders,
+            "the keeper is the library half; ignoring it loses the commonest crossing of all"
+        )
+    }
+
+    /// And the other way round, because a folder copy can be the one worth keeping — it is
+    /// larger often enough — and the sentence has to be earned from either side.
+    func testAFolderKeeperWithOneLibraryCopyCounts() {
+        let theOtherWay = group([
+            Fixtures.item("exported-21", source: .fileFolder),
+            Fixtures.item("crossing-21", source: .photoLibrary)
+        ])
+        XCTAssertTrue(theOtherWay.spansLibraryAndFolders)
+    }
+
+    /// A single item, still. `removing(_:)` can whittle a group down, and a group of one that
+    /// claims to span two places is the decoration this flag exists not to be.
+    func testAGroupOfOneSpansNothing() {
+        let alone = group([Fixtures.item("only", source: .fileFolder)])
+        XCTAssertFalse(alone.spansLibraryAndFolders)
     }
 }

@@ -73,9 +73,22 @@ actually land in one group* is not — see §4 for why it could not be, and for 
 now taken.
 
 The proof itself is written and wired up: `DupeSpaceUITests/CrossSourceUITests` and the
-`crossing` CI job. **It has not returned a verdict yet.** Until it does, this paragraph stays
-in §2, because a test that has never run is a plan. When it goes green it moves to §1 and the
-"C" feature stops being a claim.
+`crossing` CI job, and **it has already earned its keep.** Run 156 drove the real picker,
+granted a real folder, scanned 31 real items and swept the review list, and found
+`crossing-21.jpg` offered with one other copy — the matcher does cross the line — while no
+screen said so.
+
+The reason: `ReviewGroup.items` holds the *candidates'* media, not the group's, because
+`ReviewBuilder` fills it with `ordered.compactMap { items[$0.id] }` and `ordered` is the
+candidate list. `spansLibraryAndFolders` iterated only that, so the commonest crossing there is
+— a library photograph keeping, one folder copy on offer — showed one source and returned
+false. Four unit tests covered the flag and all four passed, because the helper that built
+their groups passed every item as `items`, keeper included, which is not the shape the builder
+produces. **A fixture more generous than the code hides the bug it was written to catch.**
+
+Fixed by counting the keeper, with three more tests including the exact shape the app makes.
+This paragraph stays in §2 until the `crossing` job is green — a test that has never passed is
+still a plan.
 
 **The five UI tests are green** as of run 146, and what they cost is worth keeping. Three
 separate causes, none of which was the thing it looked like:

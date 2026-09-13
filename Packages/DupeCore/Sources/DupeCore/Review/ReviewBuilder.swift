@@ -40,9 +40,23 @@ public struct ReviewGroup: Sendable, Identifiable, Equatable {
     /// not necessarily land on the same fingerprint. That is fixed; this is the flag that says
     /// so on screen, and the sentence beside it is the only reason a person would believe the
     /// app looked anywhere their own eyes had not.
+    /// THE KEEPER COUNTS, and leaving it out is what made this flag useless in practice.
+    ///
+    /// `items` holds the *candidates'* media, not the group's: the builder fills it with
+    /// `ordered.compactMap { items[$0.id] }`, and `ordered` is the candidate list, which by
+    /// definition excludes the copy that is staying. So the commonest crossing there is — a
+    /// photograph in the library, and one copy of it in a folder, which is exactly what
+    /// "exported once" looks like — has a library keeper and a single folder candidate, and
+    /// this saw one source and said no.
+    ///
+    /// Run 156 caught it end to end: `crossing-21.jpg` was offered with one other copy, and no
+    /// screen said it had crossed anything. Four unit tests covered this flag and all four
+    /// passed, because the helper that built their groups passed every item as `items` —
+    /// including the keeper — which is not the shape `ReviewBuilder` produces. A test that
+    /// builds a different object than the code does is a test of the test.
     public var spansLibraryAndFolders: Bool {
-        var sawLibrary = false
-        var sawFolder = false
+        var sawLibrary = keeper.source == .photoLibrary
+        var sawFolder = keeper.source == .fileFolder
         for item in items {
             switch item.source {
             case .photoLibrary: sawLibrary = true
@@ -50,7 +64,7 @@ public struct ReviewGroup: Sendable, Identifiable, Equatable {
             }
             if sawLibrary && sawFolder { return true }
         }
-        return false
+        return sawLibrary && sawFolder
     }
 }
 
