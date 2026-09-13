@@ -171,8 +171,9 @@ of them failed:
   three days because nothing had ever opened the picker to check.
 
   `local_storage_directories()` now searches the device's own data root for every
-  `File Provider Storage` directory, writes the fixture into all of them, and prints each one,
-  so a run that still comes back empty says where it looked.
+  `File Provider Storage` directory, writes the fixture into all of them, and prints each one.
+  **Run 150 walked the picker into the folder and tapped Open**, so this works — the placement
+  is solved and only the naming of it was ever wrong.
 - Driving the picker: **blocked.** The dump at the failing step is one line long:
 
   ```
@@ -365,8 +366,10 @@ In order, and the first one is the one that matters:
    still open is the fixture, not the test.** "On My iPhone" is served by
    `com.apple.FileProvider.LocalStorage` and the folder was being written somewhere else, so
    the picker had nothing to grant. The driver now finds every `File Provider Storage`
-   directory on the device and writes into all of them; if that still comes up empty, the run
-   prints the ones it found and the next move is to read that list rather than guess again.
+   directory on the device and writes into all of them, which run 150 proved reaches the
+   picker. What is left is the app's side of the grant: run 150 got as far as the folders card
+   and could not tell whether the app had taken the folder or refused it, because the assertion
+   was reading the picker's own breadcrumb while the sheet was still dismissing.
 3. Fix `real-library-check.py` so it stops reporting the clips as missing — or find out they
    genuinely are.
 4. Run it on a phone and answer the trashing question.

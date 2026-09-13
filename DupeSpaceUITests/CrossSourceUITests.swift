@@ -205,26 +205,56 @@ final class CrossSourceUITests: XCTestCase {
             }
         }
 
-        // The grant lands back in the app, and the app re-reads its folders.
-        XCTAssertTrue(
-            app.wait(for: .runningForeground, timeout: 30),
-            "the app did not come back after the picker"
-        )
+        // MARK: Wait for the picker to actually be gone
+
+        // Because the picker is inside the app's own tree, and for as long as it is dismissing
+        // its breadcrumb still carries the folder's name. Run 150 searched the whole app for
+        // that name, matched the sheet that was still on screen, concluded the folder was
+        // listed on the overview, and then failed one line later on a card that had not been
+        // given the grant yet. A query that cannot tell the sheet from the screen behind it is
+        // not evidence about either.
+        if files.exists {
+            let dismissed = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: files)
+            guard XCTWaiter().wait(for: [dismissed], timeout: 30) == .completed else {
+                XCTFail("the picker never went away after Open — the grant was never committed")
+                return
+            }
+        }
+
+        // MARK: And then read the card
+
         // Not `folders.message` — that identifier is the card's *failure* line ("that folder
         // could not be read", "something already covers it"), so waiting for it would have
-        // passed on exactly the runs where the grant went wrong. What success looks like is a
-        // row: the empty-state sentence gone, and the folder's own name on the card.
+        // passed on exactly the runs where the grant went wrong. What success looks like is the
+        // empty-state sentence going away.
+        let empty = element("folders.empty", in: app)
+        if empty.exists {
+            let filled = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: empty)
+            guard XCTWaiter().wait(for: [filled], timeout: 30) == .completed else {
+                // The two outcomes need different answers, and the app says which: it sets
+                // `folders.message` when it refuses a grant and leaves it nil when it takes one.
+                let message = element("folders.message", in: app)
+                XCTFail(
+                    message.exists
+                        ? "the app refused the folder: \(message.label)"
+                        : "the folders card still says it has nothing, and gave no reason:"
+                          + "\n\n\(app.debugDescription)"
+                )
+                return
+            }
+        }
+
+        require(
+            "folders.title", in: app, timeout: 10,
+            "the folders card went missing after the grant"
+        )
         let listed = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS[c] %@", folderName))
             .firstMatch
         XCTAssertTrue(
-            listed.waitForExistence(timeout: 30),
-            "the folder was never listed on the overview, so the grant did not take. What the "
-            + "app is showing:\n\n\(app.debugDescription)"
-        )
-        XCTAssertFalse(
-            element("folders.empty", in: app).exists,
-            "the folders card still says it has nothing"
+            listed.waitForExistence(timeout: 20),
+            "the card stopped saying it was empty but the folder is not on it:"
+            + "\n\n\(app.debugDescription)"
         )
 
         // MARK: Scan, and read what it says about where each copy lives

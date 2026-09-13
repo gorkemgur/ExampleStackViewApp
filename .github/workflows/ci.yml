@@ -463,7 +463,13 @@ jobs:
           set -euo pipefail
           xcrun simctl boot "${{ steps.simulator.outputs.udid }}" || true
           xcrun simctl bootstatus "${{ steps.simulator.outputs.udid }}" -b
-          python3 Scripts/real-library-check.py "${{ steps.simulator.outputs.udid }}" artifacts/library artifacts/crossing --setup-only
+          mkdir -p artifacts/crossing
+          # Kept, because the tail is the only part of a log anybody reads first and this step's
+          # output is two thousand lines above it. Which provider directory "On My iPhone" is
+          # actually served from is the question this job exists to answer, and it was printed
+          # somewhere unreachable.
+          python3 Scripts/real-library-check.py "${{ steps.simulator.outputs.udid }}" artifacts/library artifacts/crossing --setup-only \
+            2>&1 | tee artifacts/crossing/setup.log
 
       # The part idb cannot do. `UIDocumentPickerViewController` is hosted out of process, so
       # `idb describe-all` sees a one-line tree with only the app in it; XCUITest addresses
@@ -493,6 +499,9 @@ jobs:
       - name: What actually failed
         if: failure()
         run: |
+          echo "::group::How the device was loaded"
+          cat artifacts/crossing/setup.log 2>/dev/null || echo "the setup step left no log"
+          echo "::endgroup::"
           echo "::group::Compile errors"
           grep -nE "error:" xcodebuild.log | grep -v "Checking existence" | sort -u | head -40 || echo "none"
           echo "::endgroup::"
