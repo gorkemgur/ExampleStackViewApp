@@ -2,7 +2,7 @@
 
 Written 13 September 2026. Updated after CI run 146, the first fully green run, and again
 after **run 157 — the first run in which the app's one distinctive claim was proven against a
-real device rather than asserted.** Branch `claude/selam-dr571g`.
+real device rather than asserted** — and last after run 162. Branch `claude/selam-dr571g`.
 
 This is a handover, not a summary. It is organised by *how much we know*, because that turned
 out to be the thing that mattered: this project has repeatedly had code that worked and code
@@ -34,12 +34,13 @@ These run in CI on every push, through the real system frameworks.
 | No false positives | no singleton has ever been offered |
 | `GrayImageRenderer`, `VideoFrameSampler`, `FileSystemOriginalExporter` | `AdapterTests`, 13 tests, real H.264 written by `AVAssetWriter` |
 | Fingerprint agreement across halves | `ResendFingerprintTests.testBothHalvesFingerprintTheSamePictureTheSameWay` |
-| Second resources — RAW halves and Live Photo video | `SecondResourcesTests`, 5 tests, including that an asset which *claims* to be a Live Photo but has no measured video is not counted |
+| Second resources — RAW halves and Live Photo video | `SecondResourcesTests`, 5 tests, green from run 162, including that an asset which *claims* to be a Live Photo but has no measured video is not counted |
 | **Cross-source duplicates (the "C" feature)** | `crossing` job: a real folder granted through Apple's own document picker, 31 real items scanned, and a group that holds a library photograph and its folder copy *and says so*. Green from run 157 |
-| `DupeCore` logic | 301 tests |
-| Every screen and the whole path through them | 23 UI tests, all green in run 146 |
+| `DupeCore` logic | 307 tests |
+| Every screen and the whole path through them | 24 UI tests, all green — 23 against stubs, plus `CrossSourceUITests` against the real thing |
 
-Test counts by target: **DupeCore 301**, **DupeSpaceTests 172**, **DupeSpaceUITests 23**.
+Test counts by target, counted rather than remembered: **DupeCore 307**, **DupeSpaceTests 172**,
+**DupeSpaceUITests 24**.
 
 ### The three bugs the device jobs found that nothing else could
 
@@ -299,7 +300,7 @@ any of them started, which no table can predict.
 | Job | What it is for | Run 146 |
 |---|---|---|
 | `site` | `docs/index.html` structure check | 7 s |
-| `core` | `DupeCore`, platform-free, 301 tests | 43 s |
+| `core` | `DupeCore`, platform-free, 307 tests | 43 s |
 | `compile` | the one-minute verdict, and the only Release build | 2 m 20 |
 | `app` | simulator unit tests, 172 tests | 6 m 00 |
 | `ui` ×2 | XCUITest, sharded by measured cost | 6 m 48 / 7 m 14 |
