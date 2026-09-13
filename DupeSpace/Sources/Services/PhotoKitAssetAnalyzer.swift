@@ -23,11 +23,16 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
         // edit, a Live Photo's paired movie. Hashing only the first would report two photos
         // as byte-identical when one of them carries edits the other does not — and that
         // equality is exactly what promotes a pair to the tier labelled "loses nothing".
-        let resources = PHAssetResource.assetResources(for: asset).sorted {
-            $0.type.rawValue == $1.type.rawValue
-                ? $0.originalFilename < $1.originalFilename
-                : $0.type.rawValue < $1.type.rawValue
-        }
+        //
+        // By type alone. The filename used to be the tie-break and part of the hash, and that
+        // made this digest an identity rather than a fingerprint of the content: two files
+        // with every byte the same and different names came out different. Which is the
+        // ordinary case — the same picture saved twice is `IMG_4021.JPG` and `IMG_4021 1.JPG`
+        // — so the whole "identical copies, costs nothing" tier could never fire for a
+        // photograph. Caught by the real-library job on its first end-to-end run: two
+        // byte-identical pairs put into a real Photos library, neither offered.
+        let resources = PHAssetResource.assetResources(for: asset)
+            .sorted { $0.type.rawValue < $1.type.rawValue }
         guard !resources.isEmpty else { return .unavailable }
 
         let options = PHAssetResourceRequestOptions()
@@ -37,7 +42,8 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
 
         for resource in resources {
             // A header per resource so two different splits of the same bytes cannot collide.
-            accumulator.update(Data("r\(resource.type.rawValue):\(resource.originalFilename)|".utf8))
+            // The *type*, and nothing else: a name is not content.
+            accumulator.update(Data("r\(resource.type.rawValue)|".utf8))
 
             if let error = await Self.append(resource, to: accumulator, options: options) {
                 return Self.classify(error)
