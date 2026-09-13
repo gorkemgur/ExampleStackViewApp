@@ -133,7 +133,28 @@ def wait_for_any(identifiers, timeout=300):
     return None, None
 
 
+def scroll_to_top(times=8):
+    """Put a scrolling screen back where every search assumes it starts."""
+    for _ in range(times):
+        run(["idb", "ui", "swipe", "--udid", UDID, "200", "300", "200", "700"])
+        time.sleep(0.35)
+
+
 def scroll_to(identifier, attempts=10):
+    """Find something by scrolling down to it, from the top.
+
+    FROM THE TOP, which it did not used to do, and that cost a whole run. `scroll_to` only ever
+    swipes one way, so it silently depends on the screen already being at the top — true for
+    every caller until a second one was added ahead of it. The folder search ran first, swiped
+    ten times without finding what it wanted, and left the overview at the bottom; the scan
+    entry point was then looked for by scrolling *further down*, from below it, and the run
+    died on `the scan entry point was never reachable` — a screen it had reached on every
+    previous run.
+
+    A search that leaves the screen somewhere else is a search that breaks the next one. This
+    one puts it back first.
+    """
+    scroll_to_top()
     for _ in range(attempts):
         element = find(describe(), identifier)
         if element is not None:
@@ -262,7 +283,7 @@ def grant_the_folder():
     """
     add = scroll_to("folders.add")
     if add is None:
-        print("the app's add-folder control was not reachable")
+        dump_tree("looking for the app's add-folder control on the overview")
         return False
     tap(add, settle=3)
 
