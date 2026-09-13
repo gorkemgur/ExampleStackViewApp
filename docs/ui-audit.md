@@ -10,20 +10,18 @@ recording taken across each transition and read frame by frame. See
 
 ## Measurements
 
-- animation: cards entering on launch — 75 frames at ~17fps, 4 moving (peak 84.5 levels), last movement at 0.60s [animated]
+- animation: cards entering on launch — 96 frames at ~21fps, 6 moving (peak 74.5 levels), last movement at 4.41s [animated]
 - overview: Button "History" is 100.0x36.0pt, in the navigation bar — the bar supplies the hit area
-- overview: 66 named elements checked against a 440pt screen
-- animation: live surfaces sheet presenting — 37 frames at ~11fps, 2 moving (peak 143.3 levels), last movement at 0.28s [one step only]
-- animation: live surfaces sheet presenting — at ~11fps the clip cannot resolve a transition, so the step count says nothing
+- overview: 71 named elements checked against a 440pt screen
+- animation: live surfaces sheet presenting — 46 frames at ~13fps, 10 moving (peak 84.9 levels), last movement at 0.84s [animated]
 - live surfaces: Button "Close" is 67.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - live surfaces: 45 named elements checked against a 440pt screen
-- animation: scan screen pushing in — 57 frames at ~16fps, 3 moving (peak 16.2 levels), last movement at 0.25s [animated]
+- animation: scan screen pushing in — 95 frames at ~27fps, 3 moving (peak 19.0 levels), last movement at 0.15s [animated]
 - scan: 21 named elements checked against a 440pt screen
-- animation: progress card replacing the intro — 12 frames at ~3fps, 2 moving (peak 12.8 levels), last movement at 1.00s [one step only]
-- animation: progress card replacing the intro — at ~3fps the clip cannot resolve a transition, so the step count says nothing
+- animation: progress card replacing the intro — 11 frames at ~3fps, 3 moving (peak 15.6 levels), last movement at 2.55s [animated]
 - results: 35 named elements checked against a 440pt screen
-- animation: review screen pushing in — 23 frames at ~7fps, 3 moving (peak 21.1 levels), last movement at 0.61s [animated]
+- animation: review screen pushing in — 23 frames at ~7fps, 4 moving (peak 22.3 levels), last movement at 0.76s [animated]
 - review: 46 named elements checked against a 440pt screen
 - overview at accessibility text size: Button "History" is 119.0x36.0pt, in the navigation bar — the bar supplies the hit area
-- overview at accessibility text size: 66 named elements checked against a 440pt screen
+- overview at accessibility text size: 71 named elements checked against a 440pt screen
 - large text: the scan screen was never reached, only the overview audited
