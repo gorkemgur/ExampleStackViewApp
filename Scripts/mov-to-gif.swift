@@ -128,21 +128,99 @@ func distance(_ a: [UInt8], _ b: [UInt8]) -> Double {
     return Double(total) / Double(a.count)
 }
 
+/// Decode many frames in one pass instead of one seek apiece.
+///
+/// THIS WAS TWO THIRDS OF THE PIPELINE. `copyCGImage` opens a decode for every call, and this
+/// script called it once per frame: a seventy-second recording at twelve frames a second is
+/// eight hundred and forty separate seeks, and then a couple of hundred more for the frames
+/// actually written. Sixteen minutes of a twenty-five minute job, to convert two files.
+///
+/// `generateCGImagesAsynchronously` takes the whole list at once, which lets AVFoundation sort
+/// the requests and walk the file once rather than jumping back to a keyframe for each one.
+/// Same frames, same tolerances, same output — it is only told about them together.
+///
+/// - Parameter handle: called on the generator's own queue, so it must be safe to call from
+///   several threads. Keeping the *digest* rather than the image is what stops eight hundred
+///   decoded frames from being resident at the same time.
+/// Somewhere for the decoded frames to land that is not a global `var`.
+///
+/// The completion handler runs on the generator's own queue, so whatever it writes into is
+/// touched from several threads at once. A top-level mutable variable would be shared mutable
+/// state by any reading, and this script is compiled by whatever language mode the toolchain
+/// defaults to.
+private final class Collected<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Int: T] = [:]
+
+    func put(_ value: T, at index: Int) {
+        lock.lock(); defer { lock.unlock() }
+        storage[index] = value
+    }
+
+    func taken() -> [Int: T] {
+        lock.lock(); defer { lock.unlock() }
+        return storage
+    }
+}
+
+func collectFrames<T>(
+    indices: [Int],
+    width: Int,
+    exact: Bool,
+    transform: @escaping (CGImage) -> T?
+) -> [Int: T] {
+    guard !indices.isEmpty else { return [:] }
+    let generator = makeGenerator(width: width, exact: exact)
+    let times = indices.map {
+        NSValue(time: CMTime(seconds: Double($0) / fps, preferredTimescale: 600))
+    }
+
+    let collected = Collected<T>()
+    let finished = DispatchSemaphore(value: 0)
+    let counter = Counter(target: indices.count)
+
+    generator.generateCGImagesAsynchronously(forTimes: times) { requested, image, _, _, _ in
+        if let image, let value = transform(image) {
+            // Back to the index it was asked for: the handler may arrive out of order.
+            collected.put(value, at: Int((CMTimeGetSeconds(requested) * fps).rounded()))
+        }
+        if counter.tick() { finished.signal() }
+    }
+
+    finished.wait()
+    return collected.taken()
+}
+
+/// Counts completions so the wait ends when the last one lands, not after a guessed interval.
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen = 0
+    private let target: Int
+
+    init(target: Int) { self.target = target }
+
+    /// - Returns: true exactly once, on the final call.
+    func tick() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        seen += 1
+        return seen == target
+    }
+}
+
 // MARK: - Pass one: what moved, and when
 
 let frameCount = max(Int(seconds * fps), 2)
 let step = 1.0 / fps
 
-let prober = makeGenerator(width: digestWidth, exact: false)
-var times: [Int] = []
-var digests: [[UInt8]] = []
-for index in 0..<frameCount {
-    let time = CMTime(seconds: Double(index) / fps, preferredTimescale: 600)
-    guard let image = try? prober.copyCGImage(at: time, actualTime: nil),
-          let reading = digest(image) else { continue }
-    times.append(index)
-    digests.append(reading)
-}
+let readings = collectFrames(
+    indices: Array(0..<frameCount),
+    width: digestWidth,
+    exact: false,
+    transform: digest
+)
+
+let times = readings.keys.sorted()
+let digests = times.map { readings[$0]! }
 
 guard digests.count > 1 else {
     FileHandle.standardError.write(Data("only \(digests.count) frame(s) in \(input.lastPathComponent)\n".utf8))
@@ -217,18 +295,30 @@ CGImageDestinationSetProperties(destination, [
     kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]
 ] as CFDictionary)
 
-let writer = makeGenerator(width: targetWidth, exact: true)
+// In chunks, because these are full-size and holding two hundred of them at once is a
+// couple of hundred megabytes for no reason. Forty at a time keeps the batch's advantage
+// and bounds what is resident.
 var written = 0
-for frame in chosen {
-    let time = CMTime(seconds: Double(frame.index) / fps, preferredTimescale: 600)
-    guard let image = try? writer.copyCGImage(at: time, actualTime: nil) else { continue }
-    CGImageDestinationAddImage(destination, image, [
-        kCGImagePropertyGIFDictionary: [
-            kCGImagePropertyGIFUnclampedDelayTime: frame.hold,
-            kCGImagePropertyGIFDelayTime: frame.hold
-        ]
-    ] as CFDictionary)
-    written += 1
+for chunk in stride(from: 0, to: chosen.count, by: 40) {
+    let slice = Array(chosen[chunk..<min(chunk + 40, chosen.count)])
+    let images = collectFrames(
+        indices: slice.map({ $0.index }),
+        width: targetWidth,
+        exact: true,
+        transform: { $0 }
+    )
+
+    // Written in the order the edit decided, not the order the decoder finished in.
+    for frame in slice {
+        guard let image = images[frame.index] else { continue }
+        CGImageDestinationAddImage(destination, image, [
+            kCGImagePropertyGIFDictionary: [
+                kCGImagePropertyGIFUnclampedDelayTime: frame.hold,
+                kCGImagePropertyGIFDelayTime: frame.hold
+            ]
+        ] as CFDictionary)
+        written += 1
+    }
 }
 
 guard written > 1, CGImageDestinationFinalize(destination) else {

@@ -251,8 +251,26 @@ jobs:
           grep -nE "\*\* [A-Z ]+ \*\*" xcodebuild.log | tail -5 || true
           echo "::endgroup::"
   ui:
-    name: UI tests on a simulator
+    name: UI tests (${{ matrix.shard.name }})
     runs-on: macos-15
+    # TWO RUNNERS, NOT ONE. Twenty-three UI tests took fourteen minutes on a single machine
+    # with two parallel workers, and that was the longest thing in the pipeline after the GIFs.
+    # These are separate suites against separate simulators — nothing is shared and nothing is
+    # ordered — so the only thing keeping them on one runner was that nobody had split them.
+    #
+    # Split by measured cost rather than alphabetically: `HistoryUITests` alone is 220 seconds
+    # because every one of its tests runs a whole scan first, and pairing it with the other
+    # long suite would have left one shard idle while the other ran.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: review and launch
+            slug: a
+            only: "-only-testing:DupeSpaceUITests/ReviewUITests -only-testing:DupeSpaceUITests/LaunchUITests"
+          - name: history, deletion, scan, group
+            slug: b
+            only: "-only-testing:DupeSpaceUITests/HistoryUITests -only-testing:DupeSpaceUITests/DeletionUITests -only-testing:DupeSpaceUITests/ScanUITests -only-testing:DupeSpaceUITests/GroupUITests"
     steps:
       - uses: actions/checkout@v4
 
@@ -323,7 +341,7 @@ jobs:
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath .derived \
             -resultBundlePath TestResults.xcresult \
-            -only-testing:DupeSpaceUITests \
+            ${{ matrix.shard.only }} \
             -parallel-testing-enabled YES \
             -maximum-parallel-testing-workers 2 \
             -enableCodeCoverage NO \
@@ -335,7 +353,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: xcresult-ui
+          name: xcresult-ui-${{ matrix.shard.slug }}
           path: TestResults.xcresult
           retention-days: 7
 
@@ -376,6 +394,22 @@ jobs:
 
       - name: Select newest Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+
+      # Both caches the idb job already has, and this job did not: it was pulling the
+      # idb-companion bottle and compiling the app from nothing on every single run.
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-idb-v1
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: real-derived-${{ runner.os }}-${{ hashFiles('DupeSpace/Sources/**/*.swift', 'Shared/**/*.swift', 'DupeSpaceWidgets/**/*.swift', 'Packages/DupeCore/Sources/**/*.swift', 'project.yml') }}
+          restore-keys: |
+            real-derived-${{ runner.os }}-
 
       # The recipe the idb job already proved. `brew trust` because Homebrew refuses formulae
       # from third-party taps without it, and pipx because its shims land somewhere the
