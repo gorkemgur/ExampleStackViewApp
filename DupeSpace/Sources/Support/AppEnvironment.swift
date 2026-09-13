@@ -69,10 +69,12 @@ enum AppEnvironment {
     }
 
     static func makeDeleter() -> MediaDeleting {
-        // A step delay under test, and only there: the walk has to photograph the deletion
-        // while it is running, and a stub that finishes in one frame leaves nothing to
-        // photograph. Unit tests construct their own stub and get no delay at all.
-        guard !isUITesting else { return StubDeleter(stepDelay: .milliseconds(420)) }
+        // No delay. There used to be 420 milliseconds a step here, for one reason: the walk
+        // photographed the deletion while it ran, and a stub that finishes in a frame leaves
+        // nothing to photograph. That walk was deleted with the rest of the recordings, so
+        // what is left is every UI test that deletes anything paying three seconds for a film
+        // nobody makes.
+        guard !isUITesting else { return StubDeleter(stepDelay: .zero) }
         return CompositeDeleter(
             photos: PhotoKitDeleter(),
             files: FileDeleter(registry: folderRegistry)

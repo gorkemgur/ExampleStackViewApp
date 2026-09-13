@@ -22,8 +22,18 @@ import XCTest
 extension XCTestCase {
 
     /// An element with this identifier, whatever type the framework decided it is.
+    ///
+    /// The types it is *likely* to be, first, and only then everything. `descendants(matching:
+    /// .any)` is the broadest query XCUITest has: it walks and snapshots the whole tree, and
+    /// the review screen's tree is several hundred elements. Asking `buttons` first answers
+    /// most of these queries against a fraction of it, and the general case is still there for
+    /// the ones that need it — which is the whole point of this helper and worth keeping.
     func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any)[identifier]
+        for query in [app.buttons, app.staticTexts, app.otherElements, app.images, app.sliders] {
+            let candidate = query[identifier]
+            if candidate.exists { return candidate }
+        }
+        return app.descendants(matching: .any)[identifier]
     }
 
     /// Wait for an element, and print the whole screen if it never arrives.
