@@ -46,7 +46,7 @@ final class GroupUITests: XCTestCase {
         let target = button(labelled: text)
         guard target.waitForExistence(timeout: timeout) else {
             XCTFail(
-                "nothing labelled '\(text)' appeared in \(Int(timeout))s. What was on the screen:\n\n\(app.debugDescription)",
+                "nothing labelled '\(text)' appeared in \(Int(timeout))s. What was on the screen:\n\n\(screen(app))",
                 file: file, line: line
             )
             return
@@ -112,7 +112,7 @@ final class GroupUITests: XCTestCase {
         let dialog = button(labelled: "Select them all")
         XCTAssertTrue(
             dialog.waitForNonExistence(timeout: 10),
-            "the confirmation is still up after backing out of it:\n\n\(app.debugDescription)"
+            "the confirmation is still up after backing out of it:\n\n\(screen(app))"
         )
         XCTAssertFalse(app.buttons["group.keepone"].exists, "cancelling must not arm anything")
     }

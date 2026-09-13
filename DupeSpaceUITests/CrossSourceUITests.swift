@@ -83,7 +83,7 @@ final class CrossSourceUITests: XCTestCase {
             print("""
 
             ===== \(host.name), state \(host.app.state.rawValue) =====
-            \(host.app.debugDescription)
+            \(screen(host.app))
             """)
         }
         return nil
@@ -159,7 +159,7 @@ final class CrossSourceUITests: XCTestCase {
         let files = picker.collectionViews["File View"]
         XCTAssertTrue(
             files.waitForExistence(timeout: 20),
-            "the picker never showed a file list (\(hostName)):\n\n\(picker.debugDescription)"
+            "the picker never showed a file list (\(hostName)):\n\n\(screen(picker))"
         )
 
         for step in ["On My iPhone", folderName] {
@@ -186,7 +186,7 @@ final class CrossSourceUITests: XCTestCase {
                 } else {
                     XCTFail(
                         "'\(step)' was not in the picker (\(hostName)). What it was showing:"
-                        + "\n\n\(picker.debugDescription)"
+                        + "\n\n\(screen(picker))"
                     )
                 }
                 return
@@ -194,8 +194,24 @@ final class CrossSourceUITests: XCTestCase {
             target.tap()
         }
 
-        // The navigation bar's own Open, which is what commits the grant.
-        let open = picker.navigationBars["FullDocumentManagerViewControllerNavigationBar"].buttons["Open"]
+        // MARK: Be inside the folder before committing to it
+
+        // Open grants *the directory you are looking at*, and tapping a folder starts a
+        // navigation rather than finishing one. Run 151 tapped the fixture and tapped Open in
+        // the same breath, and the app came back holding a grant on
+        // `.../File Provider Storage` — the parent — which the overview then listed under that
+        // name. It had done exactly what it was told.
+        let bar = picker.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
+        let arrived = bar.staticTexts.matching(NSPredicate(format: "label == %@", folderName)).firstMatch
+        guard arrived.waitForExistence(timeout: 20) else {
+            XCTFail(
+                "tapping '\(folderName)' never moved the picker into it — the title bar still "
+                + "reads '\(bar.staticTexts.firstMatch.label)', so Open would grant the wrong folder"
+            )
+            return
+        }
+
+        let open = bar.buttons["Open"]
         if open.waitForExistence(timeout: 10) {
             open.tap()
         } else {
@@ -238,7 +254,7 @@ final class CrossSourceUITests: XCTestCase {
                     message.exists
                         ? "the app refused the folder: \(message.label)"
                         : "the folders card still says it has nothing, and gave no reason:"
-                          + "\n\n\(app.debugDescription)"
+                          + "\n\n\(screen(app))"
                 )
                 return
             }
@@ -251,11 +267,23 @@ final class CrossSourceUITests: XCTestCase {
         let listed = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS[c] %@", folderName))
             .firstMatch
-        XCTAssertTrue(
-            listed.waitForExistence(timeout: 20),
-            "the card stopped saying it was empty but the folder is not on it:"
-            + "\n\n\(app.debugDescription)"
-        )
+        if !listed.waitForExistence(timeout: 20) {
+            // The card's own rows, rather than the whole application. Run 151 answered this
+            // question with a two-thousand-line tree in which the one line that mattered —
+            // `label: 'File Provider Storage'` — was in the middle, and reading it cost a
+            // round trip of its own. What the app granted is one sentence.
+            let title = element("folders.title", in: app)
+            let add = element("folders.add", in: app)
+            let rows = app.staticTexts.allElementsBoundByIndex
+                .filter { $0.frame.minY > title.frame.maxY && $0.frame.maxY < add.frame.minY }
+                .map { $0.label }
+            XCTFail(
+                "the app took a folder but not this one. It is holding: \(rows) — expected "
+                + "'\(folderName)'. A grant on a parent directory means Open was tapped before "
+                + "the picker had finished moving into the folder."
+            )
+            return
+        }
 
         // MARK: Scan, and read what it says about where each copy lives
 
@@ -282,7 +310,7 @@ final class CrossSourceUITests: XCTestCase {
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "review.open."))
         XCTAssertTrue(
             rows.firstMatch.waitForExistence(timeout: 60),
-            "the scan offered nothing at all. What is on the review screen:\n\n\(app.debugDescription)"
+            "the scan offered nothing at all. What is on the review screen:\n\n\(screen(app))"
         )
 
         var crossed = false

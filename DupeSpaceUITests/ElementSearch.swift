@@ -40,7 +40,26 @@ extension XCTestCase {
         app.descendants(matching: .any)[identifier]
     }
 
-    /// Wait for an element, and print the whole screen if it never arrives.
+    /// The screen, at a length somebody will actually read.
+    ///
+    /// `debugDescription` on the application is the whole tree, and on this app's overview that
+    /// is upwards of four hundred lines. Run 151's `crossing` log came to 2,881 lines, of which
+    /// the one that answered the question — `label: 'File Provider Storage'` — sat in the
+    /// middle of a dump printed by an assertion message, far above the tail that anybody reads
+    /// first, and getting to it cost a round trip.
+    ///
+    /// A tree is worth printing; a tree nobody can find the line in is not. The head is the
+    /// part that carries the screen's own furniture and the first cards, which is what tells
+    /// you which screen you are on.
+    func screen(_ app: XCUIApplication, lines: Int = 140) -> String {
+        let tree = app.debugDescription
+        let all = tree.split(separator: "\n", omittingEmptySubsequences: false)
+        guard all.count > lines else { return tree }
+        return all.prefix(lines).joined(separator: "\n")
+            + "\n… \(all.count - lines) more lines. The full tree is in the result bundle."
+    }
+
+    /// Wait for an element, and print the screen if it never arrives.
     ///
     /// - Returns: the element, so a caller can go on to measure or tap it.
     @discardableResult
@@ -59,7 +78,7 @@ extension XCTestCase {
                 \(message.isEmpty ? "'\(identifier)' never appeared" : message) \
                 — waited \(Int(timeout))s. What was on the screen:
 
-                \(app.debugDescription)
+                \(screen(app))
                 """,
                 file: file, line: line
             )

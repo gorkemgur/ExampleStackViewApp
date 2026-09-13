@@ -172,8 +172,10 @@ of them failed:
 
   `local_storage_directories()` now searches the device's own data root for every
   `File Provider Storage` directory, writes the fixture into all of them, and prints each one.
-  **Run 150 walked the picker into the folder and tapped Open**, so this works — the placement
-  is solved and only the naming of it was ever wrong.
+  On a stock iOS 18 simulator there are three, all of the form
+  `<device>/Containers/Shared/AppGroup/<uuid>/File Provider Storage`. **Runs 150 and 151 walked
+  the picker into the folder and came back with a grant**, so the placement is solved; only the
+  naming of it was ever wrong.
 - Driving the picker: **blocked.** The dump at the failing step is one line long:
 
   ```
@@ -338,6 +340,20 @@ thing; 7 jobs should be 4–5.
 - `try XCTUnwrap(await …)` does not compile: autoclosures cannot carry `await`.
 - GitHub refuses any file over 100 MB. Do not commit `.mov`.
 - The DupeCore test factory is `Fixtures`, not `TestSupport`.
+- **"On My iPhone" is not the Files app's data container.** It is served by
+  `com.apple.FileProvider.LocalStorage`, and on a simulator the directories are
+  `<device>/Containers/Shared/AppGroup/<uuid>/File Provider Storage` — three of them on a stock
+  iOS 18 device. `Scripts/real-library-check.py` finds them rather than naming one.
+- **The document picker's Open grants the directory you are looking at.** Tapping a folder
+  *starts* a navigation; tap Open in the same breath and you get a grant on the parent, silently
+  and correctly. Wait for the navigation bar's title to become the folder's name first.
+- **The picker is inside the app's own accessibility tree.** So is its dismissal animation: for
+  a moment after Open, a search of the app for the folder's name finds the sheet's breadcrumb
+  rather than anything on the screen behind it.
+- **A failure message that prints `app.debugDescription` is a failure message nobody can read.**
+  The overview's tree is four hundred lines and CI serves a job's log only once it has finished,
+  so the line that matters ends up far above the tail. `screen(_:)` in `ElementSearch.swift`
+  caps it; the full tree is in the result bundle for anyone who wants it.
 
 ---
 
@@ -366,10 +382,11 @@ In order, and the first one is the one that matters:
    still open is the fixture, not the test.** "On My iPhone" is served by
    `com.apple.FileProvider.LocalStorage` and the folder was being written somewhere else, so
    the picker had nothing to grant. The driver now finds every `File Provider Storage`
-   directory on the device and writes into all of them, which run 150 proved reaches the
-   picker. What is left is the app's side of the grant: run 150 got as far as the folders card
-   and could not tell whether the app had taken the folder or refused it, because the assertion
-   was reading the picker's own breadcrumb while the sheet was still dismissing.
+   directory on the device and writes into all of them, which reaches the picker. **The app
+   takes the grant** — run 151 came back with a folder on the overview. What it took was
+   `File Provider Storage`, the parent, because Open was tapped before the picker had finished
+   moving into the fixture. The walk waits for the title bar now. Nothing past the grant — the
+   scan, and whether a group says it spans both halves — has been reached yet.
 3. Fix `real-library-check.py` so it stops reporting the clips as missing — or find out they
    genuinely are.
 4. Run it on a phone and answer the trashing question.
