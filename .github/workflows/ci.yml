@@ -254,7 +254,7 @@ jobs:
     name: UI tests (${{ matrix.shard.name }})
     runs-on: macos-15
     # TWO RUNNERS, NOT ONE. Twenty-three UI tests took fourteen minutes on a single machine
-    # with two parallel workers, and that was the longest thing in the pipeline after the GIFs.
+    # with two parallel workers — the longest thing left in the pipeline.
     # These are separate suites against separate simulators — nothing is shared and nothing is
     # ordered — so the only thing keeping them on one runner was that nobody had split them.
     #
@@ -586,31 +586,6 @@ jobs:
       - name: Measure layout and animation
         run: python3 Scripts/audit-ui.py "$UDID" artifacts/audit
 
-      # The handover instrument is not a state, so a still cannot show it. Never fails the
-      # run: a recording that did not come off is a missing preview, not a broken app.
-      - name: Record the deletion
-        continue-on-error: true
-        run: python3 Scripts/record-deletion.py "$UDID" artifacts/motion/deletion.mov
-
-      # Two tours, because the app has two faces and only one of them has ever been filmed:
-      # a library with copies in it, and a library with none. The second is the state a new
-      # user is most likely to be in and the one nothing here has ever looked at.
-      - name: Record both tours
-        continue-on-error: true
-        run: python3 Scripts/record-tour.py "$UDID" artifacts/motion 19
-
-      # The runners have no ffmpeg, which is why the .mov has been committed unconverted since
-      # the recorder was written — but AVFoundation reads frames and ImageIO writes GIFs, and
-      # both ship with the operating system. There was never anything to install.
-      - name: Turn the recordings into GIFs
-        continue-on-error: true
-        run: |
-          shopt -s nullglob
-          for clip in artifacts/motion/*.mov; do
-            swift Scripts/mov-to-gif.swift "$clip" "${clip%.mov}.gif" 320 12 18 200 || true
-          done
-          ls -la artifacts/motion || true
-
       - name: Commit the screenshots
         if: github.event_name == 'push'
         run: |
@@ -635,25 +610,9 @@ jobs:
             cp artifacts/audit/ui-audit.md docs/ui-audit.md
           fi
 
-          # Same argument as the screenshots, for the screens that have to be watched rather
-          # than looked at. Replaced wholesale for the same reason: a clip the recorder could
-          # not take this time is a clip of an app that no longer exists.
-          #
-          # The GIFs only. The .mov the GIF is made from was committed beside it, and
-          # `found.mov` came back at 108 MB — eight over the limit GitHub refuses at, which
-          # took the whole push down with it. It was never worth carrying: it is the same
-          # eighteen seconds at thirty times the size, nothing renders it in a browser, and
-          # the run's own artifact holds it for seven days if anyone needs the original.
-          if compgen -G "artifacts/motion/*.gif" > /dev/null; then
-            rm -rf docs/motion
-            mkdir -p docs/motion
-            cp artifacts/motion/*.gif docs/motion/
-          fi
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/screenshots
-          if [ -d docs/motion ]; then git add docs/motion; fi
           if [ -f docs/ui-audit.md ]; then git add docs/ui-audit.md; fi
           if git diff --cached --quiet; then
             echo "screenshots unchanged"

@@ -214,8 +214,8 @@ The feature is sound, the verification route is not known.
 be meaningfully exercised on a simulator. Both are reporting surfaces rather than paths to a
 deletion, which is why this has been tolerated.
 
-**Nothing has been used by a human being.** Every screenshot in `docs/screenshots` and both
-GIFs in `docs/motion` come from a script driving a simulator. No person has held this app.
+**Nothing has been used by a human being.** Every screenshot in `docs/screenshots` comes from
+a script driving a simulator. No person has held this app.
 
 ---
 
@@ -250,7 +250,7 @@ any of them started, which no table can predict.
 | `ui` | XCUITest, parallel over two cloned simulators | 20 min |
 | `site` | `docs/index.html` structure check | 5 s |
 | `real` | **the one that finds real bugs** — real media, real PhotoKit, real deletion | 9 min |
-| `idb` | screenshots, layout/motion audit, deletion recording, both tour GIFs | 25 min |
+| `idb` | screenshots and the layout/motion audit | ~11 min |
 
 `app` and `ui` were one job until `56bc3c9`. GitHub serves a job's log only once the job has
 *finished*, so a unit verdict known at minute six could not be read until minute twenty-six.
@@ -282,8 +282,10 @@ thing; 7 jobs should be 4–5.
 - A membership check that reads only the visible part of a list gets *more* wrong as the app
   finds more. See §5.
 - `simctl privacy grant photos` exits 0 and iOS asks anyway. The driver taps the dialog.
-- `AVAssetImageGenerator` with `.zero` time tolerance forces a keyframe decode per request —
-  nine minutes for one GIF. Only the frames actually written need exact seeks.
+- `AVAssetImageGenerator.copyCGImage` opens a decode per call. Asking it for a frame at a time
+  cost sixteen minutes a run before the recordings were dropped; `generateCGImagesAsynchronously`
+  takes the whole list and walks the file once. Worth knowing if anything here ever films the
+  app again.
 - `CGContext` draws origin-at-bottom-left; `GrayImage` indexes from the top. A flipped renderer
   produces perfectly stable, perfectly wrong fingerprints — and every hashing test still passes,
   because both sides of every comparison are flipped identically.
