@@ -202,51 +202,46 @@ final class CrossSourceUITests: XCTestCase {
             (cell.exists ? cell : target).tap()
         }
 
-        // MARK: Be inside the folder before committing to it
+        // MARK: Commit, wherever the taps have left us
 
-        // Open grants *the directory you are looking at*, and tapping a folder starts a
-        // navigation rather than finishing one. Run 151 tapped the fixture and tapped Open in
-        // the same breath, and the app came back holding a grant on
-        // `.../File Provider Storage` — the parent — which the overview then listed under that
-        // name. It had done exactly what it was told.
+        // Open grants *the directory you are standing in*, and a tap on a folder may navigate
+        // into it, may only select it, or — as run 153 discovered on the second tap — may be
+        // read as the choice itself and close the picker there and then.
+        //
+        // All three are fine. `FileMediaLibrary` enumerates without
+        // `.skipsSubdirectoryDescendants`, so a grant on the fixture or on its parent both
+        // contain the fixture's files. So this stops trying to steer and just reports where it
+        // ended up.
         let bar = picker.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
         let arrived = bar.staticTexts.matching(NSPredicate(format: "label == %@", folderName)).firstMatch
 
         if !arrived.waitForExistence(timeout: 15) {
-            // A second reading of the same gesture. Some pickers treat one tap on a folder as
-            // *selecting* it and need a second to go in; this costs one tap to rule out, and
-            // not ruling it out costs a whole run.
+            // Some pickers read one tap on a folder as selecting it and want a second to go in.
             let cell = files.cells.containing(
                 NSPredicate(format: "label == %@ OR identifier == %@", folderName, folderName)
             ).firstMatch
             if cell.exists { cell.doubleTap() }
+            _ = arrived.waitForExistence(timeout: 10)
         }
 
-        // And if it still has not moved: carry on anyway, deliberately.
-        //
-        // Open will then grant the directory we are standing in, which is the fixture's
-        // *parent* — and `FileMediaLibrary` enumerates without `.skipsSubdirectoryDescendants`,
-        // so the fixture's three files are inside the grant either way. Which folder the person
-        // picked is not what this test is for. Whether a photograph in the library and the same
-        // photograph in a granted folder land in one group is, and asserting the mechanism
-        // instead has now cost two runs.
-        if !arrived.waitForExistence(timeout: 15) {
-            let cells = files.cells.allElementsBoundByIndex.map { $0.label }
-            print("""
+        // Never `firstMatch.label` on a query that may be empty: reading a property off no
+        // match throws, and run 153 was destroyed by its own diagnostic doing exactly that —
+        // the picker had already closed, so the navigation bar it was asking about was gone.
+        // A line printed to explain a failure must not be able to cause one.
+        let title = bar.staticTexts.firstMatch
+        print("the picker is showing '\(title.exists ? title.label : "nothing — it has closed")'")
 
-            the picker would not move into '\(folderName)' — the title bar reads \
-            '\(bar.staticTexts.firstMatch.label)'. Granting its parent instead, which contains \
-            it. \(cells.count) cells in the list: \(cells)
-            """)
-        }
-
-        let open = bar.buttons["Open"]
-        if open.waitForExistence(timeout: 10) {
-            open.tap()
-        } else {
-            for label in ["Open", "Done"] where picker.buttons[label].exists {
-                picker.buttons[label].tap()
-                break
+        // Only if it is still open. If the tap already chose the folder, there is nothing left
+        // to commit and pressing on would tap whatever is now underneath.
+        if bar.exists {
+            let open = bar.buttons["Open"]
+            if open.waitForExistence(timeout: 10) {
+                open.tap()
+            } else {
+                for label in ["Open", "Done"] where picker.buttons[label].exists {
+                    picker.buttons[label].tap()
+                    break
+                }
             }
         }
 

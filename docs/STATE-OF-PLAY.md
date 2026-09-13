@@ -350,6 +350,11 @@ thing; 7 jobs should be 4–5.
 - **The picker is inside the app's own accessibility tree.** So is its dismissal animation: for
   a moment after Open, a search of the app for the folder's name finds the sheet's breadcrumb
   rather than anything on the screen behind it.
+- **Reading a property off an XCUIElement query with no match throws.** `firstMatch.label` on
+  an empty query is not an empty string, it is a test failure — and run 153's was raised by a
+  `print` written to explain a *different* failure, after the picker it was asking about had
+  closed. Guard every such read with `.exists`. A line printed to explain a failure must not be
+  able to cause one.
 - **A failure message that prints `app.debugDescription` is a failure message nobody can read.**
   The overview's tree is four hundred lines and CI serves a job's log only once it has finished,
   so the line that matters ends up far above the tail. `screen(_:)` in `ElementSearch.swift`
