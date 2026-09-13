@@ -293,7 +293,15 @@ for scene in 21...23 {
     }
 }
 
-// Clips. Scenes 11-13 have partners; 14-15 do not.
+// Clips. Scenes 11-13 have partners by re-encoding; 16 has one by being copied; 14-15 have none.
+//
+// SCENE 16 IS THE CONTROL, and it is here because without it a missed video pair says two
+// different things at once. Every clip pair in this fixture was a re-encode, so when all three
+// came back MISSED there was no way to tell whether the app never fingerprints videos on the
+// PhotoKit path at all, or whether it does and the re-encode simply falls outside the
+// threshold. A byte-identical pair needs no frame sampling and no threshold — only the digest
+// — so if *it* is missed, videos are not reaching the matcher, and if it is found while the
+// re-encodes are not, the sampler or the threshold is the thing to look at.
 for scene in 11...15 {
     let original = directory.appendingPathComponent("clip-\(scene).mov")
     try await writeVideo(scene: scene, to: original, width: 640, height: 480, seconds: 3, bitrate: 2_500_000)
@@ -309,13 +317,25 @@ for scene in 11...15 {
     }
 }
 
+// The byte-identical clip pair. `FileManager.copyItem` rather than a second encode: two runs
+// of `AVAssetWriter` on the same frames do not necessarily produce the same bytes, and the
+// whole point of this pair is that the digest alone settles it.
+do {
+    let original = directory.appendingPathComponent("clip-16.mov")
+    try await writeVideo(scene: 16, to: original, width: 640, height: 480, seconds: 3, bitrate: 2_500_000)
+    let copy = directory.appendingPathComponent("clip-16-copy.mov")
+    try? FileManager.default.removeItem(at: copy)
+    try FileManager.default.copyItem(at: original, to: copy)
+    note("exact    clip-16.mov = clip-16-copy.mov (byte-identical, no threshold involved)")
+}
+
 let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
 let photos = files.filter { $0.hasSuffix(".jpg") }.count
 let videos = files.filter { $0.hasSuffix(".mov") }.count
 let granted = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
 note("")
 note("\(photos) photos and \(videos) videos for the library, \(granted.count) files for the folder")
-note("9 groups expected once the folder is granted, 9 items on offer")
+note("10 groups expected once the folder is granted, 10 items on offer")
 
 try? manifest.joined(separator: "\n").write(
     to: directory.appendingPathComponent("EXPECTED.txt"), atomically: true, encoding: .utf8

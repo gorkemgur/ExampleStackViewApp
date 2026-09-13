@@ -28,7 +28,7 @@ These run in CI on every push, through the real system frameworks.
 | Photo library read | `real` job: `PhotoKitMediaLibrary` indexes 28 real assets |
 | Byte-identical detection | `real` job: both exact pairs found, offered, deleted |
 | Perceptual detection (photos) | `real` job: both half-size re-sends found |
-| Video similarity | `real` job: all three re-encoded clips found |
+| Video similarity, **on files** | `AdapterTests.testTheSameFootageReEncodedStillMatchesItself`: real H.264, 480×360 at 2 Mbps against 320×240 at 400 kbps. **Not** proven on the PhotoKit path — see §5 |
 | Permission flow | `real` job taps the real "Allow Full Access" dialog |
 | Deletion | `real` job answers the system's own Delete alert; second scan comes back clean |
 | No false positives | no singleton has ever been offered |
@@ -238,6 +238,20 @@ location. So the refusal may not apply there at all. **Only a real device with a
 grant can settle this**, and the answer decides whether folder deletion can offer a 30-day
 undo like the photo half does. This is the single most valuable unanswered question in the
 project.
+
+**Has the app ever offered a video pair on the real path?** No, and the table in §1 said
+otherwise until run 157 was read properly. The `real` job reports `clip-11`, `clip-12` and
+`clip-13` MISSED on every run, and offers four groups — which is exactly the four photo pairs
+the fixture builds. Videos are indexed and opened (the scan ledger counts them), and the file
+path matches a re-encode in a unit test, so the difference is `PhotoKitAssetAnalyzer`.
+
+Every video pair in the fixture was a re-encode, which meant a miss said two things at once:
+either videos never reach the matcher, or they do and the threshold is wrong. `clip-16` and
+`clip-16-copy` are byte-identical and now asserted like `photo-1` — no frame sampling, no
+threshold, only the digest. **The next `real` run answers it**: if the byte-identical pair is
+missed too, videos are not reaching the matcher and `deliveryMode = .fastFormat` in
+`videoSignature(for:)` is the first thing to look at; if it is found while the re-encodes are
+not, the sampler or the threshold is.
 
 **Why did one history test start failing?** `testADeletionLeavesAReceiptYouCanOpen` passed for
 days and failed in run 140 after 194 seconds against its usual 110. The fixture changed in the

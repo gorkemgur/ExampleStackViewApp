@@ -55,7 +55,13 @@ FOLDER_NAME = "DupeSpace Fixture"
 #: grouped two things it never compared, and that is a stop-the-line failure.
 SINGLETONS = ["photo-5", "photo-6", "photo-7", "photo-8", "clip-14", "clip-15"]
 #: Byte-identical pairs. Not a threshold, not a judgement: these must be found.
-EXACT = ["photo-1", "photo-2"]
+#:
+#: `clip-16` is the newest and it is here to answer a question the fixture could not previously
+#: ask. Every video pair in it was a re-encode, so when all three came back MISSED the report
+#: could not say whether videos reach the matcher at all or whether the threshold is wrong. A
+#: byte-identical clip needs no frame sampling and no threshold, only the digest — so it
+#: separates the two.
+EXACT = ["photo-1", "photo-2", "clip-16"]
 
 failures = []
 notes = []
