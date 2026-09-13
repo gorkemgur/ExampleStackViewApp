@@ -28,6 +28,7 @@ assert before anyone has seen one.
   python3 Scripts/real-library-check.py <udid> <library dir> <artifacts dir> [--setup-only]
 """
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -54,14 +55,23 @@ FOLDER_NAME = "DupeSpace Fixture"
 #: Files built with no partner. If any of these is offered for deletion, the matcher has
 #: grouped two things it never compared, and that is a stop-the-line failure.
 SINGLETONS = ["photo-5", "photo-6", "photo-7", "photo-8", "clip-14", "clip-15"]
-#: Byte-identical pairs. Not a threshold, not a judgement: these must be found.
+#: Byte-identical pairs, by name. Not a threshold, not a judgement: these must be found.
 #:
-#: `clip-16` is the newest and it is here to answer a question the fixture could not previously
-#: ask. Every video pair in it was a re-encode, so when all three came back MISSED the report
-#: could not say whether videos reach the matcher at all or whether the threshold is wrong. A
-#: byte-identical clip needs no frame sampling and no threshold, only the digest — so it
-#: separates the two.
-EXACT = ["photo-1", "photo-2", "clip-16"]
+#: ONLY PHOTOGRAPHS, and that is a limit of this checker rather than of the app. `sweep()` sees
+#: four groups where the app offers eight: it reaches the photo sections and not the video ones.
+#: So a clip's *name* being absent from what the sweep collected says nothing about whether the
+#: app found it — run 159 reported all three clip pairs MISSED and `clip-16` not offered, in a
+#: run where the app had in fact found every one of them. `OFFERED_AT_LEAST` is the check that
+#: covers the videos, because a count does not depend on reaching the row.
+EXACT = ["photo-1", "photo-2"]
+
+#: What the fixture puts on offer, library-only: two byte-identical photographs, two photo
+#: re-sends, three clip re-sends and one byte-identical clip. A total the app must reach.
+#:
+#: `>=` rather than `==` because the simulator ships its own sample photographs — the plan says
+#: twenty photos where the fixture wrote fourteen — and a future runtime may ship duplicates
+#: among them. Fewer than eight is a miss and is this app's problem; more is Apple's fixture.
+OFFERED_AT_LEAST = 8
 
 failures = []
 notes = []
@@ -223,9 +233,15 @@ def sweep():
     for slug in ["image", "video", "all"]:
         chip = find(tree, f"review.kind.{slug}")
         if chip is None:
+            print(f"no '{slug}' filter chip on the review screen")
             continue
+        before = len(groups)
         tap(chip, settle=1.2)
         walk()
+        # Said out loud, because this is how run 159's report came to be wrong: the sweep
+        # reached four groups where the app was offering eight, and reported the missing four
+        # as the app's failure rather than its own.
+        print(f"the '{slug}' filter yielded {len(groups) - before} new group rows")
         tree = describe()
 
     # Back to everything, so the delete key counts what the run intends to delete.
@@ -542,6 +558,25 @@ def main():
 
     notes.append(f"{len(groups)} groups on the review screen")
 
+    # THE COUNT, which is the one reading that does not depend on the sweep reaching a row.
+    #
+    # The kind chips carry their own tallies — "Everything, 8 items" — and the app writes them
+    # from the result rather than from what is on screen. Run 159's per-name notes called three
+    # clip pairs and a byte-identical clip missing in a run where this number was exactly right,
+    # so the count is the assertion and the names are the commentary.
+    total = None
+    for match in re.finditer(r"everything, (\d+) item", labels):
+        total = int(match.group(1))
+    if total is None:
+        notes.append("the review screen did not say how many items it was offering")
+    elif total < OFFERED_AT_LEAST:
+        failures.append(
+            f"the app is offering {total} items and the fixture builds {OFFERED_AT_LEAST} — "
+            "something it should have found, it did not"
+        )
+    else:
+        notes.append(f"{total} items offered, and the fixture builds {OFFERED_AT_LEAST}")
+
     for stem in EXACT:
         if stem not in labels:
             failures.append(f"{stem} is byte-identical to its copy and was not offered")
@@ -549,8 +584,12 @@ def main():
         if stem in labels:
             failures.append(f"{stem} has no partner and was offered for deletion")
 
+    # Notes, and only notes. A clip's name missing here means the sweep did not reach the video
+    # section — see `EXACT` — not that the app failed to find it. The count above is what
+    # actually guards the videos.
     for stem in ["photo-3", "photo-4", "clip-11", "clip-12", "clip-13"]:
-        notes.append(f"{'found' if stem in labels else 'MISSED'}  {stem} (perceptual pair)")
+        seen = "found " if stem in labels else "not seen by the sweep:"
+        notes.append(f"{seen}  {stem} (perceptual pair)")
 
     if granted_folder:
         # Hard, both ways. A pair that crosses the line has to be found — it is the app's one

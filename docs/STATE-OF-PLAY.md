@@ -28,7 +28,7 @@ These run in CI on every push, through the real system frameworks.
 | Photo library read | `real` job: `PhotoKitMediaLibrary` indexes 28 real assets |
 | Byte-identical detection | `real` job: both exact pairs found, offered, deleted |
 | Perceptual detection (photos) | `real` job: both half-size re-sends found |
-| Video similarity, **on files** | `AdapterTests.testTheSameFootageReEncodedStillMatchesItself`: real H.264, 480×360 at 2 Mbps against 320×240 at 400 kbps. **Not** proven on the PhotoKit path — see §5 |
+| Video similarity | `real` job, run 159: all three re-encoded clip pairs **and** a byte-identical one, found through PhotoKit. Plus `AdapterTests.testTheSameFootageReEncodedStillMatchesItself` on files |
 | Permission flow | `real` job taps the real "Allow Full Access" dialog |
 | Deletion | `real` job answers the system's own Delete alert; second scan comes back clean |
 | No false positives | no singleton has ever been offered |
@@ -239,20 +239,6 @@ grant can settle this**, and the answer decides whether folder deletion can offe
 undo like the photo half does. This is the single most valuable unanswered question in the
 project.
 
-**Has the app ever offered a video pair on the real path?** No, and the table in §1 said
-otherwise until run 157 was read properly. The `real` job reports `clip-11`, `clip-12` and
-`clip-13` MISSED on every run, and offers four groups — which is exactly the four photo pairs
-the fixture builds. Videos are indexed and opened (the scan ledger counts them), and the file
-path matches a re-encode in a unit test, so the difference is `PhotoKitAssetAnalyzer`.
-
-Every video pair in the fixture was a re-encode, which meant a miss said two things at once:
-either videos never reach the matcher, or they do and the threshold is wrong. `clip-16` and
-`clip-16-copy` are byte-identical and now asserted like `photo-1` — no frame sampling, no
-threshold, only the digest. **The next `real` run answers it**: if the byte-identical pair is
-missed too, videos are not reaching the matcher and `deliveryMode = .fastFormat` in
-`videoSignature(for:)` is the first thing to look at; if it is found while the re-encodes are
-not, the sampler or the threshold is.
-
 **Why did one history test start failing?** `testADeletionLeavesAReceiptYouCanOpen` passed for
 days and failed in run 140 after 194 seconds against its usual 110. The fixture changed in the
 same window (EXIF dates, two new piles), so the ordering it walks may have moved — or the
@@ -368,6 +354,12 @@ thing; 7 jobs should be 4–5.
   the screen, not what was found — run 155 read two where there were four. This is §5's rule
   about membership checks over visible lists, and it caught me in a test I wrote after writing
   the rule down.
+- **`sweep()` in `real-library-check.py` reaches the photo sections and not the video ones.**
+  It reported four groups where the app was offering eight, and named the four it could not
+  reach as the app's failures — three clip re-sends and a byte-identical clip that had all in
+  fact been found. **A checker that cannot see half the screen must not be the thing that says
+  the app is broken.** The count on the "Everything" chip is the assertion now; the per-name
+  lines are notes, and they say "not seen by the sweep" rather than MISSED.
 - The DupeCore test factory is `Fixtures`, not `TestSupport`.
 - **"On My iPhone" is not the Files app's data container.** It is served by
   `com.apple.FileProvider.LocalStorage`, and on a simulator the directories are
