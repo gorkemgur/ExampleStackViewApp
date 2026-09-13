@@ -273,56 +273,6 @@ def place_the_folder():
     return FOLDER_NAME
 
 
-def grant_the_folder():
-    """Walk the app's own affordance and Apple's picker to hand that folder over.
-
-    Every tap here is against UIKit's document picker rather than this app, so it is the least
-    predictable part of the run — which is why each step dumps what it saw before giving up,
-    and why failing here is a note. The cross-source assertions are simply skipped if the grant
-    does not land; nothing is claimed that was not seen.
-    """
-    add = scroll_to("folders.add")
-    if add is None:
-        dump_tree("looking for the app's add-folder control on the overview")
-        return False
-    tap(add, settle=3)
-
-    # The picker opens wherever it was last, so get to Browse and then into On My iPhone.
-    for label in ["Browse", "On My iPhone", FOLDER_NAME]:
-        target = None
-        for _ in range(12):
-            tree = describe()
-            target = next(
-                (
-                    element for element in tree
-                    if str(element.get("AXLabel") or "").strip() == label
-                    and is_on_glass(element)
-                ),
-                None
-            )
-            if target is not None:
-                break
-            time.sleep(1)
-        if target is None:
-            dump_tree(f"looking for '{label}' in the picker")
-            return False
-        tap(target, settle=2)
-
-    # The picker's confirm key is labelled for the selection; both spellings have shipped.
-    for label in ["Open", "Done", f"Open \"{FOLDER_NAME}\""]:
-        confirm = next(
-            (
-                element for element in describe()
-                if str(element.get("AXLabel") or "").strip() == label and is_on_glass(element)
-            ),
-            None
-        )
-        if confirm is not None:
-            tap(confirm, settle=3)
-            return True
-
-    dump_tree("looking for the picker's confirm key")
-    return False
 
 
 def labels(tree, limit=120):
@@ -443,18 +393,25 @@ def main():
     # Everything here is a note rather than a failure. It is the first run that has tried to
     # populate and grant a folder on a simulator, and a technique that does not work has to say
     # so without taking down the half of the check that has been working for days.
-    stage("handing over a folder as well")
+    stage("putting the folder half where a picker could reach it")
+    # Placed, not granted. Writing into the Files app's container works and the files are on
+    # the device; walking Apple's document picker afterwards does not, and cannot:
+    # `UIDocumentPickerViewController` is hosted out of process and `idb describe-all` sees only
+    # the application under test. The tree at the failing step was one line long.
+    #
+    #     --- what was on the screen at looking for 'Browse' in the picker: 1 elements
+    #         Application: id=None label='DupeSpace'
+    #
+    # So the walk is gone. It was searching for three labels twelve times apiece, every run,
+    # to arrive at a conclusion we already have — about a minute of a job that had grown to
+    # fourteen. The placement stays because it works, and whatever drives the picker next
+    # (XCUITest can reach system UI by bundle identifier; idb cannot) will need the files
+    # already sitting there.
     granted_folder = False
     if place_the_folder() is not None:
-        granted_folder = grant_the_folder()
-    if granted_folder:
-        shot("01b-folder.png")
-        print(f"granted On My iPhone / {FOLDER_NAME}")
-        # The app rescans on a grant; give the folder read time before the plan is read.
-        time.sleep(6)
-    else:
         notes.append(
-            "the folder could not be granted, so nothing across the library/folder line was checked"
+            f"the folder half is on the device at On My iPhone / {FOLDER_NAME}; granting it "
+            "needs XCUITest rather than idb, so nothing across the library/folder line was checked"
         )
 
     stage("scanning a library nobody stubbed")

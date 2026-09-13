@@ -23,17 +23,21 @@ extension XCTestCase {
 
     /// An element with this identifier, whatever type the framework decided it is.
     ///
-    /// The types it is *likely* to be, first, and only then everything. `descendants(matching:
-    /// .any)` is the broadest query XCUITest has: it walks and snapshots the whole tree, and
-    /// the review screen's tree is several hundred elements. Asking `buttons` first answers
-    /// most of these queries against a fraction of it, and the general case is still there for
-    /// the ones that need it — which is the whole point of this helper and worth keeping.
+    /// One query, evaluated lazily, and I am putting it back to that after measuring the
+    /// alternative. I changed this to try five typed queries first, on the reasoning that
+    /// `descendants(matching: .any)` walks the whole tree and a typed query walks less of it.
+    /// The run after that change took a UI shard past twenty-four minutes — longer than the
+    /// entire unsharded suite had taken before it.
+    ///
+    /// The reasoning was wrong in the case that actually matters. Every caller is *waiting*
+    /// for something that has not appeared yet, usually a frame after a tap. Resolving eagerly
+    /// meant five full evaluations that all came back empty, and then a poll against the
+    /// broadest query anyway. The lazy version hands `waitForExistence` one query and lets it
+    /// poll that, which is what it is for.
+    ///
+    /// Measure before optimising, and measure after. I did neither.
     func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
-        for query in [app.buttons, app.staticTexts, app.otherElements, app.images, app.sliders] {
-            let candidate = query[identifier]
-            if candidate.exists { return candidate }
-        }
-        return app.descendants(matching: .any)[identifier]
+        app.descendants(matching: .any)[identifier]
     }
 
     /// Wait for an element, and print the whole screen if it never arrives.
