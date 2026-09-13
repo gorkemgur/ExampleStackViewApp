@@ -10,17 +10,17 @@ recording taken across each transition and read frame by frame. See
 
 ## Measurements
 
-- animation: cards entering on launch — 95 frames at ~21fps, 5 moving (peak 76.8 levels), last movement at 0.76s [animated]
+- animation: cards entering on launch — 77 frames at ~17fps, 5 moving (peak 81.8 levels), last movement at 0.76s [animated]
 - overview: Button "History" is 100.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - overview: 66 named elements checked against a 440pt screen
-- animation: live surfaces sheet presenting — 45 frames at ~13fps, 6 moving (peak 133.7 levels), last movement at 0.47s [animated]
+- animation: live surfaces sheet presenting — 49 frames at ~14fps, 5 moving (peak 91.5 levels), last movement at 0.43s [animated]
 - live surfaces: Button "Close" is 67.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - live surfaces: 45 named elements checked against a 440pt screen
-- animation: scan screen pushing in — 99 frames at ~28fps, 4 moving (peak 18.8 levels), last movement at 0.18s [animated]
+- animation: scan screen pushing in — 105 frames at ~30fps, 3 moving (peak 20.8 levels), last movement at 0.13s [animated]
 - scan: 21 named elements checked against a 440pt screen
-- animation: progress card replacing the intro — 13 frames at ~3fps, 3 moving (peak 12.8 levels), last movement at 1.85s [animated]
+- animation: progress card replacing the intro — 14 frames at ~4fps, 5 moving (peak 9.9 levels), last movement at 2.00s [animated]
 - results: 35 named elements checked against a 440pt screen
-- animation: review screen pushing in — 22 frames at ~6fps, 5 moving (peak 21.0 levels), last movement at 0.95s [animated]
+- animation: review screen pushing in — 20 frames at ~6fps, 5 moving (peak 22.3 levels), last movement at 1.05s [animated]
 - review: 46 named elements checked against a 440pt screen
 - overview at accessibility text size: Button "History" is 119.0x36.0pt, in the navigation bar — the bar supplies the hit area
 - overview at accessibility text size: 66 named elements checked against a 440pt screen
