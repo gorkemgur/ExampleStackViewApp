@@ -240,13 +240,28 @@ asset this app has.
 
 ## 5. Open — not answered, and the honest reason
 
-**Does a Files provider allow trashing?** The 3328 refusal above names "non-public location" as
-the reason, and the folders this app actually deletes from are *not* in its container — they
-are served by a provider (iCloud Drive, On My iPhone, third parties), which is a public
-location. So the refusal may not apply there at all. **Only a real device with a real folder
-grant can settle this**, and the answer decides whether folder deletion can offer a 30-day
-undo like the photo half does. This is the single most valuable unanswered question in the
-project.
+**Does a Files provider allow trashing?** Researched properly, September 2026, and the shape of
+the answer is now known even though the answer itself still needs a device.
+
+**It is the provider's decision, not ours.** A file provider supports trashing only if its
+`NSFileProviderItem.capabilities` includes `.allowsTrashing`; providers that do not simply have
+no trash. So there is no single yes or no — iCloud Drive is reported to work with
+`FileManager.trashItem`, a third-party provider may not, and "On My iPhone" is its own case.
+The app cannot assume; it has to try and read the result.
+
+**Failure is safe, which matters more than the answer.** Where there is no trash, `trashItem`
+fails with `NSFeatureUnsupportedError` and *leaves the file where it was*. So a
+try-trash-then-remove fallback cannot lose anybody's file: its worst case is today's behaviour.
+
+⚠️ **Succeeding is what costs something, and that is why it has not been built.** A trashed file
+still occupies the disk until the trash is emptied. This app's promise is a number — "you got
+back 540 MB" — and counting a trashed file as freed would make that number precisely the kind of
+unearned claim §1 exists to record. Recoverable folder deletion means changing what "reclaimed"
+counts and what the receipt says, not swapping one call for another. That is a design decision
+with somebody's trust attached to it.
+
+What genuinely still needs a device is narrow: **which capability the providers people actually
+use report.**
 
 **Why did one history test start failing?** `testADeletionLeavesAReceiptYouCanOpen` passed for
 days and failed in run 140 after 194 seconds against its usual 110. The fixture changed in the
@@ -369,6 +384,9 @@ thing; 7 jobs should be 4–5.
   fact been found. **A checker that cannot see half the screen must not be the thing that says
   the app is broken.** The count on the "Everything" chip is the assertion now; the per-name
   lines are notes, and they say "not seen by the sweep" rather than MISSED.
+- **`FileManager.trashItem` coordinates the file access itself.** Calling it inside
+  `NSFileCoordinator.coordinate(writingItemAt:)` can deadlock — the same URL is coordinated
+  twice and the call never returns. If folder trashing is ever built, it goes in uncoordinated.
 - The DupeCore test factory is `Fixtures`, not `TestSupport`.
 - **"On My iPhone" is not the Files app's data container.** It is served by
   `com.apple.FileProvider.LocalStorage`, and on a simulator the directories are
