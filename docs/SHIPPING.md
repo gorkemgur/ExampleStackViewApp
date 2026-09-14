@@ -3,6 +3,60 @@
 Everything here needs an Apple Developer account, which is why none of it is done. The
 engineering side is finished and checked; what follows is account work and one decision.
 
+## Which account, and when to buy it
+
+**A şahıs şirketi cannot enrol as an Organization, and this is not a judgement call.** Apple's
+own enrolment page says it plainly: Organization requires a D-U-N-S Number registered to a
+*legal entity* — a corporation, limited partnership or LLC — and *"if your legal status is a
+sole proprietorship/single person business, enrol as an individual."* DBAs, trade names and
+branches are refused. A Turkish şahıs şirketi is a sole proprietorship, so Individual is the
+only door.
+
+**Individual does not limit what you can sell.** Paid apps, in-app purchases and subscriptions
+are all available on an Individual account. The two differences that actually bite:
+
+| | Individual | Organization |
+|---|---|---|
+| Seller name on the App Store | your legal personal name, publicly | the company's name |
+| Team | one person | members with roles |
+
+The seller name is the one worth thinking about before launch, because it is on the listing
+where a buyer looks for someone to trust.
+
+### If the business later becomes a limited şirket
+
+That *is* a legal entity: it can get a D-U-N-S Number, enrol as an Organization, and receive the
+app by transfer. Worth knowing now because two of the criteria touch this app:
+
+- **No version may use an iCloud entitlement.** This app has none and should keep it that way —
+  it is also the promise on the landing page.
+- **The App Group does not block an iOS transfer**, but it has to be recreated under the new
+  Team ID and the entitlements updated afterwards, or the widget silently shows nothing. That
+  is the same failure the group causes when it is missing entirely, so it will look like a bug
+  rather than a transfer step.
+- The app must have had at least one released version, and TestFlight has to be off while the
+  transfer runs.
+
+So: enrol as an Individual now, and treat an Organization as a later migration rather than a
+decision being deferred.
+
+### When it is worth the ninety-nine dollars
+
+Not for the engineering. A **free** Apple ID already installs on your own phone
+(`docs/RUN-ON-YOUR-PHONE.md`) and answers everything §10 of `STATE-OF-PLAY.md` still wants —
+including the trashing question, which needs a real folder grant rather than a paid account.
+
+It is worth paying when either of these is true:
+
+1. **You have decided to ship.** Everything below this section needs the account.
+2. **You want to live with the app for more than a week.** Free provisioning expires after
+   seven days and the app stops opening until it is re-installed. For the one thing this
+   project has never had — sustained use on a real library — that weekly interruption is the
+   thing most likely to stop it happening.
+
+Banking and Turkish tax setup in App Store Connect, and the Paid Applications Agreement that
+has to be signed before a single sale, are for your mali müşavir rather than this document.
+
 ## Already in place
 
 | | |
