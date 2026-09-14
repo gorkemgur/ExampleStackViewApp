@@ -54,8 +54,34 @@ It is worth paying when either of these is true:
    project has never had — sustained use on a real library — that weekly interruption is the
    thing most likely to stop it happening.
 
-Banking and Turkish tax setup in App Store Connect, and the Paid Applications Agreement that
-has to be signed before a single sale, are for your mali müşavir rather than this document.
+### Tax, in Turkey — the name of the thing to ask about
+
+Banking and tax setup in App Store Connect, and the Paid Applications Agreement that has to be
+signed before a single sale, belong to a mali müşavir and not to this document. **No figures are
+written here on purpose**: they are set annually and a repository is the wrong place to keep
+them fresh.
+
+But the mechanism is worth naming, because developers routinely do not know it exists and stay
+on the ordinary regime for years. **Gelir Vergisi Kanunu, mükerrer madde 20/B** — the earnings
+exemption for social content creators and *mobile application developers*. In outline: for a
+real person, earnings from app-store sales are exempt from income tax while they stay under the
+fourth bracket ceiling of the tariff, and taxation is final through a 15% withholding taken by
+the bank rather than through a return.
+
+The conditions are the part that has to be set up *before* any money arrives, which is why this
+is on the shipping list rather than in an accountant's inbox afterwards:
+
+- an exemption certificate (*istisna belgesi*) from the tax office;
+- a bank account opened specifically for this income, through which **all** of the revenue
+  passes — revenue arriving anywhere else puts the exemption for that year at risk;
+- Bağ-Kur (4/b) continues regardless: the exemption is from income tax, not from social
+  security.
+
+Two things specific to this project's owner are genuinely open and are the right questions to
+walk in with: how the exemption interacts with an **existing şahıs şirketi**, and how VAT and
+invoicing are arranged given Apple pays from abroad and is the seller to the customer.
+
+*This is orientation, not advice. The müşavir decides.*
 
 ## Already in place
 
