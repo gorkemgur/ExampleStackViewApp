@@ -437,7 +437,12 @@ In order, and the first one is the one that matters:
    which the sharpest was reading a `LazyVStack` without scrolling it, a rule written in §5 of
    this very document. **On a machine with Xcode this would have been half an hour.** Every
    question here costs a fifteen-minute round trip; that is the single biggest tax on this
-   project and the reason to run the suite locally at least once before trusting it.
+   project.
+
+   **And it is avoidable — there is a Mac with Xcode.** `docs/RUN-ON-YOUR-PHONE.md` now carries
+   the commands: `swift test --package-path Packages/DupeCore` alone runs 307 tests in seconds
+   with no simulator at all, and the UI suites run one at a time against a local device. Run
+   those before pushing and CI stops being where anything is discovered.
 3. ~~Fix `real-library-check.py` so it stops reporting the clips as missing.~~ Answered in runs
    159 and 160: the clips were never missing. The app offers all eight items the fixture builds
    — both byte-identical photographs, both photo re-sends, all three clip re-sends and the

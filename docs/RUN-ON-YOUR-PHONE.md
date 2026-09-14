@@ -1,12 +1,76 @@
 # Running it on your own phone
 
-Everything below assumes a Mac with Xcode and the phone on a cable. It takes about five
-minutes, and you do not need a paid Apple Developer membership.
+A Mac with Xcode, and the phone on a cable **once**. It takes about five minutes, and you do not
+need a paid Apple Developer membership.
+
+## The cable is a one-time thing
+
+Xcode needs USB for the first pairing and for the *Trust* prompt. After that: **Window → Devices
+and Simulators → your phone → Connect via network**, and every build after it installs over
+Wi-Fi. A free team's provisioning expires after seven days, and that weekly re-install is
+wireless too.
+
+So it is one cable connection, ever — not one per build. Nothing about it is hard on a battery:
+a few minutes at about half an amp, no heat, a fraction of one charge cycle. What wears a
+battery is heat, sitting at a high charge, and cycles, and a pairing session is none of them.
+
+The only route with *no* cable at all is TestFlight, which needs the paid membership. It is
+worth it for distribution, and `docs/SHIPPING.md` covers that — but it is not worth it merely
+to avoid plugging the phone in.
+
+---
+
+## Run the tests here, not in CI
+
+**This is the most valuable thing a Mac unlocks on this project, and it is not the phone.**
+
+Every question this repository asks of a simulator — does it compile, what is on the screen,
+what does the picker call that button — costs a fifteen-minute round trip through GitHub
+Actions. On your own machine the same question costs seconds. §10 of `STATE-OF-PLAY.md` records
+nine consecutive runs spent learning things a single local run would have answered.
+
+```sh
+brew install xcodegen                          # once
+xcodegen generate
+
+swift test --package-path Packages/DupeCore    # 307 tests, no simulator, seconds
+
+xcodebuild test -project DupeSpace.xcodeproj -scheme DupeSpace \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
+  -only-testing:DupeSpaceTests                 # 172 tests
+
+xcodebuild test -project DupeSpace.xcodeproj -scheme DupeSpace \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
+  -only-testing:DupeSpaceUITests/ReviewUITests # one suite at a time
+```
+
+`swift test` alone catches most of it and needs no simulator at all. Run that before every push
+and the pipeline stops being where you find out.
+
+### The two jobs that need a loaded device
+
+`real` and `crossing` put media into the simulator's Photos library first. Locally:
+
+```sh
+swift Scripts/make-library.swift artifacts/library
+UDID=$(python3 Scripts/pick-simulator.py)
+xcrun simctl boot "$UDID"
+
+# the whole real-PhotoKit walk, the one that finds the bugs unit tests cannot
+python3 Scripts/real-library-check.py "$UDID" artifacts/library artifacts/real
+
+# or just load the device, then run the crossing test from Xcode
+python3 Scripts/real-library-check.py "$UDID" artifacts/library artifacts/crossing --setup-only
+```
+
+`real-library-check.py` needs `idb` (`brew install facebook/fb/idb-companion` and
+`pipx install fb-idb`); the `--setup-only` path does not — it is all `simctl`.
+
+---
 
 ## With a free Apple ID
 
 ```sh
-brew install xcodegen          # once
 ./Scripts/for-my-phone.sh com.yourname
 open DupeSpace.xcodeproj
 ```
