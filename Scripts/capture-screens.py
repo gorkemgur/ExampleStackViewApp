@@ -228,17 +228,52 @@ def is_on_glass(element, size):
     return 100 <= middle <= height - 40
 
 
-def scroll_to(identifier, attempts=8):
+def content_offset(tree):
+    """How far the screen has been scrolled, read off the tree.
+
+    The topmost named element's y is as good a ruler as any: nothing else moves it.
+    """
+    tops = [
+        (element.get("frame") or {}).get("y")
+        for element in tree
+        if element.get("AXLabel") or element.get("AXUniqueId")
+    ]
+    tops = [y for y in tops if isinstance(y, (int, float))]
+    return min(tops) if tops else None
+
+
+def scroll_to(identifier, attempts=30, stalls_allowed=2):
     """Find an element, scrolling down until it comes into view.
 
     Into view, not merely into the tree — see `is_on_glass`.
+
+    A fixed number of swipes is a bet on how long the screen is, and the bet came due: the
+    live surfaces entry is the last thing on the overview, a card was added above it, and
+    eight swipes no longer reached the bottom. The walk then reported the entry "not
+    reachable", which read like a missing control rather than a screen that had grown.
+
+    So the loop gives up when the content stops moving instead of when a counter runs out.
+    A screen has a bottom; arriving at it is the only honest reason to stop looking.
     """
+    previous = None
+    stalled = 0
     for _ in range(attempts):
         tree = describe()
         element = find(tree, identifier)
         if element is not None and is_on_glass(element, screen_size(tree)):
             return element
+
+        offset = content_offset(tree)
+        if previous is not None and offset is not None and abs(offset - previous) < 1:
+            stalled += 1
+            if stalled >= stalls_allowed:
+                print(f"not reachable: {identifier} is past the bottom of a screen that will not scroll further")
+                return None
+        else:
+            stalled = 0
+        previous = offset
         swipe_up()
+
     print(f"not reachable by scrolling: {identifier}")
     return None
 

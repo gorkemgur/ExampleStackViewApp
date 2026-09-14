@@ -154,14 +154,45 @@ def swipe(from_y, to_y):
     time.sleep(1.0)
 
 
-def scroll_to(identifier, attempts=8):
-    """Find an element and bring it onto the glass, so that tapping it means something."""
+def content_offset(tree):
+    """How far the screen has been scrolled, read off the tree.
+
+    The topmost named element's y is as good a ruler as any: nothing else moves it.
+    """
+    tops = [
+        (element.get("frame") or {}).get("y")
+        for element in tree
+        if element.get("AXLabel") or element.get("AXUniqueId")
+    ]
+    tops = [y for y in tops if isinstance(y, (int, float))]
+    return min(tops) if tops else None
+
+
+def scroll_to(identifier, attempts=30, stalls_allowed=2):
+    """Find an element and bring it onto the glass, so that tapping it means something.
+
+    Scrolls until the content stops moving rather than a fixed number of times: a counted
+    swipe is a bet on the length of the screen, and screens get longer. See the same
+    function in `Scripts/capture-screens.py`, where that bet came due.
+    """
+    previous = None
+    stalled = 0
     for _ in range(attempts):
         tree = describe()
         element = find(tree, identifier)
         if element is not None and is_on_glass(element, screen_height(tree)):
             return element
+
+        offset = content_offset(tree)
+        if previous is not None and offset is not None and abs(offset - previous) < 1:
+            stalled += 1
+            if stalled >= stalls_allowed:
+                return None
+        else:
+            stalled = 0
+        previous = offset
         swipe(620, 280)
+
     return None
 
 

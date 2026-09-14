@@ -407,6 +407,14 @@ thing; 7 jobs should be 4–5.
   The overview's tree is four hundred lines and CI serves a job's log only once it has finished,
   so the line that matters ends up far above the tail. `screen(_:)` in `ElementSearch.swift`
   caps it; the full tree is in the result bundle for anyone who wants it.
+- **Scrolling a fixed number of times is a bet on the length of the screen, and screens grow.**
+  `scroll_to` in both simulator walks swiped eight times and gave up. The live surfaces entry
+  is the last thing on the overview; run 162 added the second-resources card above it, and by
+  run 167 — a commit that changed nothing but documentation — eight swipes no longer reached
+  the bottom. The walk reported "not reachable", which reads like a control that had been
+  renamed or removed, and the tree dump was the only thing that said otherwise: the button was
+  there, at y=1057 on a 956pt screen. Both scripts now stop when the content stops moving
+  instead. A screen has a bottom; arriving at it is the only honest reason to stop looking.
 
 ---
 
