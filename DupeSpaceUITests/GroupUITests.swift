@@ -75,6 +75,34 @@ final class GroupUITests: XCTestCase {
             .matching(NSPredicate(format: "identifier BEGINSWITH 'review.open.'"))
             .firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 15), "no group row to open")
+
+        // And then make sure the touch actually reaches it.
+        //
+        // `ReviewView` draws its dock through `safeAreaInset(edge: .bottom)` as a floating
+        // panel the list scrolls *under* — deliberately, and it says so at `ReviewView.swift:786`.
+        // At the scroll position this test arrives at, the first group row is entirely beneath
+        // it: the row measured {{87, 713}, {287, 72}} with the dock's own key at
+        // {{209, 758}, {163, 52}} and the panel reaching about fifty points higher again. So
+        // `tap()` sent the touch into the dock, armed the plan, opened the confirmation sheet —
+        // and the test then failed two lines later saying the group screen had no survivor on
+        // it, which was true, because the group screen had never been opened.
+        //
+        // `isHittable` is not the guard for this. It answered *true* for a row that was covered
+        // end to end, which is why asking it fixed nothing. Geometry is the guard: scroll until
+        // the row clears the dock, and refuse to tap if it never does.
+        let dockKey = app.buttons["review.delete"]
+        var scrolls = 0
+        while dockKey.exists, row.frame.maxY > dockKey.frame.minY - 64, scrolls < 8 {
+            app.swipeUp()
+            scrolls += 1
+        }
+        if dockKey.exists {
+            XCTAssertLessThan(
+                row.frame.maxY,
+                dockKey.frame.minY - 64,
+                "the group row never came out from under the floating dock"
+            )
+        }
         row.tap()
     }
 
