@@ -42,8 +42,22 @@ final class PhotoKitThumbnailLoader: ThumbnailLoading, @unchecked Sendable {
         }
 
         let options = PHImageRequestOptions()
+        // The promise on the scan screen — "nothing is downloaded from iCloud" — is kept, and
+        // it is the reason this stays false. What it cost was measured on a real phone: the
+        // 52pt and 64pt thumbnails in the list rendered and the 200pt comparison slider in
+        // group detail was empty, both halves of it, for every group. Small sizes are served
+        // out of PhotoKit's always-local thumbnail pyramid; anything larger is answered from
+        // the original, and on a library set to Optimise iPhone Storage the original is not
+        // here. `.highQualityFormat` then delivers exactly once, with nothing.
         options.isNetworkAccessAllowed = false
-        options.deliveryMode = .highQualityFormat
+        // `.opportunistic` is the whole fix. It delivers the best *local* rendition first —
+        // degraded, instantly, and above all present — instead of holding out for a quality
+        // that would need the network and then returning nil. A soft picture of the photograph
+        // you are deciding about beats a grey placeholder next to a Delete button.
+        //
+        // It calls back more than once; `ResumeOnce` already takes the first and drops the
+        // rest, which is what makes this a one-line change rather than a rewrite.
+        options.deliveryMode = .opportunistic
         options.resizeMode = .fast
         options.isSynchronous = false
 
@@ -56,14 +70,34 @@ final class PhotoKitThumbnailLoader: ThumbnailLoading, @unchecked Sendable {
                 targetSize: pixelSize,
                 contentMode: .aspectFill,
                 options: options
-            ) { image, _ in
+            ) { image, info in
                 guard resumeGuard.claim() else { return }
+                // The info dictionary was being thrown away, which is why "the photograph is
+                // in iCloud" and "the request failed" looked identical from here: both were
+                // nil. Logged rather than surfaced — the view's job is to draw something, not
+                // to explain PhotoKit — but the next person to see an empty slider gets the
+                // reason out of the console instead of out of a week.
+                if image == nil {
+                    let inCloud = (info?[PHImageResultIsInCloudKey] as? Bool) ?? false
+                    let failure = info?[PHImageErrorKey] as? NSError
+                    Self.log(identifier: identifier, pixelSize: pixelSize, inCloud: inCloud, error: failure)
+                }
                 continuation.resume(returning: image)
             }
         }
 
         if let image { cache.setObject(image, forKey: key) }
         return image
+    }
+
+    private static func log(identifier: String, pixelSize: CGSize, inCloud: Bool, error: NSError?) {
+        let reason = inCloud
+            ? "the original is in iCloud and downloading is not allowed"
+            : (error.map { "\($0.domain) \($0.code)" } ?? "no image and no reason given")
+        print(
+            "[thumbnail] nothing at \(Int(pixelSize.width))x\(Int(pixelSize.height)) "
+            + "for \(identifier.prefix(12)): \(reason)"
+        )
     }
 }
 
