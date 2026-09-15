@@ -43,7 +43,7 @@ final class StubAssetAnalyzer: AssetAnalyzing {
 
     // MARK: - Fixture
 
-    static func uiTestFixture() -> StubAssetAnalyzer {
+    static func uiTestFixture(stepDelay: Duration = .zero) -> StubAssetAnalyzer {
         let sharedVideoDigest = ContentDigest(bytes: [UInt8](repeating: 0xA7, count: 32))
 
         let baseD: UInt64 = 0x0F1E_2D3C_4B5A_6978
@@ -92,7 +92,8 @@ final class StubAssetAnalyzer: AssetAnalyzing {
                 "video-holiday-copy": .digest(sharedVideoDigest)
             ],
             hashes: hashes,
-            signatures: signatures
+            signatures: signatures,
+            stepDelay: stepDelay
         )
     }
 

@@ -53,22 +53,47 @@ enum AppEnvironment {
         ProcessInfo.processInfo.arguments.contains(onboardingFlag)
     }
 
+    /// Makes the fixture scan take long enough to be looked at while it runs.
+    ///
+    /// A running scan is a state a UI test could not otherwise hold still. The fixture is
+    /// twenty-eight items against a stub that answers instantly, so the scan is over before a
+    /// query for its Pause key can resolve — measured: the test written for the progress strip
+    /// waited twenty seconds for `scan.pause` and the tree it printed was the *results* screen.
+    /// Racing it is not a fix; a race that is usually won is a test that fails on a busy
+    /// machine and tells you nothing about the app.
+    ///
+    /// `StubAssetAnalyzer` already takes a `stepDelay` — this only asks for one. Passed
+    /// alongside `-ui-testing`, exactly as `-clean-library` and `-unanswered-access` are.
+    static let slowScanFlag = "-slow-scan"
+
+    static var isSlowScan: Bool {
+        ProcessInfo.processInfo.arguments.contains(slowScanFlag)
+    }
+
+    /// Long enough to reach a control on a loaded simulator, short enough that a test which
+    /// cancels rather than waits pays almost none of it. Four reads at a time over twenty-eight
+    /// items is roughly seven steps a stage, so this buys about twelve seconds of scanning.
+    private static let slowScanStep = Duration.milliseconds(600)
+
     /// One store, shared: the gate that decides whether to present the screen and the screen
-    /// that marks it seen have to agree on what has been seen.
+    /// that marks it seen have to agree on what has been seen. Calling this twice would make two
+    /// stores and let them disagree, so `AppContainer` calls it once and owns the answer.
     ///
     /// In memory under test, so a walk that reaches the end of the sequence does not leave a
     /// "seen" flag in the simulator's defaults for the next run to trip over.
-    static let onboardingStore: any OnboardingStoring = isUITesting
-        ? InMemoryOnboardingStore()
-        : UserDefaultsOnboardingStore()
+    static func makeOnboardingStore() -> any OnboardingStoring {
+        isUITesting ? InMemoryOnboardingStore() : UserDefaultsOnboardingStore()
+    }
 
     /// One registry, shared: the library that reads granted folders and the screen that
-    /// manages them have to agree on what is granted.
-    static let folderRegistry: any FolderRegistering = isUITesting
-        ? InMemoryFolderRegistry()
-        : UserDefaultsFolderRegistry()
+    /// manages them have to agree on what is granted. Held by `AppContainer` and passed into
+    /// every service below that reads folders — which is why they take it rather than reach for
+    /// it, because a factory that reached for it would be reaching for a second one.
+    static func makeFolderRegistry() -> any FolderRegistering {
+        isUITesting ? InMemoryFolderRegistry() : UserDefaultsFolderRegistry()
+    }
 
-    static func makeLibrary() -> MediaLibrary {
+    static func makeLibrary(registry: any FolderRegistering) -> MediaLibrary {
         guard !isUITesting else {
             return isAccessUnanswered
                 ? StubMediaLibrary.unansweredFixture()
@@ -76,27 +101,37 @@ enum AppEnvironment {
         }
         return CompositeMediaLibrary(
             photos: PhotoKitMediaLibrary(),
-            files: FileMediaLibrary(registry: folderRegistry)
+            files: FileMediaLibrary(registry: registry)
         )
     }
 
     /// Kept between launches so a second scan does not re-read a library that has not changed.
     /// UI tests get a fresh one so their assertions describe this run's work.
-    static let fingerprintCache: FileFingerprintCache = isUITesting
-        ? FileFingerprintCache(
-            fileURL: FileManager.default.temporaryDirectory
-                .appendingPathComponent("ui-test-fingerprints-\(UUID().uuidString).json")
-        )
-        : FileFingerprintCache()
+    ///
+    /// One per launch, held by `AppContainer`: the analyzer writes into it and the scan screen
+    /// reports how much of the work it saved, and two caches would make that figure a fiction.
+    static func makeFingerprintCache() -> FileFingerprintCache {
+        isUITesting
+            ? FileFingerprintCache(
+                fileURL: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("ui-test-fingerprints-\(UUID().uuidString).json")
+            )
+            : FileFingerprintCache()
+    }
 
-    static func makeAnalyzer() -> any AssetAnalyzing {
+    static func makeAnalyzer(
+        registry: any FolderRegistering,
+        cache: FileFingerprintCache
+    ) -> any AssetAnalyzing {
         let base: any AssetAnalyzing = isUITesting
-            ? (isCleanLibrary ? StubAssetAnalyzer.cleanFixture() : StubAssetAnalyzer.uiTestFixture())
+            ? (isCleanLibrary
+                ? StubAssetAnalyzer.cleanFixture()
+                : StubAssetAnalyzer.uiTestFixture(stepDelay: isSlowScan ? slowScanStep : .zero))
             : CompositeAssetAnalyzer(
                 photos: PhotoKitAssetAnalyzer(),
-                files: FileAssetAnalyzer(registry: folderRegistry)
+                files: FileAssetAnalyzer(registry: registry)
             )
-        return CachingAnalyzer(base: base, cache: fingerprintCache)
+        return CachingAnalyzer(base: base, cache: cache)
     }
 
     /// No Live Activity under UI test: a simulator shows none, and a run's assertions should
@@ -109,7 +144,7 @@ enum AppEnvironment {
         isUITesting ? StubLibraryChangeObserver() : PhotoLibraryChangeObserver()
     }
 
-    static func makeDeleter() -> MediaDeleting {
+    static func makeDeleter(registry: any FolderRegistering) -> MediaDeleting {
         // No delay. There used to be 420 milliseconds a step here, for one reason: the walk
         // photographed the deletion while it ran, and a stub that finishes in a frame leaves
         // nothing to photograph. That walk was deleted with the rest of the recordings, so
@@ -118,13 +153,13 @@ enum AppEnvironment {
         guard !isUITesting else { return StubDeleter(stepDelay: .zero) }
         return CompositeDeleter(
             photos: PhotoKitDeleter(),
-            files: FileDeleter(registry: folderRegistry)
+            files: FileDeleter(registry: registry)
         )
     }
 
     @MainActor
-    static func makeExporter() -> OriginalExporting {
-        isUITesting ? StubOriginalExporter() : FileSystemOriginalExporter(registry: folderRegistry)
+    static func makeExporter(registry: any FolderRegistering) -> OriginalExporting {
+        isUITesting ? StubOriginalExporter() : FileSystemOriginalExporter(registry: registry)
     }
 
     static func makeThumbnailLoader() -> ThumbnailLoading {

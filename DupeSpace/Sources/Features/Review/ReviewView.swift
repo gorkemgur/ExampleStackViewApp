@@ -20,20 +20,21 @@ struct ReviewView: View {
 
     private let loader: any ThumbnailLoading
 
-    // Main-actor because the thumbnail loader now takes the display scale, and `UIScreen.main`
-    // is main-actor isolated. A SwiftUI view's `init` is not implicitly isolated — only `body`
-    // is — so it has to be said.
+    // Main-actor because `AppContainer` is, and a SwiftUI view's `init` is not implicitly
+    // isolated — only `body` is — so it has to be said.
     @MainActor
-    init(result: ScanResult, history: HistoryViewModel) {
+    init(container: AppContainer, result: ScanResult, history: HistoryViewModel) {
         _model = StateObject(
             wrappedValue: ReviewViewModel(
                 result: result,
-                deleter: AppEnvironment.makeDeleter(),
+                deleter: container.deleter,
                 history: history,
-                exporter: AppEnvironment.makeExporter()
+                exporter: container.exporter
             )
         )
-        loader = AppEnvironment.makeThumbnailLoader()
+        // The app's one loader, so what this screen fetched is still in its cache the next time
+        // a group is opened. It used to build its own, and threw the cache away with the screen.
+        loader = container.thumbnails
     }
 
     var body: some View {

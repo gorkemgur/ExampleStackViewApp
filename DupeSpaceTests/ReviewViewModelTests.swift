@@ -6,7 +6,7 @@ import DupeCore
 final class ReviewViewModelTests: XCTestCase {
 
     private func makeResult() async -> ScanResult {
-        let scan = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture())
+        let scan = makeScanStore(analyzer: StubAssetAnalyzer.uiTestFixture())
         scan.start(items: StubMediaLibrary.sampleItems())
         let deadline = Date().addingTimeInterval(10)
         while scan.isScanning && Date() < deadline {

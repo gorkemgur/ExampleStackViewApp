@@ -8,11 +8,15 @@ struct RootView: View {
     @Binding var pendingLink: DeepLink?
 
     @EnvironmentObject private var history: HistoryViewModel
-    @StateObject private var model = OverviewViewModel(
-        library: AppEnvironment.makeLibrary(),
-        folderRegistry: AppEnvironment.folderRegistry,
-        changeObserver: AppEnvironment.makeChangeObserver()
-    )
+    /// The app's services. Read in `init` rather than through the environment, which a view's
+    /// `init` cannot reach — and this screen's model has to be built there to stay a single
+    /// `@StateObject`.
+    private let container: AppContainer
+    @StateObject private var model: OverviewViewModel
+    /// Observed, not owned — the scan belongs to `AppContainer`. This screen watches it only so
+    /// the strip above the stack has something to redraw against; nothing here starts, stops or
+    /// holds a scan.
+    @ObservedObject private var scan: ScanStore
     /// Re-reading the permission needs to know when the app comes back to the front. The
     /// permission alert itself, the Settings round trip the access card offers, and a
     /// revocation while backgrounded all land here and nowhere else.
@@ -23,14 +27,29 @@ struct RootView: View {
     /// Decided once, at the first construction of this view, and not re-asked afterwards: a
     /// value that re-evaluated on every redraw would put the screen back up the moment
     /// `markSeen()` had not yet been written.
-    @State private var showingOnboarding = OnboardingGate.shouldPresent(
-        hasSeen: AppEnvironment.onboardingStore.hasSeenOnboarding,
-        isUITesting: AppEnvironment.isUITesting,
-        isForced: AppEnvironment.isForcingOnboarding
-    )
+    @State private var showingOnboarding: Bool
 
-    init(pendingLink: Binding<DeepLink?> = .constant(nil)) {
+    /// Main-actor because `AppContainer` is, and a SwiftUI view's `init` is not implicitly
+    /// isolated — only `body` is. The same reason `ReviewView.init` says so.
+    @MainActor
+    init(container: AppContainer, pendingLink: Binding<DeepLink?> = .constant(nil)) {
         _pendingLink = pendingLink
+        self.container = container
+        _scan = ObservedObject(wrappedValue: container.scan)
+        _model = StateObject(
+            wrappedValue: OverviewViewModel(
+                library: container.library,
+                folderRegistry: container.folderRegistry,
+                changeObserver: container.changeObserver
+            )
+        )
+        _showingOnboarding = State(
+            initialValue: OnboardingGate.shouldPresent(
+                hasSeen: container.onboardingStore.hasSeenOnboarding,
+                isUITesting: AppEnvironment.isUITesting,
+                isForced: AppEnvironment.isForcingOnboarding
+            )
+        )
     }
 
     var body: some View {
@@ -123,7 +142,7 @@ struct RootView: View {
             }
             .navigationDestination(for: DeepLink.self) { link in
                 switch link {
-                case .scan: ScanView(items: model.items, history: history)
+                case .scan: ScanView(container: container, items: model.items, history: history)
                 }
             }
             .toolbar {
@@ -131,6 +150,33 @@ struct RootView: View {
                     historyEntry
                 }
             }
+        }
+        // Attached to the stack rather than to its root, so the strip stays at the top of
+        // History and of anything else pushed on top — the scan is the app's, and a screen you
+        // navigated to is not a reason to stop reporting it.
+        //
+        // `path` is the whole of the "am I already looking at it" question — but only because
+        // the scan key below was changed to push by value. It was a view-based
+        // `NavigationLink`, which pushes without touching the bound path, so this read said
+        // "not on the scan screen" while the scan screen was on top. The strip drew over it,
+        // and the UI test caught it on its first run.
+        //
+        // `.scan` is now the only thing ever appended, and every other push in this app —
+        // History, a group, a folder — is still view-based and deliberately leaves the path
+        // alone, because the strip belongs on those screens.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ScanStripView(
+                state: ScanStrip.state(
+                    isScanning: scan.isScanning,
+                    isPaused: scan.isPaused,
+                    progress: scan.progress,
+                    isShowingScan: !path.isEmpty
+                ),
+                // No new navigation: this is the same door the Live Activity and the widget
+                // come through, and `onChange(of: pendingLink)` below already knows to replace
+                // the path rather than stack a second scan screen on it.
+                onTap: { pendingLink = .scan }
+            )
         }
         .sheet(isPresented: $showingLiveSurfaces) {
             LiveSurfacePreviewView { showingLiveSurfaces = false }
@@ -147,7 +193,7 @@ struct RootView: View {
         // there dead after the permission had already been answered.
         .fullScreenCover(isPresented: $showingOnboarding) {
             OnboardingView(
-                store: AppEnvironment.onboardingStore,
+                store: container.onboardingStore,
                 onGrantPhotos: { await model.requestAccess(waitingForInventory: false) },
                 onFinish: { showingOnboarding = false }
             )
@@ -286,9 +332,15 @@ struct RootView: View {
 
             ladderPreview
 
-            NavigationLink {
-                ScanView(items: model.items, history: history)
-            } label: {
+            // By value, not by view. Both roads to the scan screen — this key and the link the
+            // Live Activity carries — now go through `path`, which is what makes "am I already
+            // looking at it" a question the stack can answer.
+            //
+            // It also closes something that was already wrong before the strip existed: a
+            // view-based push does not appear in the bound path, so `onChange(of: pendingLink)`
+            // resetting the path could not pop a scan screen opened from here, and tapping the
+            // Live Activity would have put a second one on top of it.
+            NavigationLink(value: DeepLink.scan) {
                 Text("Scan for duplicates")
             }
             .buttonStyle(.key)
@@ -353,6 +405,8 @@ struct RootView: View {
 }
 
 #Preview("Authorised") {
-    RootView()
-        .environmentObject(HistoryViewModel(store: InMemoryHistoryStore()))
+    let container = AppContainer()
+
+    RootView(container: container)
+        .environmentObject(container.history)
 }

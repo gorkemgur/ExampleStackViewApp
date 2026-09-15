@@ -27,7 +27,7 @@ final class RecordingScanActivity: ScanActivityPresenting {
 @MainActor
 final class ScanActivityTests: XCTestCase {
 
-    private func waitUntilFinished(_ model: ScanViewModel, timeout: TimeInterval = 10) async {
+    private func waitUntilFinished(_ model: ScanStore, timeout: TimeInterval = 10) async {
         let deadline = Date().addingTimeInterval(timeout)
         while model.isScanning && Date() < deadline {
             try? await Task.sleep(for: .milliseconds(20))
@@ -37,7 +37,7 @@ final class ScanActivityTests: XCTestCase {
     func testAScanPutsItselfOnTheLockScreenBeforeItReadsAnything() async {
         let activity = RecordingScanActivity()
         let items = StubMediaLibrary.sampleItems()
-        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture(), activity: activity)
+        let model = makeScanStore(analyzer: StubAssetAnalyzer.uiTestFixture(), activity: activity)
 
         model.start(items: items)
 
@@ -52,7 +52,7 @@ final class ScanActivityTests: XCTestCase {
 
     func testTheLiveSurfaceFollowsTheScanAndEndsWithWhatItFound() async {
         let activity = RecordingScanActivity()
-        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture(), activity: activity)
+        let model = makeScanStore(analyzer: StubAssetAnalyzer.uiTestFixture(), activity: activity)
 
         model.start(items: StubMediaLibrary.sampleItems())
         await waitUntilFinished(model)
@@ -74,7 +74,7 @@ final class ScanActivityTests: XCTestCase {
     /// is an estimate would be worse than no total at all.
     func testNothingIsClaimedFoundWhileTheScanIsStillRunning() async {
         let activity = RecordingScanActivity()
-        let model = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture(), activity: activity)
+        let model = makeScanStore(analyzer: StubAssetAnalyzer.uiTestFixture(), activity: activity)
 
         model.start(items: StubMediaLibrary.sampleItems())
         await waitUntilFinished(model)
@@ -86,7 +86,7 @@ final class ScanActivityTests: XCTestCase {
     func testHoldingTheScanShowsAsHeldAndResumingUndoesIt() async {
         let activity = RecordingScanActivity()
         let slow = StubAssetAnalyzer(digests: [:], hashes: [:], stepDelay: .milliseconds(40))
-        let model = ScanViewModel(analyzer: slow, activity: activity)
+        let model = makeScanStore(analyzer: slow, activity: activity)
 
         model.start(items: StubMediaLibrary.sampleItems())
         model.pause()
@@ -103,7 +103,7 @@ final class ScanActivityTests: XCTestCase {
     func testACancelledScanEndsTheLiveSurfaceSayingNothingWasDeleted() async {
         let activity = RecordingScanActivity()
         let slow = StubAssetAnalyzer(digests: [:], hashes: [:], stepDelay: .milliseconds(50))
-        let model = ScanViewModel(analyzer: slow, activity: activity)
+        let model = makeScanStore(analyzer: slow, activity: activity)
 
         model.start(items: StubMediaLibrary.sampleItems())
         model.cancel()
@@ -116,11 +116,11 @@ final class ScanActivityTests: XCTestCase {
     /// The Live Activity is a convenience. A device that will not show one — an iPad, or a user
     /// who turned them off — still gets a scan.
     func testAScanWithNoLiveSurfaceRunsExactlyTheSame() async {
-        let withActivity = ScanViewModel(
+        let withActivity = makeScanStore(
             analyzer: StubAssetAnalyzer.uiTestFixture(),
             activity: RecordingScanActivity()
         )
-        let without = ScanViewModel(analyzer: StubAssetAnalyzer.uiTestFixture(), activity: nil)
+        let without = makeScanStore(analyzer: StubAssetAnalyzer.uiTestFixture(), activity: nil)
 
         withActivity.start(items: StubMediaLibrary.sampleItems())
         without.start(items: StubMediaLibrary.sampleItems())

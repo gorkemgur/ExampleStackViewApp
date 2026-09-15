@@ -25,8 +25,9 @@ struct OnboardingView: View {
     /// Which way the next page should come in from. A page that slides in from the left when
     /// you went forwards reads as the screen correcting itself.
     @State private var movingBack = false
-    /// Live drag distance, so the layers can move at different rates under the finger. Reset to
-    /// zero on release, which is what makes the page snap back when the drag was too short.
+    /// Live drag distance. The page rides this one-for-one, so what is under the finger moves
+    /// with the finger. A drag that does not turn the page springs this back to zero on its own;
+    /// a drag that does turn it hands the offset to the outgoing page's transition instead.
     @State private var drag: CGFloat = 0
 
     init(
@@ -89,12 +90,14 @@ struct OnboardingView: View {
         }
     }
 
-    /// Two layers, moved at different rates under the finger.
+    /// The page moves with the finger; the words trail it slightly.
     ///
-    /// A page that slides as one rigid block is a slideshow. Letting the picture lead the words
-    /// is what makes the drag feel like it has depth, and it costs one multiplier — the artwork
-    /// tracks the finger at about a third, the copy at a tenth, and the rail above does not move
-    /// at all because it is chrome and chrome that slides reads as a bug.
+    /// The whole page used to stay put while only the two layers inside it crept along at a
+    /// third and a tenth of the drag — two hundred points of finger bought sixty-four points of
+    /// movement, which is why the screen read as stuck and then jumped on release. The page is
+    /// on the finger now, one-for-one. The depth survives as a *lag* rather than a lead: the
+    /// picture is glued to the finger and the copy comes a fraction behind it. The rail above
+    /// still does not move at all, because it is chrome and chrome that slides reads as a bug.
     ///
     /// The artwork is a flexible band rather than a fixed 232pt, and the `Spacer` that used to
     /// sit under this is gone. On a 13 Pro Max that pairing left about 195pt of nothing between
@@ -106,13 +109,13 @@ struct OnboardingView: View {
             OnboardingArtwork(pageID: model.page.id, reduceMotion: reduceMotion)
                 .frame(maxWidth: .infinity, minHeight: 130, maxHeight: 360)
                 .dsSlab(padding: DS.Space.l)
-                .offset(x: parallax(0.32))
                 // Decorative: everything it says, the copy underneath says in words.
                 .accessibilityHidden(true)
 
             PageCopy(page: model.page, reduceMotion: reduceMotion)
-                .offset(x: parallax(0.10))
+                .offset(x: trail(0.08))
         }
+        .offset(x: reduceMotion ? 0 : drag)
     }
 
     private var controls: some View {
@@ -139,8 +142,10 @@ struct OnboardingView: View {
 
     // MARK: - Movement
 
-    private func parallax(_ rate: CGFloat) -> CGFloat {
-        reduceMotion ? 0 : drag * rate
+    /// How far a layer sits *behind* the page, which is already on the finger. Negative, so a
+    /// leftward drag leaves the copy a little to the right of where the picture has gone.
+    private func trail(_ rate: CGFloat) -> CGFloat {
+        reduceMotion ? 0 : -drag * rate
     }
 
     private var pageTransition: AnyTransition {
@@ -163,14 +168,32 @@ struct OnboardingView: View {
                 drag = atEnd ? value.translation.width / 3 : value.translation.width
             }
             .onEnded { value in
-                withAnimation(Motion.content) { drag = 0 }
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                guard abs(value.translation.width) > 56 else { return }
-                if value.translation.width < 0 {
-                    movingBack = false
-                    model.advance()
-                } else {
-                    back()
+                // Decide first, move once. Resetting the drag before the decision sprang the
+                // outgoing page back to centre in the very frame its removal transition was
+                // carrying it off the other side — two animations, opposite directions, same
+                // view. The page arrived by jumping.
+                let horizontal = abs(value.translation.width) > abs(value.translation.height)
+                // A flick means the same thing as a long drag, so the threshold reads where the
+                // finger was going as well as how far it actually got.
+                let turns = horizontal
+                    && (abs(value.translation.width) > 56
+                        || abs(value.predictedEndTranslation.width) > 160)
+
+                guard turns else {
+                    withAnimation(Motion.content) { drag = 0 }
+                    return
+                }
+
+                // One transaction. The page being replaced keeps the offset the finger gave it —
+                // it is out of the update graph by then — and the transition takes it from there.
+                withAnimation(Motion.content) {
+                    drag = 0
+                    if value.translation.width < 0 {
+                        movingBack = false
+                        model.advance()
+                    } else {
+                        back()
+                    }
                 }
             }
     }

@@ -5,8 +5,9 @@ struct ScanView: View {
 
     let items: [MediaItem]
 
+    private let container: AppContainer
     private let history: HistoryViewModel
-    @StateObject private var model: ScanViewModel
+    @ObservedObject private var model: ScanStore
     /// Set once the results have appeared, so the seal bounces on arrival rather than never.
     @State private var hasSettled = false
     /// Drives the marker beside the running stage. Started when the scan starts, and never
@@ -18,17 +19,17 @@ struct ScanView: View {
     /// twenty-eight items and is not nothing at fifty thousand.
     @State private var plan: ScanPlan?
 
-    init(items: [MediaItem], history: HistoryViewModel) {
+    /// Main-actor for the same reason `ReviewView.init` is: `AppContainer` is isolated to it,
+    /// and a view's `init` is not implicitly isolated the way `body` is.
+    @MainActor
+    init(container: AppContainer, items: [MediaItem], history: HistoryViewModel) {
+        self.container = container
         self.items = items
         self.history = history
-        _model = StateObject(
-            wrappedValue: ScanViewModel(
-                analyzer: AppEnvironment.makeAnalyzer(),
-                history: history,
-                cache: AppEnvironment.fingerprintCache,
-                activity: AppEnvironment.makeScanActivity()
-            )
-        )
+        // Observed, not owned. The scan belongs to `AppContainer` and outlives this screen —
+        // which is the whole of Faz 5, and the reason the `onDisappear` that used to cancel it
+        // is gone.
+        _model = ObservedObject(wrappedValue: container.scan)
     }
 
     var body: some View {
@@ -91,11 +92,6 @@ struct ScanView: View {
             } else {
                 pulse = false
             }
-        }
-        .onDisappear {
-            // Leaving the screen must stop the work, not leave it reading the library in the
-            // background with nowhere to report to.
-            model.cancel()
         }
     }
 
@@ -561,7 +557,7 @@ struct ScanView: View {
             .accessibilityHidden(true)
 
             NavigationLink {
-                ReviewView(result: result, history: history)
+                ReviewView(container: container, result: result, history: history)
             } label: {
                 Text("Review and choose")
             }
