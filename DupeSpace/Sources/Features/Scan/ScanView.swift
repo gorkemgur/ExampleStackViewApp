@@ -9,6 +9,10 @@ struct ScanView: View {
     @StateObject private var model: ScanViewModel
     /// Set once the results have appeared, so the seal bounces on arrival rather than never.
     @State private var hasSettled = false
+    /// Drives the marker beside the running stage. Started when the scan starts, and never
+    /// started at all under Reduce Motion.
+    @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// What the scan is about to do, worked out from metadata alone. Off the main actor and
     /// once per appearance: it sorts and windows the whole library, which is nothing at
     /// twenty-eight items and is not nothing at fifty thousand.
@@ -35,6 +39,8 @@ struct ScanView: View {
                         .transition(.opacity.combined(with: .offset(y: 16)))
                 } else if model.isScanning {
                     progressCard
+                        .transition(.opacity)
+                    scanningDetail
                         .transition(.opacity)
                 } else {
                     introCard
@@ -76,6 +82,16 @@ struct ScanView: View {
                 ScanPlan.of(snapshot)
             }.value
         }
+        .onChange(of: model.isScanning) { _, scanning in
+            guard !reduceMotion else { return }
+            if scanning {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            } else {
+                pulse = false
+            }
+        }
         .onDisappear {
             // Leaving the screen must stop the work, not leave it reading the library in the
             // background with nowhere to report to.
@@ -84,6 +100,96 @@ struct ScanView: View {
     }
 
     // MARK: - States
+
+    /// What there is to look at while the scan runs.
+    ///
+    /// Pressing Start used to empty the screen. The intro card — which carries the ledger, the
+    /// one thing on here worth reading — was replaced by a single progress card, and `DS.ink`
+    /// is `0x080C11` in dark mode, so what a person on a real phone actually got was one small
+    /// card floating on a field of near-black for as long as the scan took. On a twenty-eight
+    /// item fixture that is a moment. On somebody's real library it is minutes.
+    ///
+    /// Nothing here is invented to fill space. The ledger is the same ledger, still true, and
+    /// now checkable against the counts moving above it. The ladder is the pipeline's own
+    /// stages, which the app already knew and never showed: six of them, in order, with the
+    /// finished ones struck through. That is a shape you can watch without it claiming a
+    /// percentage the meter has not earned.
+    ///
+    /// Deliberately not `SweeperRingView`, which exists and would have been the quick answer:
+    /// it is a figure sweeping a floor, the app's picture of *deleting*. Putting it here would
+    /// tell somebody their photographs were being swept up while they were being read.
+    private var scanningDetail: some View {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                Eyebrow("Reading now", tint: DS.onSlabAccent)
+                stageLadder
+            }
+
+            if let plan, !plan.isEmpty {
+                ledger(plan)
+            }
+        }
+        .dsSlab()
+    }
+
+    /// The pipeline's stages, in the order it runs them.
+    private var stageLadder: some View {
+        let current = model.progress?.stage ?? .bucketing
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(ScanProgress.Stage.allCases, id: \.self) { stage in
+                stageRow(stage, current: current)
+            }
+        }
+        .animation(Motion.content, value: current)
+        // The same trap as `scan.plan` and `review.order`: without `.contain` this identifier
+        // is worn by all six rows and overrides theirs.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("scan.stages")
+    }
+
+    private func stageRow(_ stage: ScanProgress.Stage, current: ScanProgress.Stage) -> some View {
+        let isDone = stage.rawValue < current.rawValue
+        let isCurrent = stage == current
+
+        return HStack(spacing: DS.Space.s) {
+            ZStack {
+                if isDone {
+                    Image(systemName: "checkmark")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(DS.onSlabAccent)
+                } else if isCurrent {
+                    Circle()
+                        .fill(DS.onSlabAccent)
+                        .frame(width: 8, height: 8)
+                        // The only moving thing on the screen that is not a measurement, and it
+                        // is deliberately not one: it marks where you are, it does not claim
+                        // progress. Off entirely under Reduce Motion — a pulse that cannot be
+                        // switched off is the sort of thing this app's audit exists to catch.
+                        .scaleEffect(reduceMotion ? 1 : (pulse ? 1.5 : 1))
+                        .opacity(reduceMotion ? 1 : (pulse ? 0.5 : 1))
+                } else {
+                    Circle()
+                        .fill(DS.onSlab.opacity(0.22))
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .frame(width: 20, height: 20)
+
+            Text(ScanCopy.title(for: stage))
+                .font(.footnote.weight(isCurrent ? .semibold : .regular))
+                .foregroundStyle(
+                    isCurrent ? DS.onSlab : DS.onSlab.opacity(isDone ? 0.5 : 0.32)
+                )
+                .strikethrough(isDone, color: DS.onSlab.opacity(0.35))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(ScanCopy.title(for: stage))
+        .accessibilityValue(isDone ? "done" : (isCurrent ? "running" : "waiting"))
+    }
 
     /// The invitation to scan, on the slab.
     ///
