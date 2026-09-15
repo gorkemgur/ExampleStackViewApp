@@ -109,3 +109,6 @@ DupeSpaceWidgets/DupeSpaceWidgets.entitlements
 __pycache__/
 *.pyc
 project.personal.yml
+
+# macOS
+.DS_Store
