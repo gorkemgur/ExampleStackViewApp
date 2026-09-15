@@ -12,6 +12,28 @@ public struct PerceptualHashes: Sendable, Hashable, Codable {
     }
 }
 
+/// Everything one decode of an image produces.
+///
+/// The two fingerprints answer different questions and cost almost nothing together: at 224 px
+/// the feature print is 26.9 ms against dHash+pHash's 14.9 ms at 64 px, and both figures are
+/// dominated by the same JPEG decode — the *marginal* cost of the print is about 12 ms
+/// (`docs/OPPORTUNITIES.md` §9.7). Returning them as one value is what keeps it that way; two
+/// protocol methods would be two decodes, and — worse — two decode *sizes*, which is the one
+/// thing measurably capable of changing a feature print distance (0.143 against 0.037 for the
+/// same pair at two decode sizes).
+public struct ImageFingerprint: Sendable, Hashable {
+
+    public let hashes: PerceptualHashes
+    /// `nil` when no Vision-backed analyzer produced one: an older cache entry, a source that
+    /// cannot render, or a build that predates this. Absent, not far away.
+    public let featurePrint: FeaturePrint?
+
+    public init(hashes: PerceptualHashes, featurePrint: FeaturePrint? = nil) {
+        self.hashes = hashes
+        self.featurePrint = featurePrint
+    }
+}
+
 /// Outcome of trying to read an item's original bytes.
 public enum ContentDigestResult: Sendable, Hashable {
     case digest(ContentDigest)
@@ -35,6 +57,10 @@ public protocol AssetAnalyzing: Sendable {
     /// rendered locally.
     func perceptualHashes(for item: MediaItem) async -> PerceptualHashes?
 
+    /// Everything one decode yields. An analyzer with Vision behind it overrides this and
+    /// produces both from a single decode; everything else inherits the default below.
+    func imageFingerprint(for item: MediaItem) async -> ImageFingerprint?
+
     /// Fingerprints of frames sampled across a video. `nil` when the video cannot be read
     /// locally, or when any sample failed — a signature with a gap in it would line up
     /// against another video's frames wrongly, which is worse than having none.
@@ -45,4 +71,15 @@ public extension AssetAnalyzing {
 
     /// Sources that hold no video, and callers that only care about stills, get this for free.
     func videoSignature(for item: MediaItem) async -> VideoSignature? { nil }
+
+    /// Hashes and no print.
+    ///
+    /// Every analyzer in this codebase except the Vision-backed ones implements
+    /// `perceptualHashes` and nothing else — including every stub and fixture. They keep working
+    /// unchanged and keep being judged by the hashes, which is exactly what they were written to
+    /// exercise.
+    func imageFingerprint(for item: MediaItem) async -> ImageFingerprint? {
+        guard let hashes = await perceptualHashes(for: item) else { return nil }
+        return ImageFingerprint(hashes: hashes)
+    }
 }

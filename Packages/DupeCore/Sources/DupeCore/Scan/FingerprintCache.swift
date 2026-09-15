@@ -1,27 +1,35 @@
 import Foundation
 
 /// Everything expensive that was ever computed about one item.
-public struct FingerprintRecord: Sendable, Hashable, Codable {
+public struct FingerprintRecord: Sendable, Hashable {
 
     /// The item's `contentVersion` when these were computed. Anything else and they are stale.
     public var contentVersion: String
     public var digest: ContentDigest?
     public var hashes: PerceptualHashes?
     public var signature: VideoSignature?
+    /// Vision's vector, when a Vision-backed analyzer produced one. `nil` on an entry written
+    /// by a build that had none, which is a state that has to keep working: the record is still
+    /// valid for everything else in it, and the print gets computed on the next scan.
+    public var featurePrint: FeaturePrint?
 
     public init(
         contentVersion: String,
         digest: ContentDigest? = nil,
         hashes: PerceptualHashes? = nil,
-        signature: VideoSignature? = nil
+        signature: VideoSignature? = nil,
+        featurePrint: FeaturePrint? = nil
     ) {
         self.contentVersion = contentVersion
         self.digest = digest
         self.hashes = hashes
         self.signature = signature
+        self.featurePrint = featurePrint
     }
 
-    public var isEmpty: Bool { digest == nil && hashes == nil && signature == nil }
+    public var isEmpty: Bool {
+        digest == nil && hashes == nil && signature == nil && featurePrint == nil
+    }
 
     /// The record to write into for `contentVersion`.
     ///
@@ -37,6 +45,7 @@ public protocol FingerprintCaching: Sendable {
     func record(for id: String) async -> FingerprintRecord?
     func store(digest: ContentDigest, for id: String, contentVersion: String) async
     func store(hashes: PerceptualHashes, for id: String, contentVersion: String) async
+    func store(fingerprint: ImageFingerprint, for id: String, contentVersion: String) async
     func store(signature: VideoSignature, for id: String, contentVersion: String) async
     /// Forgets everything not in `ids`. Items that left the library take their entries with them.
     func prune(keeping ids: Set<String>) async
@@ -63,6 +72,16 @@ public actor FingerprintCache: FingerprintCaching {
     public func store(hashes: PerceptualHashes, for id: String, contentVersion: String) {
         var record = current(id: id, contentVersion: contentVersion)
         record.hashes = hashes
+        records[id] = record
+    }
+
+    public func store(fingerprint: ImageFingerprint, for id: String, contentVersion: String) {
+        var record = current(id: id, contentVersion: contentVersion)
+        record.hashes = fingerprint.hashes
+        // Only when there is one. An analyzer with no Vision behind it must not write an empty
+        // print over a record, or the next build that *can* produce one reads the absence as an
+        // answer and never computes it.
+        if let print = fingerprint.featurePrint { record.featurePrint = print }
         records[id] = record
     }
 
@@ -122,6 +141,23 @@ public struct CachingAnalyzer: AssetAnalyzing {
             await cache.store(hashes: hashes, for: item.id, contentVersion: item.contentVersion)
         }
         return hashes
+    }
+
+    /// The cached record answers only when it holds everything this build knows how to make.
+    ///
+    /// Hashes without a print is exactly what an entry written before feature prints existed
+    /// looks like, and returning it would mean the print is never computed for that item — the
+    /// cache would pin the library to the old engine one asset at a time, invisibly.
+    public func imageFingerprint(for item: MediaItem) async -> ImageFingerprint? {
+        if let record = await usableRecord(for: item), let hashes = record.hashes, record.featurePrint != nil {
+            return ImageFingerprint(hashes: hashes, featurePrint: record.featurePrint)
+        }
+
+        let fingerprint = await base.imageFingerprint(for: item)
+        if let fingerprint {
+            await cache.store(fingerprint: fingerprint, for: item.id, contentVersion: item.contentVersion)
+        }
+        return fingerprint
     }
 
     public func videoSignature(for item: MediaItem) async -> VideoSignature? {

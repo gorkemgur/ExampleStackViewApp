@@ -23,6 +23,15 @@ private final class CountingAnalyzer: AssetAnalyzing, @unchecked Sendable {
         return PerceptualHashes(dHash: 7, pHash: 9)
     }
 
+    /// The shape a Vision-backed analyzer has: one decode, both fingerprints.
+    func imageFingerprint(for item: MediaItem) async -> ImageFingerprint? {
+        lock.lock(); _hashCalls += 1; lock.unlock()
+        return ImageFingerprint(
+            hashes: PerceptualHashes(dHash: 7, pHash: 9),
+            featurePrint: FeaturePrint(descriptor: "vision.revision2", elements: [1, 0, 0, 0])
+        )
+    }
+
     func videoSignature(for item: MediaItem) async -> VideoSignature? {
         lock.lock(); _signatureCalls += 1; lock.unlock()
         return VideoSignature(frameHashes: [1, 2, 3, 4, 5])
@@ -169,16 +178,18 @@ final class FingerprintCacheTests: XCTestCase {
         XCTAssertNil(gone)
     }
 
-    func testTheCacheSurvivesAnEncodeAndDecode() throws {
+    /// Was a JSON round trip. The format moved to `FingerprintArchive` when a record started
+    /// carrying a 768-element vector; the property this test is about did not move.
+    func testTheCacheSurvivesATripToDiskAndBack() throws {
         let record = FingerprintRecord(
             contentVersion: "v1",
             digest: ContentDigest(bytes: [1, 2, 3]),
             hashes: PerceptualHashes(dHash: 42, pHash: 99),
             signature: VideoSignature(frameHashes: [7, 8, 9])
         )
-        let data = try JSONEncoder().encode(["a": record])
-        let restored = try JSONDecoder().decode([String: FingerprintRecord].self, from: data)
-        XCTAssertEqual(restored["a"], record)
+        let data = FingerprintArchive.data(for: ["a": record])
+        let restored = FingerprintArchive.records(from: data)
+        XCTAssertEqual(restored?["a"], record)
     }
 
     func testAWholeScanReReadsNothingTheSecondTime() async throws {
@@ -201,6 +212,87 @@ final class FingerprintCacheTests: XCTestCase {
         XCTAssertEqual(analyzer.digestCalls + analyzer.hashCalls, callsAfterFirst, "nothing was re-read")
         XCTAssertEqual(first.groups.count, second.groups.count)
         XCTAssertEqual(first.reclaimableBytes, second.reclaimableBytes)
+    }
+
+    // MARK: - Feature prints
+
+    func testAPrintIsReadBackRatherThanRecomputed() async {
+        let analyzer = CountingAnalyzer()
+        let caching = CachingAnalyzer(base: analyzer, cache: FingerprintCache())
+        let item = Fixtures.item("a")
+
+        let first = await caching.imageFingerprint(for: item)
+        let second = await caching.imageFingerprint(for: item)
+
+        XCTAssertEqual(analyzer.hashCalls, 1, "the print is the expensive half; it must be computed once")
+        XCTAssertEqual(first?.featurePrint, second?.featurePrint)
+        XCTAssertNotNil(first?.featurePrint)
+    }
+
+    func testChangedBytesInvalidateThePrintToo() async {
+        let analyzer = CountingAnalyzer()
+        let caching = CachingAnalyzer(base: analyzer, cache: FingerprintCache())
+
+        _ = await caching.imageFingerprint(for: Fixtures.item("a", bytes: 100))
+        _ = await caching.imageFingerprint(for: Fixtures.item("a", bytes: 200))
+
+        XCTAssertEqual(analyzer.hashCalls, 2, "a print describes the bytes it was computed from and nothing else")
+    }
+
+    func testAnEntryFromBeforePrintsExistedIsNotTreatedAsAComplete() async {
+        // The shape every upgrading install is in: hashes cached by the old build, no print.
+        // Handing that back would pin the library to the old engine one asset at a time, and
+        // nothing about it would look wrong.
+        let cache = FingerprintCache()
+        let item = Fixtures.item("a")
+        await cache.store(hashes: PerceptualHashes(dHash: 7, pHash: 9), for: item.id, contentVersion: item.contentVersion)
+
+        let analyzer = CountingAnalyzer()
+        let fingerprint = await CachingAnalyzer(base: analyzer, cache: cache).imageFingerprint(for: item)
+
+        XCTAssertEqual(analyzer.hashCalls, 1, "the print is missing, so the decode has to happen")
+        XCTAssertNotNil(fingerprint?.featurePrint)
+    }
+
+    func testAnAnalyzerWithoutPrintsNeverErasesOneAlreadyStored() async {
+        let cache = FingerprintCache()
+        let item = Fixtures.item("a")
+        _ = await CachingAnalyzer(base: CountingAnalyzer(), cache: cache).imageFingerprint(for: item)
+
+        // Stored straight into the cache rather than through the wrapper: the wrapper would
+        // find the record complete and never write, which is the right behaviour and the wrong
+        // test. The two halves of this app use two analyzers and only one of them has Vision.
+        await cache.store(
+            fingerprint: ImageFingerprint(hashes: PerceptualHashes(dHash: 3, pHash: 4)),
+            for: item.id,
+            contentVersion: item.contentVersion
+        )
+
+        let record = await cache.record(for: item.id)
+        XCTAssertEqual(record?.hashes, PerceptualHashes(dHash: 3, pHash: 4), "the hashes are the fresh ones")
+        XCTAssertNotNil(
+            record?.featurePrint,
+            "a source that cannot produce prints must not spend the one the library already paid for"
+        )
+    }
+
+    func testAnAnalyzerWithoutPrintsStillFillsTheHashesInTheCache() async {
+        // The old shape: `perceptualHashes` and nothing else. The cache must not start storing
+        // empty prints over it, or the next build's print never gets computed.
+        struct HashesOnly: AssetAnalyzing {
+            func contentDigest(for item: MediaItem) async -> ContentDigestResult { .unavailable }
+            func perceptualHashes(for item: MediaItem) async -> PerceptualHashes? {
+                PerceptualHashes(dHash: 1, pHash: 2)
+            }
+        }
+
+        let cache = FingerprintCache()
+        let item = Fixtures.item("a")
+        _ = await CachingAnalyzer(base: HashesOnly(), cache: cache).imageFingerprint(for: item)
+
+        let record = await cache.record(for: item.id)
+        XCTAssertEqual(record?.hashes, PerceptualHashes(dHash: 1, pHash: 2))
+        XCTAssertNil(record?.featurePrint)
     }
 }
 

@@ -9,6 +9,19 @@ public struct ScanConfiguration: Sendable, Hashable {
     public var nearExactDistance: Int
     /// Both fingerprints must be within this for the pair to be worth showing at all.
     public var similarDistance: Int
+    /// Feature print distance below which two images are the same shot.
+    ///
+    /// A different scale from the two above and not convertible to them: those count differing
+    /// bits out of 64, this is a squared Euclidean distance in [0, 4].
+    public var featurePrintNearExactDistance: Double
+    /// Feature print distance below which a pair is worth showing at all.
+    ///
+    /// **Provisional.** Set from the measurements in `docs/OPPORTUNITIES.md` §9.2, taken on a
+    /// Mac against a one-image corpus: a q40 re-encode scores 0.0013, a brutal q15 0.0175, a
+    /// 10 % crop 0.0299, a 640 px downscale 0.0367, a 30 % crop 0.1036, a letterboxed copy
+    /// 0.1638 — and a different photograph 1.6697. 0.20 clears the worst true match by 1.22x
+    /// and sits 5.2x below the nearest false one. Re-measure on a device before believing it.
+    public var featurePrintSimilarDistance: Double
     /// Re-encodes keep their framing, so a different aspect ratio means a different crop.
     public var aspectRatioTolerance: Double
     /// How different two videos' proportions may be and still be worth opening.
@@ -34,6 +47,8 @@ public struct ScanConfiguration: Sendable, Hashable {
         maxConcurrentReads: Int = 4,
         nearExactDistance: Int = 6,
         similarDistance: Int = 12,
+        featurePrintNearExactDistance: Double = 0.02,
+        featurePrintSimilarDistance: Double = 0.20,
         aspectRatioTolerance: Double = 0.01,
         videoShapeTolerance: Double = 0.5,
         videoDurationTolerance: Double = 0.5,
@@ -43,6 +58,8 @@ public struct ScanConfiguration: Sendable, Hashable {
         self.maxConcurrentReads = max(1, maxConcurrentReads)
         self.nearExactDistance = nearExactDistance
         self.similarDistance = max(similarDistance, nearExactDistance)
+        self.featurePrintNearExactDistance = featurePrintNearExactDistance
+        self.featurePrintSimilarDistance = max(featurePrintSimilarDistance, featurePrintNearExactDistance)
         self.aspectRatioTolerance = aspectRatioTolerance
         self.videoShapeTolerance = videoShapeTolerance
         self.videoDurationTolerance = videoDurationTolerance
@@ -212,14 +229,21 @@ public struct ScanPipeline: Sendable {
                 progress(ScanProgress(stage: .fingerprinting, completed: done, total: fingerprintTargets.count))
             },
             transform: { item in
-                let result = await analyzer.perceptualHashes(for: item)
+                let result = await analyzer.imageFingerprint(for: item)
                 return (item.id, result)
             }
         )
 
         var hashes: [String: PerceptualHashes] = [:]
+        // Kept beside the hashes rather than replacing them. The hashes are cheap, they are
+        // right at short range, and an item whose print could not be produced still has to be
+        // matchable — so the print is an extra opinion on the pairs that have one, not a
+        // precondition for being looked at.
+        var featurePrints: [String: FeaturePrint] = [:]
         for (id, value) in hashResults {
-            if let value { hashes[id] = value }
+            guard let value else { continue }
+            hashes[id] = value.hashes
+            if let print = value.featurePrint { featurePrints[id] = print }
         }
         try Task.checkCancellation()
 
@@ -256,6 +280,7 @@ public struct ScanPipeline: Sendable {
         progress(ScanProgress(stage: .matching, completed: 0, total: hashes.count))
         var edges = try Self.edges(
             hashes: hashes,
+            featurePrints: featurePrints,
             items: index,
             configuration: configuration,
             progress: { done, total in
@@ -343,8 +368,37 @@ public struct ScanPipeline: Sendable {
     /// n x 256 instead of n squared.
     static let maximumNeighboursPerItem = 256
 
+    /// A feature print distance, said in the units the rest of the engine speaks.
+    ///
+    /// `SimilarityEdge.distance` counts differing bits and the clusterer filters on it, so an
+    /// edge that came from a print still has to carry a bit count. Widening that Int to a
+    /// Double everywhere would touch the clusterer, the video edges and every test that builds
+    /// an edge, for the one kind of edge that is not measured in bits.
+    ///
+    /// Monotone, which is all the clusterer asks of it — it keeps each seed's closest
+    /// neighbour. Piecewise, so the two Double thresholds keep meaning what the two Int ones
+    /// mean: a pair inside the print's near-exact limit lands inside the bit near-exact limit
+    /// whatever either pair is tuned to. One linear map would couple them by their ratio, and
+    /// then moving one threshold would silently move the other.
+    static func onTheHammingScale(_ distance: Double, configuration: ScanConfiguration) -> Int {
+        let near = configuration.featurePrintNearExactDistance
+        let similar = configuration.featurePrintSimilarDistance
+
+        if distance <= near {
+            let fraction = distance / max(near, .ulpOfOne)
+            let bits = fraction * Double(configuration.nearExactDistance)
+            return min(configuration.nearExactDistance, max(0, Int(bits.rounded())))
+        }
+
+        let fraction = (distance - near) / max(similar - near, .ulpOfOne)
+        let span = Double(configuration.similarDistance - configuration.nearExactDistance)
+        let bits = Double(configuration.nearExactDistance) + fraction * span
+        return min(configuration.similarDistance, max(configuration.nearExactDistance, Int(bits.rounded())))
+    }
+
     static func edges(
         hashes: [String: PerceptualHashes],
+        featurePrints: [String: FeaturePrint] = [:],
         items: [String: MediaItem],
         configuration: ScanConfiguration,
         progress: (Int, Int) -> Void = { _, _ in }
@@ -366,10 +420,12 @@ public struct ScanPipeline: Sendable {
         let count = ordered.count
         var dHashes = [UInt64](repeating: 0, count: count)
         var pHashes = [UInt64](repeating: 0, count: count)
+        var prints = [FeaturePrint?](repeating: nil, count: count)
         for (index, id) in ordered.enumerated() {
             let hash = hashes[id]!
             dHashes[index] = hash.dHash
             pHashes[index] = hash.pHash
+            prints[index] = featurePrints[id]
         }
 
         var nearExact = Set<SimilarityEdge>()
@@ -385,9 +441,38 @@ public struct ScanPipeline: Sendable {
                 progress(outer, count)
             }
 
-            var neighbours: [(index: Int, distance: Int)] = []
+            var neighbours: [(index: Int, distance: Int, isNearExact: Bool)] = []
 
             for inner in (outer + 1)..<count {
+                // When both sides have a feature print, the print is the judgement — not a
+                // second opinion on a pair the hashes already liked.
+                //
+                // It has to be this way round. A 10 % crop scores 16 bits against dHash and the
+                // similar threshold is 12, so a hash gate would throw that pair away before the
+                // print ever saw it — and the crop is the entire reason the print is here
+                // (`docs/OPPORTUNITIES.md` §9.1). The cost is that a pair with two prints is
+                // measured rather than dismissed on a 64-bit XOR; `proximity(within:)` stops
+                // the moment the running sum passes the threshold, which for two unrelated
+                // photographs happens inside the first few dozen of 768 elements.
+                if let left = prints[outer], let right = prints[inner] {
+                    switch left.proximity(to: right, within: configuration.featurePrintSimilarDistance) {
+                    case let .within(distance):
+                        neighbours.append((
+                            inner,
+                            Self.onTheHammingScale(distance, configuration: configuration),
+                            distance <= configuration.featurePrintNearExactDistance
+                        ))
+                        continue
+                    case .beyond:
+                        continue
+                    case .incomparable:
+                        // Two revisions, or two lengths. The print has no opinion, which is a
+                        // different thing from a bad one: fall through to the hashes rather
+                        // than veto a pair because a cache entry was written by an older build.
+                        break
+                    }
+                }
+
                 let dDistance = hammingDistance(dHashes[outer], dHashes[inner])
                 guard dDistance <= configuration.similarDistance else { continue }
 
@@ -397,7 +482,8 @@ public struct ScanPipeline: Sendable {
                 let pDistance = hammingDistance(pHashes[outer], pHashes[inner])
                 guard pDistance <= configuration.similarDistance else { continue }
 
-                neighbours.append((inner, max(dDistance, pDistance)))
+                let distance = max(dDistance, pDistance)
+                neighbours.append((inner, distance, distance <= configuration.nearExactDistance))
             }
 
             if neighbours.count > Self.maximumNeighboursPerItem {
@@ -412,7 +498,7 @@ public struct ScanPipeline: Sendable {
                 let otherID = ordered[neighbour.index]
                 let edge = SimilarityEdge(a: id, b: otherID, distance: neighbour.distance)
 
-                if neighbour.distance <= configuration.nearExactDistance,
+                if neighbour.isNearExact,
                    sameFraming(items[id], items[otherID], tolerance: configuration.aspectRatioTolerance) {
                     nearExact.insert(edge)
                 } else {

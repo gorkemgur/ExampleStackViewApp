@@ -126,7 +126,8 @@ public struct MediaItem: Sendable, Hashable, Identifiable {
     /// finding duplicates. Bump this whenever anything upstream of a stored fingerprint moves.
     ///
     /// fp2: the pHash DC term replaced by the (0,8) coefficient.
-    public static let fingerprintFormat = "fp2"
+    /// fp3: a Vision feature print sits beside the two hashes, and the matcher prefers it.
+    public static let fingerprintFormat = "fp3"
 
     /// Changes whenever the item's bytes could have — or whenever the way this app reads them
     /// has. Cheap to compute from metadata the library already handed over, which is the point:
