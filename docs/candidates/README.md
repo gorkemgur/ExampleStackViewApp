@@ -22,7 +22,7 @@ rig: nothing in the file separates the arm from the body, so a figure can be mad
 float, but it cannot sweep. Using one means giving up the movement, which is the whole thing
 that was asked for.
 
-`DupeSpace/Sources/Views/SweeperRingView.swift` draws its own for that reason — a Canvas and
+`DupeSpace/Sources/Components/SweeperRingView.swift` draws its own for that reason — a Canvas and
 about a dozen paths. The legs alternate, the body bobs, the broom swings more than twice as
 wide as the shoulders sway, and the figure's position along the floor is the real progress
 reading.
