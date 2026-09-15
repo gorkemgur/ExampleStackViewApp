@@ -253,10 +253,6 @@ struct RootView: View {
             .foregroundStyle(DS.deep)
             .padding(.horizontal, 10)
             .frame(minHeight: 32)
-            .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(DS.deep.opacity(0.13))
-            )
         }
         .accessibilityLabel("History")
         .accessibilityHint("What this app has scanned and removed")
