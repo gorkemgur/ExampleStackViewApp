@@ -8,6 +8,11 @@ struct DeletionOutcome: Sendable, Equatable {
     /// Files that were deliberately left alone because they no longer matched what the scan
     /// read. Not a failure — a refusal.
     let skippedIDs: [String]
+    /// Assets the photo library itself will not let this app delete — synced from a computer,
+    /// or belonging to somebody else's shared album. Also a refusal, and a different one: the
+    /// scan read them correctly and nothing about them changed. Kept apart from `skippedIDs`
+    /// because the sentence the user is shown for the two is not the same sentence.
+    let refusedIDs: [String]
     /// Set when part of the work succeeded and part of it did not.
     ///
     /// A deletion that spans the photo library and a Files folder is two operations, and the
@@ -20,19 +25,22 @@ struct DeletionOutcome: Sendable, Equatable {
         requestedIDs: [String],
         deletedIDs: [String],
         skippedIDs: [String] = [],
+        refusedIDs: [String] = [],
         failure: String? = nil
     ) {
         self.requestedIDs = requestedIDs
         self.deletedIDs = deletedIDs
         self.skippedIDs = skippedIDs
+        self.refusedIDs = refusedIDs
         self.failure = failure
     }
 
     var deletedCount: Int { deletedIDs.count }
     var skippedCount: Int { skippedIDs.count }
+    var refusedCount: Int { refusedIDs.count }
     /// Items that were asked for but were already gone by the time the change ran.
     var missingCount: Int {
-        max(requestedIDs.count - deletedIDs.count - skippedIDs.count, 0)
+        max(requestedIDs.count - deletedIDs.count - skippedIDs.count - refusedIDs.count, 0)
     }
 }
 
@@ -126,6 +134,44 @@ extension MediaDeleting {
     }
 }
 
+/// What the deleter has to know about an asset before it asks Photos to remove it.
+///
+/// A protocol rather than `PHAsset` itself, because the one decision worth pinning here — which
+/// assets may even be sent — is otherwise locked inside a type no test can construct.
+protocol DeletableAsset {
+    var localIdentifier: String { get }
+    var mayBeDeleted: Bool { get }
+}
+
+extension PHAsset: DeletableAsset {
+    var mayBeDeleted: Bool { canPerform(.delete) }
+}
+
+/// Splits the assets a deletion fetched into the ones PhotoKit will accept and the ones it
+/// will not.
+enum DeletionTriage {
+
+    struct Plan: Equatable {
+        /// Sent to `performChanges`.
+        let deletable: [String]
+        /// Never sent, and never reported as deleted.
+        let refused: [String]
+    }
+
+    static func plan(_ assets: [some DeletableAsset]) -> Plan {
+        var deletable: [String] = []
+        var refused: [String] = []
+        for asset in assets {
+            if asset.mayBeDeleted {
+                deletable.append(asset.localIdentifier)
+            } else {
+                refused.append(asset.localIdentifier)
+            }
+        }
+        return Plan(deletable: deletable, refused: refused)
+    }
+}
+
 /// Deletes through PhotoKit, which puts a system confirmation in front of the user and moves
 /// the assets to Recently Deleted rather than erasing them. Both are features here: the app
 /// never destroys anything silently, and a mistake stays recoverable for thirty days.
@@ -151,11 +197,20 @@ final class PhotoKitDeleter: MediaDeleting {
             return DeletionOutcome(requestedIDs: ids, deletedIDs: [])
         }
 
-        let identifiers = assets.map(\.localIdentifier)
+        let plan = DeletionTriage.plan(assets)
+
+        // Asking for nothing still raises the system confirmation, and answering it would
+        // delete nothing. The refusal is the whole answer here.
+        guard !plan.deletable.isEmpty else {
+            return DeletionOutcome(requestedIDs: ids, deletedIDs: [], refusedIDs: plan.refused)
+        }
+
+        let allowed = Set(plan.deletable)
+        let requested = assets.filter { allowed.contains($0.localIdentifier) }
 
         do {
             try await PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.deleteAssets(assets as NSArray)
+                PHAssetChangeRequest.deleteAssets(requested as NSArray)
             }
         } catch {
             let nsError = error as NSError
@@ -165,7 +220,7 @@ final class PhotoKitDeleter: MediaDeleting {
             throw DeletionError.failed(error.localizedDescription)
         }
 
-        return DeletionOutcome(requestedIDs: ids, deletedIDs: identifiers)
+        return DeletionOutcome(requestedIDs: ids, deletedIDs: plan.deletable, refusedIDs: plan.refused)
     }
 }
 
@@ -179,6 +234,9 @@ final class StubDeleter: MediaDeleting, @unchecked Sendable {
 
     enum Behaviour: Sendable {
         case succeed
+        /// Deletes everything except the named ids, which come back as refusals — what the real
+        /// deleter does with an asset the photo library will not let this app remove.
+        case refuse([String])
         case cancel
         case fail(String)
     }
@@ -265,6 +323,16 @@ final class StubDeleter: MediaDeleting, @unchecked Sendable {
                 DeletionProgress(stage: .done, settled: ids.count, total: ids.count, isDeterminate: isDeterminate)
             )
             return DeletionOutcome(requestedIDs: ids, deletedIDs: ids)
+        case let .refuse(refused):
+            let refusedSet = Set(refused)
+            onProgress(
+                DeletionProgress(stage: .done, settled: ids.count, total: ids.count, isDeterminate: false)
+            )
+            return DeletionOutcome(
+                requestedIDs: ids,
+                deletedIDs: ids.filter { !refusedSet.contains($0) },
+                refusedIDs: ids.filter { refusedSet.contains($0) }
+            )
         case .cancel:
             throw DeletionError.cancelledByUser
         case let .fail(message):

@@ -21,12 +21,7 @@ final class PhotoKitMediaLibrary: MediaLibrary {
     func loadInventory() async throws -> [MediaItem] {
         await Task.detached(priority: .userInitiated) {
             let albumCounts = Self.albumMembershipCounts()
-
-            let options = PHFetchOptions()
-            options.includeHiddenAssets = false
-            options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-
-            let assets = PHAsset.fetchAssets(with: options)
+            let assets = PHAsset.fetchAssets(with: Self.inventoryFetchOptions())
             var items: [MediaItem] = []
             items.reserveCapacity(assets.count)
 
@@ -35,6 +30,29 @@ final class PhotoKitMediaLibrary: MediaLibrary {
             }
             return items
         }.value
+    }
+
+    /// Everything the inventory pass asks PhotoKit for, in one place a test can read.
+    ///
+    /// It used to be four lines inside `loadInventory`, which meant the only way to find out
+    /// what this app is able to see at all was to read a method that also enumerates albums and
+    /// builds items. Each line here decides what exists as far as the rest of the app is
+    /// concerned, and an unwritten default is the easiest of those decisions to get wrong.
+    static func inventoryFetchOptions() -> PHFetchOptions {
+        let options = PHFetchOptions()
+        options.includeHiddenAssets = false
+
+        // Without this a fetch returns one frame per burst — the representative Photos picked —
+        // and the other nineteen are simply not there. `MediaItem` has carried
+        // `burstIdentifier` since it was written and `RegretTier` groups on it, so the whole
+        // burst-leftover rung was built against assets that could never arrive: a burst of
+        // twenty reached the scan as a single photograph with no sibling to be a leftover of.
+        // The default is `NO`, nobody set it, and an empty rung reads exactly like a clean
+        // library.
+        options.includeAllBurstAssets = true
+
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        return options
     }
 
     // MARK: - Mapping

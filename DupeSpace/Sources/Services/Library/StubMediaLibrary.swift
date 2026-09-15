@@ -44,6 +44,47 @@ final class StubMediaLibrary: MediaLibrary {
         StubMediaLibrary(access: .notDetermined, items: sampleItems())
     }
 
+    /// The fixture plus twelve pairs of similar photographs, so one rung is long enough to be
+    /// folded. See `AppEnvironment.crowdedLibraryFlag`.
+    static func crowdedFixture() -> StubMediaLibrary {
+        StubMediaLibrary(access: .authorized, items: sampleItems() + crowdItems())
+    }
+
+    /// Twelve pairs, and nothing about them protected: no favourite, no album, no location, so
+    /// none is vetoed and the rung's own bulk control can reach all of them. Sizes vary a
+    /// little so the second of each pair is the cheaper one and the ladder has something to
+    /// prefer.
+    static func crowdItems() -> [MediaItem] {
+        let day: TimeInterval = 86_400
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+
+        return (0..<12).flatMap { index -> [MediaItem] in
+            let stamp = now - TimeInterval(100 + index) * day
+            return [
+                MediaItem(
+                    id: "crowd-\(index)-a",
+                    source: .photoLibrary,
+                    kind: .image,
+                    displayName: "IMG_5\(String(format: "%03d", index)).HEIC",
+                    byteSize: 4_100_000 + Int64(index) * 11_000,
+                    pixelWidth: 4032,
+                    pixelHeight: 3024,
+                    creationDate: stamp
+                ),
+                MediaItem(
+                    id: "crowd-\(index)-b",
+                    source: .photoLibrary,
+                    kind: .image,
+                    displayName: "IMG_5\(String(format: "%03d", index))_1.HEIC",
+                    byteSize: 3_600_000 + Int64(index) * 9_000,
+                    pixelWidth: 4032,
+                    pixelHeight: 3024,
+                    creationDate: stamp + 2
+                )
+            ]
+        }
+    }
+
     static func previewFixture(access: LibraryAccess = .authorized) -> StubMediaLibrary {
         StubMediaLibrary(access: access, items: sampleItems())
     }
