@@ -209,17 +209,64 @@ final class OverviewViewModel: ObservableObject {
             state = .loading
             do {
                 let loaded = try await library.loadInventory()
-                items = loaded
-                breakdown = InventoryAnalyzer.breakdown(for: loaded)
-                secondResources = SecondResources.tally(loaded)
-                libraryBytes = InventoryAnalyzer.totalBytes(loaded)
-                cloudOnlyBytes = InventoryAnalyzer.cloudOnlyBytes(loaded)
-                largestItems = InventoryAnalyzer.largest(loaded, limit: 5)
+                // Summarised where the enumeration already is — off the main actor. See the
+                // note on `InventorySummary`.
+                let summary = await Task.detached(priority: .userInitiated) {
+                    InventorySummary.of(loaded)
+                }.value
+                apply(summary)
                 state = .loaded
                 WidgetPublisher.publish(storage: storage, libraryBytes: onDeviceLibraryBytes)
             } catch {
                 state = .failed(error.localizedDescription)
             }
         } while reloadRequested
+    }
+
+    /// Six writes, back to back, with nothing between them that can suspend.
+    ///
+    /// That is the whole requirement: `@Published` writes separated by an `await` — or by an
+    /// O(n) pass, which is what used to separate these — let the main actor service a redraw in
+    /// the gap, so one library load could invalidate the overview six times. Synchronous and
+    /// adjacent, they coalesce into one update.
+    private func apply(_ summary: InventorySummary) {
+        items = summary.items
+        breakdown = summary.breakdown
+        secondResources = summary.secondResources
+        libraryBytes = summary.libraryBytes
+        cloudOnlyBytes = summary.cloudOnlyBytes
+        largestItems = summary.largestItems
+    }
+}
+
+/// Everything the overview reads about an inventory, worked out in one place.
+///
+/// This used to be six statements in `loadInventory`, each assigning a `@Published` property on
+/// the main actor. `breakdown`, `tally`, `totalBytes` and `cloudOnlyBytes` each walk the whole
+/// inventory and `largest` sorts it — five linear passes and one `n log n`, over as many as
+/// fifty thousand items, on the actor the app needs in order to draw anything at all, at exactly
+/// the moment it is trying to draw its first screen.
+///
+/// The enumeration itself was already off the main actor (`PhotoKitMediaLibrary.loadInventory`
+/// runs in a detached task); only the arithmetic after it was not. Now both are, and the result
+/// crosses back as one `Sendable` value.
+struct InventorySummary: Sendable {
+
+    var items: [MediaItem] = []
+    var breakdown: [CategoryBreakdown] = []
+    var secondResources = SecondResources()
+    var libraryBytes: Int64 = 0
+    var cloudOnlyBytes: Int64 = 0
+    var largestItems: [MediaItem] = []
+
+    static func of(_ items: [MediaItem]) -> InventorySummary {
+        InventorySummary(
+            items: items,
+            breakdown: InventoryAnalyzer.breakdown(for: items),
+            secondResources: SecondResources.tally(items),
+            libraryBytes: InventoryAnalyzer.totalBytes(items),
+            cloudOnlyBytes: InventoryAnalyzer.cloudOnlyBytes(items),
+            largestItems: InventoryAnalyzer.largest(items, limit: 5)
+        )
     }
 }
