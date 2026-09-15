@@ -21,15 +21,30 @@ import DupeCore
 enum DS {
 
     // MARK: - Ground
+    //
+    // The dark half of this ramp was raised as one piece, and the measurements are why. `ink`
+    // was `#080C11`: L* 3.21, where black is 0 — not a dark colour, the absence of one. The
+    // scan screen is a single card on it, so what a person on a real phone got was a card
+    // floating in nothing, which is the complaint the scan screen's own notes already record.
+    //
+    // Raising the page alone would have flattened the card into it, so every surface moved
+    // together and the step from page to card is preserved (1.17 before, 1.22 after). The
+    // chroma went *up* rather than along for the ride — `ink` from 2.8 to 9.3 — because this
+    // file's argument for its own neutrals is that they carry a blue bias and read as chosen
+    // rather than as `systemGray`, and there is no room for a hue inside a near-black.
+    //
+    // What it costs is paid by everything written on a card, so those are pinned in
+    // `PaletteTests`: body copy 14.56 -> 11.79, the accent 6.19 -> 5.01, secondary copy
+    // 6.47 -> 5.24. All still above AA.
 
     /// The page behind everything.
-    static let ink = adaptive(light: 0xEFF3F8, dark: 0x080C11)
+    static let ink = adaptive(light: 0xEFF3F8, dark: 0x161F2B)
     /// A panel lifted off the page.
-    static let inkRaised = adaptive(light: 0xFFFFFF, dark: 0x131A22)
+    static let inkRaised = adaptive(light: 0xFFFFFF, dark: 0x1B2B3C)
     /// A recess: meter tracks, thumbnail wells, anything pressed into the panel.
-    static let well = adaptive(light: 0xE2E9F1, dark: 0x0D1319)
+    static let well = adaptive(light: 0xE2E9F1, dark: 0x152533)
     /// The one rule weight in the app.
-    static let hairline = adaptive(light: 0xD6E0EA, dark: 0x232D38)
+    static let hairline = adaptive(light: 0xD6E0EA, dark: 0x2F3F50)
     /// A filled neutral, for the part of a measurement this app cannot act on.
     static let neutral = adaptive(light: 0xA5B4C4, dark: 0x46566A)
 
@@ -47,23 +62,23 @@ enum DS {
     /// a background step off the page, a hairline, and a shadow. The token keeps its name,
     /// because the *role* did not change — it is still the block that carries the product —
     /// and a rename would have touched eighty call sites to say the same thing.
-    static let slab = adaptive(light: 0xFFFFFF, dark: 0x171E27)
+    static let slab = adaptive(light: 0xFFFFFF, dark: 0x212F40)
 
     /// The slab as it is actually painted: lit from the top, not flat.
     static var slabFill: LinearGradient {
         LinearGradient(
-            colors: [adaptive(light: 0xFFFFFF, dark: 0x1B2430), adaptive(light: 0xF8FAFD, dark: 0x141B25)],
+            colors: [adaptive(light: 0xFFFFFF, dark: 0x253549), adaptive(light: 0xF8FAFD, dark: 0x1C2C40)],
             startPoint: .top,
             endPoint: .bottom
         )
     }
 
     /// The slab's own edge. A hairline on paper, a lift in the dark.
-    static let slabEdge = adaptive(light: 0xDCE4EE, dark: 0x2A3542)
+    static let slabEdge = adaptive(light: 0xDCE4EE, dark: 0x374759)
 
     /// A recess *on* the slab: the fader's groove, an unreached step, the part of a track that
     /// is not on offer. It has to read as cut into the card rather than as a colour laid on it.
-    static let groove = adaptive(light: 0xD7DEE8, dark: 0x2B3644)
+    static let groove = adaptive(light: 0xD7DEE8, dark: 0x39495D)
 
     /// Ink, for the one thing on this screen that is white in both appearances: the fader cap.
     /// Its stroke and its ridges cannot come from an adaptive pair, because the thing they are
@@ -114,12 +129,24 @@ enum DS {
     /// A tier's colour. Cool at the bottom of the ladder where deletion is free, warm at the top
     /// where it costs something — so a rail, a dot or a rung says what it costs before the words
     /// do. Deliberately not the accent: this is a semantic scale, not branding.
+    ///
+    /// The top rung is violet and not a red, which is a break in the cool-to-warm ramp and a
+    /// deliberate one. `destructive` is `#E5342B` / `#FF5247`; `.similar` was `#BC4127` /
+    /// `#F2684E`, and measured in CIELAB those are 2.0 degrees apart in light and 4.4 in dark —
+    /// the same hue at two saturations. One of them means "this cannot be undone" and the other
+    /// means "your call, one by one", and a reader had to work the difference out rather than
+    /// see it. The ramp has to stop before red, because in this app red is a warning and not a
+    /// temperature. Violet is 78 degrees off the delete key and 122 off the amber below it.
+    ///
+    /// The amber moved too, by seven degrees, for a duller reason: its light value sat at hue
+    /// 73 while its dark value sat at 80, so the two appearances disagreed about what amber is
+    /// — and the light one was close enough to the red (37 degrees) to be worth closing.
     static func tier(_ tier: RegretTier) -> Color {
         switch tier {
         case .identical: return adaptive(light: 0x0C7C8E, dark: 0x32D7EB)
         case .inferiorCopy: return adaptive(light: 0x10805F, dark: 0x3DDC97)
-        case .burstLeftover: return adaptive(light: 0x996100, dark: 0xF5B944)
-        case .similar: return adaptive(light: 0xBC4127, dark: 0xF2684E)
+        case .burstLeftover: return adaptive(light: 0x906600, dark: 0xF5B944)
+        case .similar: return adaptive(light: 0x944CB3, dark: 0xC274E2)
         }
     }
 
@@ -162,7 +189,13 @@ enum DS {
     /// The muting neutral, at a value that reads on the slab. It is the most load-bearing
     /// colour in the deletion instrument, because it is what says "in Recently Deleted: gone
     /// from the library, not yours again yet".
-    static let neutralOnSlab = adaptive(light: 0x9FAFC1, dark: 0x5D7288)
+    ///
+    /// Darkened in light mode, where it was `#9FAFC1` against a white card: a contrast of 2.24,
+    /// under the 3.0 a UI element carrying meaning needs. That was true before any of the
+    /// grounds moved — the test written for this phase found it, nobody had looked. The dark
+    /// value rose with the rest of the ramp, which would otherwise have taken it the other way,
+    /// from 3.38 down to 2.72.
+    static let neutralOnSlab = adaptive(light: 0x8595A6, dark: 0x697E95)
 
     /// Secondary copy on the slab.
     static let onSlabMuted = adaptive(light: 0x64768A, dark: 0x8FA3B8)
