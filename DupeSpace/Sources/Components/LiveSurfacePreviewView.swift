@@ -95,24 +95,29 @@ struct LiveSurfacePreviewView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 28) {
-                    ForEach(Array(states.enumerated()), id: \.offset) { _, entry in
-                        VStack(alignment: .leading, spacing: 10) {
-                            Eyebrow(entry.0, tint: DS.deep)
+                VStack(alignment: .leading, spacing: 28) {
+                    // One state drawn in full context, and only one.
+                    //
+                    // Every state used to get its own phone: six drawn devices, each 372 points
+                    // tall with a clock and a home indicator, so comparing "Running" with
+                    // "Failed" meant scrolling a screen and a half between them and holding the
+                    // first one in your head. A spec sheet's whole job is comparison. The phone
+                    // is here once, to answer "does this read on a Lock Screen at arm's length",
+                    // and after that the cards are stacked where the eye can run down them.
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("On the Lock Screen")
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                            .foregroundStyle(.secondary)
 
-                            LockScreenMock(state: entry.1)
+                        LockScreenMock(state: states[0].1)
+                    }
 
-                            // The same two strings the surface itself renders, repeated as a
-                            // caption: this is a spec sheet, and the wording is the part that
-                            // has to be reviewed without squinting at a mock.
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(entry.1.headline)
-                                    .font(.subheadline.weight(.semibold))
-                                Text(entry.1.detail)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Every state")
+                            .font(.system(.title3, design: .rounded).weight(.bold))
+
+                        ForEach(Array(states.enumerated()), id: \.offset) { _, entry in
+                            StateStrip(name: entry.0, state: entry.1)
                         }
                     }
                 }
@@ -130,6 +135,58 @@ struct LiveSurfacePreviewView: View {
             }
         }
         .accessibilityIdentifier("livepreview.root")
+    }
+}
+
+/// One state, on the two surfaces it appears on, with the thing neither of them shows.
+///
+/// The island and the card sit on the dark ground they are drawn against on a phone, so their
+/// contrast is reviewable; the line underneath is what VoiceOver reads out, which is the one
+/// piece of information the mock genuinely cannot show. It used to repeat the card's own two
+/// strings in plain black text under every mock — the same words twice, six times over, which
+/// reads as debug output somebody forgot to delete.
+private struct StateStrip: View {
+
+    let name: String
+    let state: LiveScanState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(name)
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                Spacer(minLength: 8)
+                // What the scan's percentage reads as in the island's tiny slot, which is the
+                // one number on these surfaces with nowhere to grow and the first thing that
+                // truncates.
+                Text(state.compactValue)
+                    .font(.caption2.weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 10) {
+                IslandPreview(state: state)
+                ScanLockScreenView(state: state)
+            }
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color(dsRGB: 0x0A1218))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+            )
+            .environment(\.colorScheme, .dark)
+
+            Text(state.accessibilityDescription)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -182,11 +239,25 @@ private struct LockScreenMock: View {
         .background(wallpaper)
         .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
         .overlay(
-            // The bezel. Two strokes: a dark band for the aluminium, a hairline highlight for
-            // the glass edge inside it.
+            // The bezel. A flat 5-point band read as an outline drawn round a rectangle rather
+            // than as a device: metal is lit, so the stroke is a gradient — brighter where a
+            // light would be, darker underneath — and the whole thing casts a shadow so it sits
+            // on the page instead of being printed on it.
             RoundedRectangle(cornerRadius: 40, style: .continuous)
-                .strokeBorder(Color(dsRGB: 0x1B222B), lineWidth: 5)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color(dsRGB: 0x3A4654),
+                            Color(dsRGB: 0x1B222B),
+                            Color(dsRGB: 0x10161D)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 5
+                )
         )
+        .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
         .overlay(
             RoundedRectangle(cornerRadius: 36, style: .continuous)
                 .strokeBorder(.white.opacity(0.09), lineWidth: 1)

@@ -166,4 +166,53 @@ final class PaletteTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - A mark drawn on somebody's photograph
+
+    /// What a translucent colour actually becomes once something is drawn behind it.
+    ///
+    /// Every other token here can be read straight off, because every other token is opaque.
+    /// `DS.onPicture` is not: the number that decides whether the badge is readable is the
+    /// composite, and the composite depends on the frame behind it — which, on a thumbnail,
+    /// is anything at all. So these tests take the two ends of "anything".
+    private func composited(_ color: Color, over backdrop: Double) -> Color {
+        let resolved = UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        resolved.getRed(&r, green: &g, blue: &b, alpha: &a)
+        func mix(_ channel: CGFloat) -> Double { Double(channel) * Double(a) + backdrop * (1 - Double(a)) }
+        return Color(red: mix(r), green: mix(g), blue: mix(b))
+    }
+
+    /// The bright end: a white sky, which is where a translucent dark disc is thinnest.
+    func testTheKindBadgeStaysReadableOnTheBrightestFrameThereIs() {
+        XCTAssertGreaterThanOrEqual(
+            contrast(.white, composited(DS.onPicture, over: 1), .light), 3,
+            "the white glyph on the kind badge has gone soft against a white sky — this is the "
+            + "one case a dark ground cannot lose, because there is nothing else carrying it"
+        )
+    }
+
+    /// The dark end: a night frame, where the ground *is* the frame and only the ring is left.
+    func testTheKindBadgeKeepsAnEdgeOnTheDarkestFrameThereIs() {
+        XCTAssertGreaterThanOrEqual(
+            contrast(composited(DS.onPictureEdge, over: 0), .black, .light), 3,
+            "on a night frame the badge's ground is indistinguishable from the picture; "
+            + "without the hairline there is no badge, only a floating glyph"
+        )
+    }
+
+    /// The decision, not the colour: this one does not flip with the appearance.
+    ///
+    /// Everything else in `DS` is adaptive and the next person to read this file will want to
+    /// make this adaptive too. It sits on a photograph, and dark mode says nothing about
+    /// whether that photograph is a white sky.
+    func testTheMarkOnAPictureIgnoresTheAppearance() {
+        for token in [DS.onPicture, DS.onPictureEdge] {
+            XCTAssertEqual(
+                luminance(token, .light), luminance(token, .dark), accuracy: 0.0001,
+                "a mark on a photograph was made to follow the appearance; the frame behind it "
+                + "does not follow the appearance"
+            )
+        }
+    }
 }

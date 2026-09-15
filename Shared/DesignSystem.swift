@@ -160,6 +160,36 @@ enum DS {
     /// for it to happen.
     static func tierVivid(_ rung: RegretTier) -> Color { tier(rung) }
 
+    /// What to set on top of a filled tier colour.
+    ///
+    /// The tier palette inverts between appearances — dark inks for light mode, bright ones for
+    /// dark — so a filled pill cannot simply take white. This is the ink that stays legible on
+    /// whichever side of that the colour is on.
+    static let onTint = adaptive(light: 0xFFFFFF, dark: 0x0A1016)
+
+    /// The ground for a mark drawn on top of somebody's photograph, and the hairline that
+    /// separates it from the frame underneath.
+    ///
+    /// **Deliberately not adaptive.** Every other colour here flips with the appearance,
+    /// because every other colour sits on the app's own chrome. This one sits on a picture,
+    /// and a picture is as likely to be a white sky in dark mode as in light — so the
+    /// appearance says nothing about what is behind this mark, and flipping with it would be
+    /// answering the wrong question.
+    ///
+    /// It was `.black.opacity(0.55)`: a hard black sticker on a bright frame, and nothing at
+    /// all on a dark one. Two changes. The ink is the app's own near-black rather than pure
+    /// black, so the mark belongs to the same palette as the row it is drawn on; and the
+    /// hairline gives the disc an edge in exactly the case the ground cannot — a frame darker
+    /// than the ground itself.
+    ///
+    /// Both halves are held to a number in `PaletteTests`, composited against the worst frame
+    /// each can meet: white on this ground over pure white, and this hairline over pure black,
+    /// each at 3:1 or better — Apple's floor for a UI element that carries meaning.
+    static let onPicture = Color(dsRGB: 0x101720).opacity(0.62)
+
+    /// See ``onPicture``.
+    static let onPictureEdge = Color.white.opacity(0.45)
+
     /// What that tier costs, in two words, for the rung's eyebrow.
     static func cost(_ tier: RegretTier) -> String {
         tier.isLossless ? "Costs nothing" : "Your call"
@@ -303,16 +333,31 @@ struct Badge: View {
         self.tint = tint
     }
 
+    /// Filled, in sentence case.
+    ///
+    /// It was the tint at 14 % behind the tint as text. On a near-white card that is almost no
+    /// chroma at all — "costs nothing" came out sage-on-mint and "your call" mustard-on-beige,
+    /// which is a washed sticker rather than a label, and the uppercase-heavy-kerned type on
+    /// top of it is the detail that dates the whole screen. Filled gives the words back their
+    /// colour and their contrast in one move.
+    ///
+    /// The foreground is `DS.onTint` and not `.white`, because the tier colours invert between
+    /// appearances: 0x10805F is dark enough to carry white in light mode and 0x3DDC97 is far
+    /// too bright for it in dark mode.
     var body: some View {
         Text(text)
-            .font(.caption2.weight(.heavy))
-            .textCase(.uppercase)
-            .kerning(0.5)
-            .foregroundStyle(tint)
-            .padding(.horizontal, 9)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(DS.onTint)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(Capsule(style: .continuous).fill(tint.opacity(0.14)))
-            .fixedSize(horizontal: false, vertical: true)
+            .background(Capsule(style: .continuous).fill(tint))
+            // Both axes. It was `horizontal: false`, so in a row that had already spent its
+            // width — the onboarding rung, where two photographs and a mark are laid out first
+            // — the pill was handed whatever was left and wrapped "Costs nothing" onto two
+            // cramped lines inside a capsule. Two words in a badge do not wrap; the badge asks
+            // for the width it needs.
+            .fixedSize(horizontal: true, vertical: true)
     }
 }
 

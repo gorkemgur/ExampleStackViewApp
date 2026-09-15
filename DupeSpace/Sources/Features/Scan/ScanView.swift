@@ -597,20 +597,24 @@ struct ScanView: View {
     private func tierCard(_ summary: TierSummary) -> some View {
         Card(rail: DS.tier(summary.tier)) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: ScanCopy.symbolName(for: summary.tier))
-                    .font(.system(.body, design: .rounded).weight(.semibold))
-                    .foregroundStyle(DS.tier(summary.tier))
-                    .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(DS.tier(summary.tier).opacity(0.13))
-                    )
+                VStack(alignment: .leading, spacing: 6) {
+                    // The glyph inline, unboxed, the way `Card` has drawn its own since the
+                    // tinted icon slot was taken out of it — "every settings row in every app",
+                    // and saying nothing the rail beside it does not already say in the same
+                    // colour. Here it was worse than generic: a pale tinted square sat directly
+                    // above a badge of the same hue at full strength, so the card carried one
+                    // colour twice in the same column, once washed out and once solid.
+                    HStack(spacing: 7) {
+                        Image(systemName: ScanCopy.symbolName(for: summary.tier))
+                            .font(.subheadline.weight(.semibold))
+                            .imageScale(.small)
+                            .foregroundStyle(DS.tier(summary.tier))
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(ScanCopy.title(for: summary.tier))
-                        .font(.system(.headline, design: .rounded))
-                        .lineLimit(2)
-                        .accessibilityIdentifier("scan.tier.\(summary.tier.rawValue)")
+                        Text(ScanCopy.title(for: summary.tier))
+                            .font(.system(.headline, design: .rounded))
+                            .lineLimit(2)
+                            .accessibilityIdentifier("scan.tier.\(summary.tier.rawValue)")
+                    }
 
                     Badge(DS.cost(summary.tier), tint: DS.costTint(summary.tier))
 
