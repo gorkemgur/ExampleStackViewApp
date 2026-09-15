@@ -96,6 +96,17 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
     /// something hashable, this falls back to reading the original resource and decoding it
     /// with the same ImageIO path the folder half uses, and the two halves meet.
     func perceptualHashes(for item: MediaItem) async -> PerceptualHashes? {
+        await imageFingerprint(for: item)?.hashes
+    }
+
+    /// The same decode, feeding both fingerprints.
+    ///
+    /// The feature print is what tells a crop from a different photograph; the hashes cannot
+    /// (`docs/OPPORTUNITIES.md` §9.1). Producing them together is what keeps the print's cost at
+    /// the twelve milliseconds it adds rather than the twenty-seven a decode of its own costs,
+    /// and — the part that would have bitten later — it keeps both halves of this app decoding
+    /// at one size, which is the only reason two feature prints of one picture are comparable.
+    func imageFingerprint(for item: MediaItem) async -> ImageFingerprint? {
         guard let asset = Self.asset(for: item.id) else { return nil }
 
         let options = PHImageRequestOptions()
@@ -105,7 +116,7 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
         options.isSynchronous = false
         options.version = .current
 
-        let side = CGFloat(GrayImageRenderer.renderSize * 4)
+        let side = CGFloat(VisionFeaturePrinter.decodeSize)
 
         let image: UIImage? = await withCheckedContinuation { continuation in
             let resumeGuard = ResumeGuard()
@@ -124,13 +135,16 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
         }
 
         if let cgImage = image?.cgImage, let gray = GrayImageRenderer.render(cgImage) {
-            return PerceptualHashes(
-                dHash: PerceptualHasher.dHash(gray),
-                pHash: PerceptualHasher.pHash(gray)
+            return ImageFingerprint(
+                hashes: PerceptualHashes(
+                    dHash: PerceptualHasher.dHash(gray),
+                    pHash: PerceptualHasher.pHash(gray)
+                ),
+                featurePrint: VisionFeaturePrinter.featurePrint(of: cgImage)
             )
         }
 
-        return await Self.hashesFromTheOriginal(of: asset)
+        return await Self.fingerprintFromTheOriginal(of: asset)
     }
 
     /// When `PHImageManager` returns nothing this code can hash.
@@ -144,7 +158,7 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
     /// it is the fallback and not the path. Nothing is downloaded: the same
     /// `isNetworkAccessAllowed = false` applies, and a cloud-only original fails here too —
     /// correctly, because the scan set those aside before it ever got this far.
-    private static func hashesFromTheOriginal(of asset: PHAsset) async -> PerceptualHashes? {
+    private static func fingerprintFromTheOriginal(of asset: PHAsset) async -> ImageFingerprint? {
         let resources = PHAssetResource.assetResources(for: asset)
         guard let resource = resources.first(where: { $0.type == .photo })
             ?? resources.first(where: { $0.type == .fullSizePhoto })
@@ -173,7 +187,7 @@ final class PhotoKitAssetAnalyzer: AssetAnalyzing {
         guard !failed else { return nil }
         let data = collector.take()
         guard !data.isEmpty else { return nil }
-        return FileAssetAnalyzer.hashes(of: data)
+        return FileAssetAnalyzer.fingerprint(of: data)
     }
 
     func videoSignature(for item: MediaItem) async -> VideoSignature? {

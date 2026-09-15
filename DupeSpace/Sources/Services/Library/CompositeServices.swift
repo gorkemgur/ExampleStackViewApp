@@ -49,6 +49,12 @@ final class CompositeAssetAnalyzer: AssetAnalyzing {
         await analyzer(for: item).perceptualHashes(for: item)
     }
 
+    /// Forwarded rather than inherited. The protocol's default would ask the chosen analyzer
+    /// for hashes only, and every feature print this app computes would be dropped here.
+    func imageFingerprint(for item: MediaItem) async -> ImageFingerprint? {
+        await analyzer(for: item).imageFingerprint(for: item)
+    }
+
     func videoSignature(for item: MediaItem) async -> VideoSignature? {
         await analyzer(for: item).videoSignature(for: item)
     }
@@ -101,12 +107,20 @@ final class CompositeDeleter: MediaDeleting {
 
         var deleted: [String] = []
         var skipped: [String] = []
+        var refused: [String] = []
 
         // Photos first. PhotoKit puts a system prompt in front of its deletion, and file
         // deletions are the half that cannot be undone: dismissing that prompt must not
         // arrive after files have already been removed for good.
         if !photoIDs.isEmpty {
-            deleted += try await photos.delete(ids: photoIDs, expecting: [:]).deletedIDs
+            // Every field of it, not just the one. This read `.deletedIDs` and nothing else,
+            // so an asset the photo library refused to delete — or one the deleter left alone
+            // — was dropped on the floor between PhotoKit and the screen: not deleted, not
+            // reported, and indistinguishable from an asset that had never been asked for.
+            let photoOutcome = try await photos.delete(ids: photoIDs, expecting: [:])
+            deleted += photoOutcome.deletedIDs
+            skipped += photoOutcome.skippedIDs
+            refused += photoOutcome.refusedIDs
             settled += photoIDs.count
             onProgress(
                 DeletionProgress(
@@ -138,6 +152,7 @@ final class CompositeDeleter: MediaDeleting {
                 settled = settledBeforeFiles + fileIDs.count
                 deleted += outcome.deletedIDs
                 skipped += outcome.skippedIDs
+                refused += outcome.refusedIDs
             } catch {
                 // The photos above are already gone. Letting this throw discarded that fact
                 // entirely: the caller wrote no receipt, the review list went on offering
@@ -149,6 +164,7 @@ final class CompositeDeleter: MediaDeleting {
                     requestedIDs: ids,
                     deletedIDs: deleted,
                     skippedIDs: skipped,
+                    refusedIDs: refused,
                     failure: error.localizedDescription
                 )
             }
@@ -157,6 +173,6 @@ final class CompositeDeleter: MediaDeleting {
         onProgress(
             DeletionProgress(stage: .done, settled: ids.count, total: ids.count, isDeterminate: isDeterminate)
         )
-        return DeletionOutcome(requestedIDs: ids, deletedIDs: deleted, skippedIDs: skipped)
+        return DeletionOutcome(requestedIDs: ids, deletedIDs: deleted, skippedIDs: skipped, refusedIDs: refused)
     }
 }

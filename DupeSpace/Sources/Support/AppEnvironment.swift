@@ -70,6 +70,21 @@ enum AppEnvironment {
         ProcessInfo.processInfo.arguments.contains(slowScanFlag)
     }
 
+    /// A library with enough near-duplicates in one rung that the list has to fold some away.
+    ///
+    /// The ordinary fixture is twenty-eight items and its biggest rung is four groups, so the
+    /// row that offers the rest of a long rung is never drawn and the only proof that truncation
+    /// works at all was a unit test on the arithmetic. This adds twelve pairs of near-identical
+    /// photographs — seven bits apart, no burst identifier between them, so they land on the
+    /// bottom rung exactly as a real library's similar shots do.
+    ///
+    /// Passed alongside `-ui-testing`, as `-clean-library` and `-slow-scan` are.
+    static let crowdedLibraryFlag = "-crowded-library"
+
+    static var isCrowdedLibrary: Bool {
+        ProcessInfo.processInfo.arguments.contains(crowdedLibraryFlag)
+    }
+
     /// Long enough to reach a control on a loaded simulator, short enough that a test which
     /// cancels rather than waits pays almost none of it. Four reads at a time over twenty-eight
     /// items is roughly seven steps a stage, so this buys about twelve seconds of scanning.
@@ -95,8 +110,9 @@ enum AppEnvironment {
 
     static func makeLibrary(registry: any FolderRegistering) -> MediaLibrary {
         guard !isUITesting else {
-            return isAccessUnanswered
-                ? StubMediaLibrary.unansweredFixture()
+            if isAccessUnanswered { return StubMediaLibrary.unansweredFixture() }
+            return isCrowdedLibrary
+                ? StubMediaLibrary.crowdedFixture()
                 : StubMediaLibrary.uiTestFixture()
         }
         return CompositeMediaLibrary(
@@ -114,7 +130,7 @@ enum AppEnvironment {
         isUITesting
             ? FileFingerprintCache(
                 fileURL: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("ui-test-fingerprints-\(UUID().uuidString).json")
+                    .appendingPathComponent("ui-test-fingerprints-\(UUID().uuidString).bin")
             )
             : FileFingerprintCache()
     }
@@ -123,10 +139,13 @@ enum AppEnvironment {
         registry: any FolderRegistering,
         cache: FileFingerprintCache
     ) -> any AssetAnalyzing {
+        let step = isSlowScan ? slowScanStep : Duration.zero
         let base: any AssetAnalyzing = isUITesting
             ? (isCleanLibrary
                 ? StubAssetAnalyzer.cleanFixture()
-                : StubAssetAnalyzer.uiTestFixture(stepDelay: isSlowScan ? slowScanStep : .zero))
+                : (isCrowdedLibrary
+                    ? StubAssetAnalyzer.crowdedFixture(stepDelay: step)
+                    : StubAssetAnalyzer.uiTestFixture(stepDelay: step)))
             : CompositeAssetAnalyzer(
                 photos: PhotoKitAssetAnalyzer(),
                 files: FileAssetAnalyzer(registry: registry)

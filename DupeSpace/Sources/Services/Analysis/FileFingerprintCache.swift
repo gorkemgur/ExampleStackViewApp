@@ -22,7 +22,14 @@ actor FileFingerprintCache: FingerprintCaching {
                 .first ?? URL(fileURLWithPath: NSTemporaryDirectory())
             let directory = base.appendingPathComponent("DupeSpace", isDirectory: true)
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            self.fileURL = directory.appendingPathComponent("fingerprints.json")
+            self.fileURL = directory.appendingPathComponent("fingerprints.bin")
+
+            // The JSON this replaces. Nothing reads it any more and `fp3` invalidated every
+            // record in it, so it is pure dead weight — and on a large library it is hundreds
+            // of megabytes of it. An app that asks people to free space does not leave that
+            // behind.
+            let legacy = directory.appendingPathComponent("fingerprints.json")
+            try? FileManager.default.removeItem(at: legacy)
         }
     }
 
@@ -43,6 +50,17 @@ actor FileFingerprintCache: FingerprintCaching {
         loadIfNeeded()
         var record = FingerprintRecord.base(from: records[id], contentVersion: contentVersion)
         record.hashes = hashes
+        records[id] = record
+        isDirty = true
+    }
+
+    func store(fingerprint: ImageFingerprint, for id: String, contentVersion: String) {
+        loadIfNeeded()
+        var record = FingerprintRecord.base(from: records[id], contentVersion: contentVersion)
+        record.hashes = fingerprint.hashes
+        // Only when there is one, so a source without Vision behind it cannot spend a print the
+        // library has already paid twenty-seven milliseconds for.
+        if let print = fingerprint.featurePrint { record.featurePrint = print }
         records[id] = record
         isDirty = true
     }
@@ -70,9 +88,7 @@ actor FileFingerprintCache: FingerprintCaching {
     /// every fingerprint would cost more than the cache saves.
     func flush() {
         guard isDirty else { return }
-        let encoder = JSONEncoder()
-        guard let data = try? encoder.encode(records) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        try? FingerprintArchive.data(for: records).write(to: fileURL, options: .atomic)
         isDirty = false
     }
 
@@ -87,7 +103,7 @@ actor FileFingerprintCache: FingerprintCaching {
 
         guard
             let data = try? Data(contentsOf: fileURL),
-            let stored = try? JSONDecoder().decode([String: FingerprintRecord].self, from: data)
+            let stored = FingerprintArchive.records(from: data)
         else {
             return
         }

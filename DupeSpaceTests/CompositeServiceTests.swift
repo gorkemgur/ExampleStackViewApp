@@ -29,6 +29,14 @@ private actor RecordingAnalyzer: AssetAnalyzing {
         seen.append(item.id)
         return nil
     }
+
+    func imageFingerprint(for item: MediaItem) async -> ImageFingerprint? {
+        seen.append(item.id)
+        return ImageFingerprint(
+            hashes: PerceptualHashes(dHash: 1, pHash: 2),
+            featurePrint: FeaturePrint(descriptor: name, elements: [1, 0])
+        )
+    }
 }
 
 final class CompositeMediaLibraryTests: XCTestCase {
@@ -97,6 +105,25 @@ final class CompositeAnalyzerTests: XCTestCase {
         let filesSeen = await files.seen
         XCTAssertEqual(photosSeen, ["p1"])
         XCTAssertEqual(filesSeen, ["f1"])
+    }
+
+    /// The composite has to forward the *whole* fingerprint, not just the half it used to know
+    /// about. A composite that only implements `perceptualHashes` inherits a default that asks
+    /// its children for hashes, and every feature print either half computed is dropped on the
+    /// floor between the analyzer and the scan — silently, with every test still green.
+    ///
+    /// This exact shape of bug has already happened once in this file's sibling: the composite
+    /// deleter read only `deletedIDs` and lost both refusal counts on the way out.
+    func testTheWholeFingerprintReachesTheScanAndNotJustTheHashes() async {
+        let photos = RecordingAnalyzer(name: "photos")
+        let analyzer = CompositeAssetAnalyzer(photos: photos, files: RecordingAnalyzer(name: "files"))
+
+        let fingerprint = await analyzer.imageFingerprint(
+            for: MediaItem(id: "p1", source: .photoLibrary, kind: .image)
+        )
+
+        XCTAssertEqual(fingerprint?.featurePrint?.descriptor, "photos")
+        XCTAssertEqual(fingerprint?.hashes.dHash, 1)
     }
 }
 
