@@ -21,9 +21,16 @@ Project floor is **iOS 17.0** (`project.yml:5-6`). Availability is stated agains
 Both found by the PhotoKit sweep, both re-verified by hand against the working tree before
 being written down.
 
-### 1.1 Burst frames are invisible to the app
+### 1.1 Burst frames are invisible to the app — **FIXED 15 September 2026**
 
-`PHFetchOptions.includeAllBurstAssets` defaults to `NO` (`PHFetchOptions.h:26-27`) and is
+`PhotoKitMediaLibrary.inventoryFetchOptions()` now sets `includeAllBurstAssets = true`, and
+`InventoryReachTests` pins it: the fetch options were lifted out of `loadInventory` precisely so
+a test could read them. Mutation proof — deleting the line turns
+`testEveryFrameOfABurstIsInTheInventory` red; flipping `includeHiddenAssets` turns a different
+one red. **Still not seen against a real burst on a device.** What follows is the defect as it
+stood.
+
+`PHFetchOptions.includeAllBurstAssets` defaults to `NO` (`PHFetchOptions.h:26-27`) and was
 never set:
 
 ```swift
@@ -41,10 +48,25 @@ only by whatever perceptual edges happen to link representative frames.
 Cost of the fix is one line; the cost of the *consequence* is not — inventory size and scan
 time both rise materially, so it has to be accounted for in `ScanThrottling`.
 
-### 1.2 One undeletable asset fails the entire batch
+### 1.2 One undeletable asset fails the entire batch — **FIXED 15 September 2026**
 
-`canPerform(_:)` (`PHAsset.h:74`, `PHAssetEditOperation.delete`, iOS 8) is called **nowhere**
-in the repo (grep: zero hits). Deletion is a single atomic block:
+`DeletionTriage.plan` splits the fetched assets on `mayBeDeleted` (`PHAsset.canPerform(.delete)`)
+before anything is sent, and `DeletionOutcome` gained a `refusedIDs` channel kept separate from
+`skippedIDs` — the existing skipped copy says "the file changed after the scan read it", which
+for a library refusal is simply untrue. `CompositeDeleter` turned out to read only `.deletedIDs`
+off the photo half, so refusals **and** skips were being dropped between the deleter and the
+screen; that is fixed too. Seven tests in `DeletionRefusalTests`.
+
+**The retry was deliberately not built.** Each `performChanges` carrying `deleteAssets` raises
+its own system confirmation, so falling back to one-at-a-time would put N alerts in front of
+somebody who already answered one. Filter before asking; do not retry after failing.
+
+**Still not measured against a real undeletable asset** — no device has an iTunes-synced or
+shared-album asset in this test library, so the `PHAsset.mayBeDeleted` conformance itself is
+unexercised. What follows is the defect as it stood.
+
+`canPerform(_:)` (`PHAsset.h:74`, `PHAssetEditOperation.delete`, iOS 8) was called **nowhere**
+in the repo (grep: zero hits). Deletion was a single atomic block:
 
 ```swift
 // DupeSpace/Sources/Services/Deletion/MediaDeleting.swift:157-159
@@ -656,6 +678,26 @@ was testable. Pin the revision, treat a descriptor mismatch as cache invalidatio
   `originatingRequestDescriptor = nil` and `distance(to:)` then throws, even though the bytes are
   identical. Stay in one API family. Upside: an iOS 17 ObjC build produces byte-identical
   descriptors, so the cache survives a later Swift-API migration.
+
+**A simulator cannot verify any of this, and it fails in the worst possible way.** Measured on
+iOS 18.6, 15 September 2026. The default compute device is `Apple iOS simulator GPU`, and
+`VNGenerateImageFeaturePrintRequest` throws `Failed to create espresso context` on it — every
+image, every time. So the feature print path is *absent* on every simulator and therefore in
+every CI job this repository runs.
+
+Pinning the request to the CPU device (`setComputeDevice(_:for:)`, iOS 17+) makes it succeed,
+and that is the trap: it returns a vector of the right length (768), the right element type and
+the right size (3072 bytes) — and **the same vector for every image**. Two deliberately opposite
+pictures scored **0.0000032** apart, agreeing to four decimal places, where two different
+photographs should be about 1.67. That is far *below* the near-exact threshold, so a matcher
+trusting it would pair every photograph in a library with every other one and pre-tick them as
+identical copies.
+
+The app therefore proves the model before it uses it: `VisionFeaturePrinter` asks Vision for the
+prints of two images it draws itself — a smooth gradient and a hard checkerboard — once per
+process, and if they come back closer than the similar threshold it produces no prints at all
+and the engine falls back to the two hashes. Feature print thresholds remain **unmeasured on
+real hardware**; `FeaturePrintMeasurementTests` skips rather than passing when the gate is shut.
 
 **Rotation is the one failure, and the fix is free.** Rotated 90° scores 1.0434; re-running with
 `CGImagePropertyOrientation.left` gives **0.0001**. Read EXIF orientation, or try four

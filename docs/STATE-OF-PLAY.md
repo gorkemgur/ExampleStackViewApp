@@ -57,6 +57,60 @@ different line on each run and drives the system Files picker — flaky rather t
 broken. Undiagnosed. The line above used to say "all green", which had stopped being true
 without anyone re-counting.
 
+**15 September 2026 — the `GroupUITests` flakiness, measured rather than assumed.** Both of its
+tests went red once inside a five-class shard, which looked like a regression from the
+deletion-refusal work landing in the same tree. Five runs settled it:
+
+| # | Tree | Scope | `GroupUITests` |
+|---|---|---|---|
+| 1 | with the change | shard b, 5 classes | **red ×2** |
+| 2 | clean | alone | green |
+| 3 | with the change | alone | green |
+| 4 | clean | shard b, 5 classes | green |
+| 5 | with the change | shard b, 5 classes | green |
+
+Run 5 repeats run 1 exactly and disagrees with it, so the failure is non-deterministic and the
+change is not implicated — run 4 rules out the shard, run 3 rules out the code. **Still no root
+cause**, but it is no longer "it failed once when I was doing something else": the same
+configuration has now produced both answers, which is the definition the word was being used
+loosely for before. `DupeSpaceTests` is **249** as of this date, not the 191 above.
+
+**15 September 2026 — rows that were given space and never drawn.** A person looking at the app
+on their phone reported "a huge gap under the Photos heading". Measured rather than guessed, with
+`app.debugDescription` frames: on the burst rung the explanation ended at y −191 and the single
+row that had been built sat at y −19, with **172 points of nothing** between them and the
+ladder's rail running straight through it. Cause: the rung's rows sat in a `LazyVStack` nested
+inside the list's own `LazyVStack`; the inner one reserved every row's height and built almost
+none of them. At one scroll position it built **zero of three**.
+
+Two things about this are worth keeping. First, the total heights were always correct, which is
+why comparing section positions before and after the fix showed no difference and briefly made
+the right diagnosis look wrong — the space was never missing, the content was. Second, **every
+one of the 250 tests passed throughout**: they ask whether an element exists, and a row that is
+never built is simply never queried for. `testEveryRowOfARungIsDrawnAndNotJustSpacedFor` counts
+them instead, and with the lazy stack put back it reports 0 where it wants 3.
+
+**15 September 2026 — a whole rung given space and never drawn, one level up from the last
+one.** A person looking at the app reported "a huge gap under the Photos heading" again, after
+the nested-`LazyVStack` fix. Measured with `app.debugDescription` frames, with the heading
+scrolled properly into view: the heading ended at y 395.4, the next element on screen was at
+633.3, and `review.section.image.1` — the whole "Lower-quality re-sends" rung, one item, half a
+megabyte — was **absent from the accessibility tree**. The heading said the kind held four items
+and the screen showed three.
+
+Four candidates were tested and three were exonerated by measurement: adding `.id(section.id)`
+to each rung changed nothing; moving the padding off the `ForEach` changed nothing; removing
+`pinnedViews` changed nothing. Replacing the list's `LazyVStack` with a plain `VStack` made the
+rung appear 11.9 points below the heading, which is what pinned the cause: the rungs were the
+lazy stack's own children and it reserved one child's height without building its content. Why
+SwiftUI does that is **UNVERIFIED** — there is a behavioural characterisation here and no more
+than that.
+
+The fix keeps both the laziness and the pinned headings: each kind's rungs now sit in an eager
+`VStack`, so the lazy stack has three children rather than twelve and anything it builds, it
+builds whole. `LadderDrawingUITests` measures the gap rather than asking whether elements exist,
+because "does this exist" is precisely the question that let this through twice.
+
 ### The three bugs the device jobs found that nothing else could
 
 All three were invisible to a green test suite, because no test ran the code the way the app
@@ -548,6 +602,106 @@ Written down before they are understood, so they are not re-found:
   absence on a device. That does not overturn the conclusion — the library may simply hold no
   video duplicates — but it is the second time this has been seen and it is no longer only a
   script's opinion.
+
+---
+
+## 5b-bis. Two expert audits — read `docs/AUDIT-FINDINGS.md`
+
+Two review agents went over `docs/SWIFTUI-TRAPS.md` and the screens behind it on 15 September
+2026. **Nothing they found is fixed.** The notebook itself has errors — case 2's mechanism is
+wrong (`Circle` does not stretch), case 3's `.id(section.id)` experiment held its own variable
+constant, and case 6 covers one of the two marks on that thumbnail. Everything is in
+`docs/AUDIT-FINDINGS.md` with `file:line`; do not re-derive it.
+
+---
+
+## 5c. What a big library found — measured 15 September 2026
+
+Every number this project had came from a twenty-eight item fixture. `ScanScaleTests` in
+`DupeCore` builds a synthetic camera roll — a fifth of it in near-duplicate pairs, the rest
+photographs of unrelated things, feature prints dense in all 768 elements so the early exit in
+`proximity(within:)` behaves as it does on real vectors. No simulator: `swift test` runs it.
+The measurements are gated behind `DUPESPACE_SCALE=1` because the heaviest one takes five
+minutes; the correctness tests run every time.
+
+Debug build, Apple silicon, `swift test`. **A Mac, not a phone.**
+
+### The sweep is quadratic and feature prints cost seventy times the hashes
+
+| items | pairs | prints on | prints off | ratio |
+|---|---|---|---|---|
+| 500 | 124,750 | **1.52 s** | 0.023 s | 65x |
+| 1,000 | 499,500 | **6.03 s** | 0.085 s | 71x |
+| 2,000 | 1,999,000 | **24.25 s** | 0.313 s | 77x |
+
+Four times the pairs, four times the time, at both settings: `ScanPipeline.edges` is n-squared
+exactly as written, and nothing in the measurement is amortised or cached away.
+
+Extrapolating the prints-on column on that curve — **not measured, arithmetic**:
+
+| library | pairs | projected |
+|---|---|---|
+| 5,000 | 12.5 M | ~2.5 min |
+| 10,000 | 50 M | ~10 min |
+| 20,000 | 200 M | ~40 min |
+| 50,000 | 1.25 B | ~4 h |
+
+Fifty thousand is the number this repo's own notes use for a large library. On a phone, slower.
+The hashes alone would do the same fifty thousand in about **13 minutes** on this curve, which
+is the size of the trade feature prints bought: `docs/OPPORTUNITIES.md` §9.1 measured them
+separating a 30 % crop from an unrelated photograph 10.19x better than the hashes, and §9.2 is
+why the bottom rung works at all. The cost of that was never measured until now.
+
+Two things make the real figure worse rather than better:
+
+- The synthetic unrelated vectors sit ~2.0 apart; Vision's measured ~1.67. A closer pair
+  accumulates more slowly and **exits later**, so real vectors cost more per pair, not less.
+- The early exit only helps pairs that are *far apart*. Every pair inside the threshold is
+  summed over all 768 elements. A pile of near-identical photographs therefore pays full price
+  on every pair of itself — which is why the 2,000-copy pile below takes five minutes on its
+  own.
+
+**Not decided.** A pre-filter — the LSH sketch that was refused in an earlier round for being an
+optimisation without a measurement — now has its measurement. Whether to build one is open.
+
+### A pile above the neighbour cap fragments, and every fragment keeps a copy
+
+`ScanPipeline.maximumNeighboursPerItem` is 256, and it drops edges to bound memory at n x 256
+instead of n squared. `DuplicateClusterer.similarGroups:69` is seed-first: it takes one seed's
+neighbours, forms a group, and moves on. Above the cap, no single seed can reach a whole pile.
+
+| copies of one screenshot | groups | reachable | left after cleaning |
+|---|---|---|---|
+| 300 | 1 | 300 | **1** |
+| 1,000 | 5 | 1,000 | **5** |
+| 2,000 | 10 | 2,000 | **10** |
+
+Nothing is lost — every copy is reachable and offered — and 995 of 1,000 is most of the win.
+But the rung's promise is "keep one", and above the cap the app keeps roughly one per two
+hundred. The comment on the cap names "five thousand screenshots of the same app screen" as the
+case it exists for; on this curve that case leaves about twenty-five.
+
+Pinned by `testHowManyCopiesSurviveCleaningOnePile` under `XCTExpectFailure`, so the assertion
+in the file is what the app promises and the test goes red the day somebody fixes it.
+
+**Not fixed, and deliberately not fixed quietly.** The obvious repairs all change what a group
+means: transitive closure can chain A~B~C where A and C are not alike, which is the failure this
+app cannot have. Raising the cap moves the cliff without removing it. This is a decision, not a
+patch.
+
+### What is still right up there
+
+- 50 planted pairs among 500 photographs: all 50 found, and exactly 50 groups — no unrelated
+  photograph joined to anything, across ~160,000 non-duplicate pairs.
+- No `solo-` item was ever offered for deletion.
+- Cancellation is honoured inside the sweep at 2,000 items.
+
+### Not measured
+
+Memory. The figures above are wall time and counts only; nothing has watched the peak. The
+scan's own throttling (`ScanThrottling`) was bypassed with `UnthrottledScan` so the numbers
+describe the algorithm rather than the scheduler. The list's scrolling at this size has not
+been looked at.
 
 ---
 
