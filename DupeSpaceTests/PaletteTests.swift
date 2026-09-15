@@ -215,4 +215,150 @@ final class PaletteTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - The frame a mark can actually land on
+
+    /// Composite a translucent token over an opaque one, in a given appearance.
+    ///
+    /// The `over: Double` version above answers "what does this become on a white or a black
+    /// frame". This one answers "what does this become on the app's own card", which is a
+    /// different question with a different answer in each appearance.
+    private func composited(_ color: Color, over backdrop: Color, _ style: UIUserInterfaceStyle) -> Color {
+        let top = UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
+        let under = UIColor(backdrop).resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
+        var tr: CGFloat = 0, tg: CGFloat = 0, tb: CGFloat = 0, ta: CGFloat = 0
+        var ur: CGFloat = 0, ug: CGFloat = 0, ub: CGFloat = 0, ua: CGFloat = 0
+        top.getRed(&tr, green: &tg, blue: &tb, alpha: &ta)
+        under.getRed(&ur, green: &ug, blue: &ub, alpha: &ua)
+        func mix(_ over: CGFloat, _ below: CGFloat) -> Double {
+            Double(over) * Double(ta) + Double(below) * (1 - Double(ta))
+        }
+        return Color(red: mix(tr, ur), green: mix(tg, ug), blue: mix(tb, ub))
+    }
+
+    /// A two-part mark has to be findable on *every* frame, and the two ends are not the worst
+    /// case.
+    ///
+    /// The existing pair of tests sample a white sky and a night shot, and both pass. Neither
+    /// looks at the middle, where a translucent dark ground has gone grey and a white hairline
+    /// has gone grey with it — and a mid-grey frame is the commonest frame there is.
+    ///
+    /// No single colour can clear a floor against every backdrop: whatever it is, some frame
+    /// matches it. That is why the mark is two parts, and it is the *pair* that has to hold —
+    /// for any frame, either the ground separates from it or the hairline does. That is the
+    /// claim, and this is the sweep that makes it one.
+    func testAMarkOnAPhotographIsFindableOnEveryFrameItCanLandOn() {
+        var worst = (ratio: Double.infinity, frame: 0.0)
+        for step in stride(from: 0.0, through: 1.0, by: 1.0 / 64.0) {
+            let frame = Color(red: step, green: step, blue: step)
+            let ground = contrast(composited(DS.onPicture, over: step), frame, .light)
+            let edge = contrast(composited(DS.onPictureEdge, over: step), frame, .light)
+            let best = max(ground, edge)
+            if best < worst.ratio { worst = (best, step) }
+        }
+        XCTAssertGreaterThanOrEqual(
+            worst.ratio, 3,
+            "on a frame at \(Int(worst.frame * 255)) grey, neither the badge's ground "
+            + "(\(String(format: "%.2f", worst.ratio)):1 at best) nor its hairline separates "
+            + "from the picture — the mark is there and nobody can find it"
+        )
+    }
+
+    // MARK: - The mark that says which copy survives
+
+    /// The seal carries a white tick and nothing else carries it.
+    ///
+    /// This is the more meaningful of the two marks on the thumbnail — the kind badge says what
+    /// a file is, the seal says which copy lives. Its failure does not even need a bright
+    /// photograph: the tick is measured against the seal's own disc.
+    func testTheSurvivorSealCarriesItsOwnTick() {
+        for (style, name) in appearances {
+            XCTAssertGreaterThanOrEqual(
+                contrast(.white, DS.onPictureAccent, style), 4.5,
+                "in \(name) the seal's tick has dissolved into the seal — and the tick is the "
+                + "whole message, the disc is only there to hold it"
+            )
+        }
+    }
+
+    /// The same decision as ``testTheMarkOnAPictureIgnoresTheAppearance``, for the same reason.
+    func testTheSurvivorSealIgnoresTheAppearance() {
+        XCTAssertEqual(
+            luminance(DS.onPictureAccent, .light), luminance(DS.onPictureAccent, .dark),
+            accuracy: 0.0001,
+            "the survivor seal follows the appearance, and it is drawn on a photograph — "
+            + "dark mode says nothing about whether that photograph is a white sky"
+        )
+    }
+
+    // MARK: - The ladder the scan screen draws to be watched
+
+    /// Every row of the scan ladder is text, and text has a floor.
+    ///
+    /// The screen exists to say "here is the whole pipeline, in order, so you can watch it".
+    /// Four of its six rows were drawn at `DS.onSlab.opacity(0.32)` — 2.06:1 — with their
+    /// markers at `.opacity(0.22)`, 1.61:1. A stage nobody can read is not a stage anybody can
+    /// watch, and the hierarchy between current and waiting is carried by weight, which costs
+    /// no contrast at all.
+    func testEveryStageOfTheScanLadderIsReadable() {
+        for (style, name) in appearances {
+            XCTAssertGreaterThanOrEqual(
+                contrast(composited(DS.onSlabWaiting, over: DS.slab, style), DS.slab, style), 4.5,
+                "in \(name), a stage that has not started yet is under the floor for text"
+            )
+            XCTAssertGreaterThanOrEqual(
+                contrast(composited(DS.onSlabDone, over: DS.slab, style), DS.slab, style), 4.5,
+                "in \(name), a stage that has finished is under the floor for text"
+            )
+            XCTAssertGreaterThanOrEqual(
+                contrast(composited(DS.onSlabWaitingMark, over: DS.slab, style), DS.slab, style), 3,
+                "in \(name), the dot beside a waiting stage is under the floor for a UI "
+                + "element that carries meaning"
+            )
+        }
+    }
+
+    // MARK: - One hue, one meaning — including the brand's
+
+    /// The brand gradient and the ladder's top rung are drawn on the same screen.
+    ///
+    /// `brandBottom` was `#32D7EB` and `tier(.identical)` in dark mode was `#32D7EB`: not close,
+    /// identical. The progress fill and the colour that means "these are the same file" were
+    /// one colour, which is verbatim the defect this file documents killing when `aqua` was
+    /// deleted — the dark value came back in through the brand.
+    func testTheBrandGradientIsNotTheLaddersTopRung() {
+        for (style, name) in appearances {
+            XCTAssertGreaterThanOrEqual(
+                hueSeparation(DS.brandBottom, DS.tier(.identical), style), 20,
+                "in \(name), the brand's own gradient wears the identical rung's colour"
+            )
+        }
+    }
+
+    // MARK: - A filled pill knows what it is filled with
+
+    /// `onTint` is right for the tier palette and wrong for everything else.
+    ///
+    /// The tier colours are dark in light mode and bright in dark mode, so "which ink" and
+    /// "which appearance" give the same answer and `onTint` gets away with asking the second
+    /// question. `DS.neutral` is a mid grey in both, and `onTint` puts white on it.
+    func testAFilledPillCarriesItsOwnLabelWhateverItIsFilledWith() {
+        let fills: [(Color, String)] = [
+            (DS.deep, "DS.deep"),
+            (DS.neutral, "DS.neutral"),
+            (DS.tier(.identical), "the identical rung"),
+            (DS.tier(.inferiorCopy), "the inferior-copy rung"),
+            (DS.tier(.burstLeftover), "the burst rung"),
+            (DS.tier(.similar), "the similar rung")
+        ]
+        for (style, name) in appearances {
+            for (fill, label) in fills {
+                XCTAssertGreaterThanOrEqual(
+                    contrast(DS.onFill(fill, in: style), fill, style), 4.5,
+                    "in \(name), a pill filled with \(label) cannot carry its own text"
+                )
+            }
+        }
+    }
 }
+

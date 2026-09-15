@@ -165,7 +165,7 @@ struct ScanView: View {
                         .opacity(reduceMotion ? 1 : (pulse ? 0.5 : 1))
                 } else {
                     Circle()
-                        .fill(DS.onSlab.opacity(0.22))
+                        .fill(DS.onSlabWaitingMark)
                         .frame(width: 6, height: 6)
                 }
             }
@@ -174,7 +174,7 @@ struct ScanView: View {
             Text(ScanCopy.title(for: stage))
                 .font(.footnote.weight(isCurrent ? .semibold : .regular))
                 .foregroundStyle(
-                    isCurrent ? DS.onSlab : DS.onSlab.opacity(isDone ? 0.5 : 0.32)
+                    isCurrent ? DS.onSlab : (isDone ? DS.onSlabDone : DS.onSlabWaiting)
                 )
                 .strikethrough(isDone, color: DS.onSlab.opacity(0.35))
                 .fixedSize(horizontal: false, vertical: true)

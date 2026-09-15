@@ -201,17 +201,22 @@ struct CompareSliderView: View {
         .allowsHitTesting(false)
     }
 
+    /// The two labels under the comparison, on the screen where somebody decides which
+    /// photograph dies.
+    ///
+    /// They were the tint at 14 % behind the tint as text, uppercase and kerned — the exact
+    /// pattern `DesignSystem.swift` records replacing on `Badge`, and for the exact reason:
+    /// `DS.neutral` on its own 14 % ground measures 1.92:1 in light and **1.77:1** in dark. The
+    /// layout half of that cleanup landed here and the drawing half did not, so the retired
+    /// pattern was still being drawn under every comparison.
+    ///
+    /// `Badge` now chooses its ink from its fill, which is what makes it usable with a neutral
+    /// at all. The ink it picks is not the same one in both appearances and not because the
+    /// appearance changed: `DS.neutral` is light in light mode, so the ink goes dark and
+    /// measures 9.03:1; it is a dark slate in dark mode, so the ink goes white and measures
+    /// 7.50:1.
     private func chip(_ title: String, tint: Color) -> some View {
-        Text(title)
-            .font(.caption2.weight(.bold))
-            .textCase(.uppercase)
-            .kerning(0.8)
-            .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tint.opacity(0.14))
-            )
+        Badge(title, tint: tint)
     }
 
     private func placeholderSymbol(for item: MediaItem) -> String {

@@ -275,9 +275,12 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - name: review, launch and onboarding
+          # `LadderDrawingUITests` was in neither shard, which meant the test written to pin
+          # the 237.9-point hole in the review ladder had never once run on CI. It belongs
+          # here, next to the other tests that walk the review screen.
+          - name: review ladder, launch and onboarding
             slug: a
-            only: "-only-testing:DupeSpaceUITests/ReviewUITests -only-testing:DupeSpaceUITests/LaunchUITests -only-testing:DupeSpaceUITests/OnboardingUITests"
+            only: "-only-testing:DupeSpaceUITests/ReviewUITests -only-testing:DupeSpaceUITests/LadderDrawingUITests -only-testing:DupeSpaceUITests/LaunchUITests -only-testing:DupeSpaceUITests/OnboardingUITests"
           - name: history, deletion, scan, group
             slug: b
             only: "-only-testing:DupeSpaceUITests/HistoryUITests -only-testing:DupeSpaceUITests/DeletionUITests -only-testing:DupeSpaceUITests/ScanUITests -only-testing:DupeSpaceUITests/GroupUITests"

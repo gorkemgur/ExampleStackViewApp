@@ -5,7 +5,7 @@ import DupeCore
 /// The app's material: one palette, one type scale, one set of shapes.
 ///
 /// The palette is taken from the icon rather than from the system — `#0A84FF` at the top of the
-/// gradient, `#32D7EB` at the bottom — so the Home Screen, the Lock Screen and the app are
+/// gradient, `#5AC8FF` at the bottom — so the Home Screen, the Lock Screen and the app are
 /// recognisably the same thing. Everything else is derived from those two hues: the neutrals
 /// carry a slight blue bias so they read as chosen rather than as `systemGray`, and the regret
 /// ladder gets a cool-to-warm ramp that runs from the brand's teal to a coral, because the one
@@ -108,7 +108,18 @@ enum DS {
 
     /// The icon's own two stops. Fills only — never text on a light ground.
     static let brandTop = Color(dsRGB: 0x0A84FF)
-    static let brandBottom = Color(dsRGB: 0x32D7EB)
+    /// The bottom stop moved off `#32D7EB`, and the reason is that the colour was spoken for.
+    /// `tier(.identical)` resolves to `#32D7EB` in dark mode — byte for byte the same value —
+    /// so the progress fill and the colour meaning "these are the same file" were one colour on
+    /// one screen. That is verbatim the collision this file documents killing when `aqua` was
+    /// deleted; it came back in through the brand.
+    ///
+    /// Blue was the only direction left. The teal end belongs to the identical rung and the
+    /// green end to the inferior-copy rung, so the gradient is now a lightness and chroma ramp
+    /// inside blue rather than a blue-to-teal hue ramp: 36 degrees of travel from the top stop,
+    /// and 27.7 degrees clear of the identical rung in light, 34.9 in dark. `PaletteTests`
+    /// holds that gap.
+    static let brandBottom = Color(dsRGB: 0x5AC8FF)
 
     /// The colour of a thing that cannot be undone. Used in exactly one place: the key that
     /// destroys files. It was on four controls, three of which only opened a sheet or armed a
@@ -182,13 +193,73 @@ enum DS {
     /// hairline gives the disc an edge in exactly the case the ground cannot — a frame darker
     /// than the ground itself.
     ///
-    /// Both halves are held to a number in `PaletteTests`, composited against the worst frame
-    /// each can meet: white on this ground over pure white, and this hairline over pure black,
-    /// each at 3:1 or better — Apple's floor for a UI element that carries meaning.
-    static let onPicture = Color(dsRGB: 0x101720).opacity(0.62)
+    /// Both halves are held to a number in `PaletteTests`, and the number is a claim about the
+    /// *pair*, not about either half. No single colour can clear a floor against every frame —
+    /// whatever it is, some photograph matches it — so the test sweeps sixty-four frame
+    /// luminances and asserts that for each one, either the ground separates or the hairline
+    /// does. At 0.62 and 0.45 the worst frame was a `#6F6F6F` grey where the better of the two
+    /// managed 2.35:1, under the 3:1 this comment used to claim outright. At 0.85 and 0.90 the
+    /// worst frame is `#7C7C7C` at 3.73:1.
+    static let onPicture = Color(dsRGB: 0x101720).opacity(0.85)
 
     /// See ``onPicture``.
-    static let onPictureEdge = Color.white.opacity(0.45)
+    static let onPictureEdge = Color.white.opacity(0.90)
+
+    /// The accent for a mark drawn on a photograph — the survivor seal's disc.
+    ///
+    /// Same argument as ``onPicture``: it sits on a picture, so it must not follow the
+    /// appearance. Held to 4.5:1 against its own white glyph in `PaletteTests`, because the
+    /// tick inside it is text-sized and the disc is its only ground.
+    /// It was `DS.deep`, which is adaptive: `#0A6FE0` in light and `#3DA1FF` in dark. The dark
+    /// value carries a white tick at 2.71:1 — a failure *inside* the mark, needing no bright
+    /// photograph to provoke it — and being adaptive at all is the thing ``onPicture`` exists to
+    /// argue against. Fixed at the light value, which carries white at 4.81:1 in both.
+    static let onPictureAccent = Color(dsRGB: 0x0A6FE0)
+
+    /// A stage on the scan ladder that has not started, one that has finished, and the mark
+    /// beside a waiting one.
+    ///
+    /// These were `DS.onSlab.opacity(0.32)`, `.opacity(0.5)` and `.opacity(0.22)` written
+    /// inline. A derived colour spelled at its call site is a colour no harness can see:
+    /// `PaletteTests` measured the five opaque tokens and none of the alphas actually drawn.
+    /// Named here so they can be read back.
+    /// 0.32 measured 2.06:1 in light. The hierarchy between a current stage and a waiting one
+    /// is carried by weight — `semibold` against `regular`, which the ladder already does — and
+    /// weight costs no contrast. Reading order survives: 18.02 for the current stage, 7.18 for
+    /// a finished one, 5.05 for a waiting one.
+    static let onSlabWaiting = onSlab.opacity(0.62)
+
+    /// See ``onSlabWaiting``.
+    static let onSlabDone = onSlab.opacity(0.72)
+
+    /// See ``onSlabWaiting``.
+    /// 0.22 measured 1.61:1. This one is a dot rather than a word, so its floor is 3:1 rather
+    /// than 4.5:1, and 0.47 clears it at 3.13.
+    static let onSlabWaitingMark = onSlab.opacity(0.47)
+
+    /// The ink for a filled pill, chosen by what the pill is filled with rather than by the
+    /// appearance.
+    ///
+    /// ``onTint`` answers this correctly for the tier palette and only for the tier palette,
+    /// because those colours are dark in light mode and bright in dark mode — so "which ink"
+    /// and "which appearance" happen to give the same answer. `DS.neutral` is a mid grey in
+    /// both, and `onTint` puts white on it at 2.12:1.
+    ///
+    /// Reading the fill's own luminance asks the question directly. On the tier colours it
+    /// agrees with ``onTint`` exactly; on a neutral it does not.
+    static func onFill(_ tint: Color, in style: UIUserInterfaceStyle = .unspecified) -> Color {
+        let resolved = UIColor(tint).resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        resolved.getRed(&r, green: &g, blue: &b, alpha: &a)
+        func linear(_ c: CGFloat) -> Double {
+            let v = Double(c)
+            return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+        }
+        let luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+        // The midpoint that maximises the worse of the two contrasts, not 0.5 — luminance is
+        // already linear here, and white wins below roughly 0.18.
+        return luminance > 0.1791 ? Color(dsRGB: 0x0A1016) : .white
+    }
 
     /// What that tier costs, in two words, for the rung's eyebrow.
     static func cost(_ tier: RegretTier) -> String {
@@ -325,6 +396,8 @@ enum Readout {
 /// the screen without reading a word of it.
 struct Badge: View {
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private let text: String
     private let tint: Color
 
@@ -341,13 +414,15 @@ struct Badge: View {
     /// top of it is the detail that dates the whole screen. Filled gives the words back their
     /// colour and their contrast in one move.
     ///
-    /// The foreground is `DS.onTint` and not `.white`, because the tier colours invert between
-    /// appearances: 0x10805F is dark enough to carry white in light mode and 0x3DDC97 is far
-    /// too bright for it in dark mode.
+    /// The foreground is chosen from the fill rather than from the appearance. It used to be
+    /// `DS.onTint`, which is right for the tier colours and only for those: they are dark in
+    /// light mode and bright in dark mode, so "which ink" and "which appearance" happen to give
+    /// the same answer. The first badge filled with something else exposed it — `DS.neutral` is
+    /// a mid grey in both appearances, and `onTint` puts white on it at 2.12:1.
     var body: some View {
         Text(text)
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(DS.onTint)
+            .foregroundStyle(DS.onFill(tint, in: colorScheme == .dark ? .dark : .light))
             .lineLimit(1)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)

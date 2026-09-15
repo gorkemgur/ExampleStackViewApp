@@ -87,9 +87,17 @@ element in its row that cannot yield, opposite a select-all button with `lineLim
 scale floor (`ReviewView.swift:709`). Correct at default type; at AX5 every point of compression
 lands on the control beside it. The rule needs "…while the badge is small relative to its row".
 
-### Case 6 is half-closed, and its floor is cited wrongly
+### Case 6 is half-closed, and its floor is cited wrongly — **FIXED 15 September 2026**
 
 Both figures reproduce exactly (5.050:1 and 4.414:1). Three problems:
+
+**Fixed, and the prescription here was wrong too.** The point-samples were replaced by a
+sweep over sixty-four frame luminances, and the tokens moved to `0.85 / 0.90`. But the item below
+asks each token to clear 3:1 against mid-grey, and **no single colour can clear a floor against
+every frame** — whatever it is, some photograph matches its luminance. The invariant that is
+achievable, and now enforced, is about the pair: for any frame, either the ground separates or the
+hairline does. The old pair's floor was **2.35:1** at `#6F6F6F`, not the 2.02:1 cited; the new
+pair's is **3.73:1** at `#7C7C7C`.
 
 1. **The extremes are not the worst case.** `PaletteTests` samples only `over: 1` and `over: 0`
    (`DupeSpaceTests/PaletteTests.swift:189, 198`). Against mid-grey (#808080): the hairline
@@ -119,7 +127,7 @@ both directions: a floor on emptiness and a ceiling on collision.
 Ranked roughly by consequence. Contrast figures were computed from the tokens, not measured off
 a rendered screen.
 
-### 1. The survivor seal fails the floor case 6 introduced, on the same 52pt thumbnail
+### 1. The survivor seal fails the floor case 6 introduced, on the same 52pt thumbnail — **FIXED 15 September 2026**
 
 `GroupRowView.swift:59-64` — `.foregroundStyle(.white, DS.deep)`, no ground, no hairline, and
 `DS.deep` is **adaptive**, which case 6's own closing paragraph forbids for a mark on a photo.
@@ -131,8 +139,12 @@ a rendered screen.
 
 The dark failure is *internal* — white tick against its own disc — so it does not even need a
 bright photograph to fail. And the seal is the more meaningful of the two marks: it says which
-copy survives. **Fix:** `DS.onPicture` ground + `DS.onPictureEdge` hairline, as the kind badge
-now has. **Pin:** three asserts in `PaletteTests` using the existing `composited(_:over:)`.
+copy survives. **Fixed** with the badge's construction, but `DS.onPictureAccent` (fixed `#0A6FE0`, white tick
+at 4.81:1) rather than the neutral `DS.onPicture` ground — blue is what says *survivor* here, and
+the neutral ground would have thrown that meaning away. Pinned by
+`testTheSurvivorSealCarriesItsOwnTick` and `testTheSurvivorSealIgnoresTheAppearance`, both proved
+by mutation. The seal also stopped being a bare `ZStack` child, which removes a latent instance of
+part 1's own case 1.
 
 ### 2. The reclaim meter's numerator and denominator are different quantities
 
@@ -226,7 +238,7 @@ reads `drag.location.x / width`; the limit marker at `:880` uses `width * limitF
 marker cannot be hit exactly. **The strongest pin available** — extract the mapping and assert
 `capX(for: fraction(forTouchAt: x)) + gripWidth/2 == x` across the track.
 
-### 10. `DS.brandBottom` *is* `DS.tier(.identical)` in dark mode, both on the scan screen
+### 10. `DS.brandBottom` *is* `DS.tier(.identical)` in dark mode, both on the scan screen — **FIXED 15 September 2026**
 
 `DesignSystem.swift:111` `brandBottom = #32D7EB` fixed; `:146` `tier(.identical)` dark =
 **`#32D7EB`**. Drawn at `ScanView.swift:374` (progress fill) and `:551` (results meter), while
@@ -234,9 +246,15 @@ marker cannot be hit exactly. **The strongest pin available** — extract the ma
 `DesignSystem.swift:96-101` documents killing when `aqua` was deleted — the dark value came
 straight back in through `brandBottom`. **Pin:**
 `XCTAssertGreaterThanOrEqual(hueSeparation(DS.brandBottom, DS.tier(.identical), .dark), 12)`,
-which fails today at 0.0°.
+which failed at 0.0°.
 
-### 11. The retired chip pattern is still drawn under every comparison
+**Fixed** by moving the brand, not the ladder: `brandBottom` goes `#32D7EB` → `#5AC8FF`, which is
+27.7° clear of the identical rung in light and 34.9° in dark. Blue was the only direction
+available — the teal end belongs to the identical rung and the green end to the inferior-copy
+rung — so the icon's gradient is now a lightness and chroma ramp inside blue rather than a
+blue-to-teal hue ramp. Pinned by `testTheBrandGradientIsNotTheLaddersTopRung`.
+
+### 11. The retired chip pattern is still drawn under every comparison — **FIXED 15 September 2026**
 
 `CompareSliderView.swift:204-216` — tint-at-14 % behind tint-as-text, uppercase, kerned; the
 exact pattern `DesignSystem.swift:338-343` says was replaced and why. On `DS.inkRaised`:
@@ -248,7 +266,20 @@ exact pattern `DesignSystem.swift:338-343` says was replaced and why. On `DS.ink
 
 1.92:1 on caption2 is gone, on the screen where somebody decides which photograph dies.
 
-### 12. Every derived colour is invisible to the contrast harness
+**Fixed** by making `chip` call `Badge`. That required fixing `Badge` first: it used `DS.onTint`,
+which is right for the tier palette and only for it — those colours are dark in light mode and
+bright in dark mode, so "which ink" and "which appearance" give the same answer. `DS.neutral` is a
+mid grey in one appearance and a dark slate in the other, and `onTint` put white on it at 2.12:1.
+`DS.onFill(_:in:)` now reads the fill's own luminance: 9.03:1 in light, 7.50:1 in dark, and it
+agrees with `onTint` exactly on every tier colour. Pinned by
+`testAFilledPillCarriesItsOwnLabelWhateverItIsFilledWith`.
+
+**Still open, and newly found:** the same retired pattern is drawn in `Shared/ScanLiveViews.swift`
+lines 119-122 — `DS.brandBottom` as text over `DS.brandBottom.opacity(0.15)` — on the Live Activity
+and widget surfaces, which neither audit looked at. **Not measured**, because the ground behind a
+Live Activity is the Lock Screen wallpaper rather than a token.
+
+### 12. Every derived colour is invisible to the contrast harness — **PARTLY FIXED 15 September 2026**
 
 `PaletteTests.swift:151-168` measures five opaque tokens and four rung colours. Every colour
 actually drawn is `token.opacity(x)` and none is measured — **14 distinct alphas on `DS.onSlab`
@@ -264,8 +295,15 @@ alone, 35 `DS.<token>.opacity(…)` call sites.** `DS.onSlab` over `slabFill`:
 So the ladder that exists to say "here is the whole pipeline, in order, so you can watch it"
 (`ScanView.swift:109-112`) draws four of six rows at 2.06:1 with markers at 1.61:1.
 
-**Fix:** name the derived values as tokens (`DS.onSlabWaiting`, `DS.onSlabDone`,
-`DS.onSlabSecondary`) so they can be measured, and lift the faint end.
+**Fixed for the scan ladder only.** `DS.onSlabWaiting`, `DS.onSlabDone` and
+`DS.onSlabWaitingMark` are named tokens now, measured by
+`testEveryStageOfTheScanLadderIsReadable`, and lifted: the waiting stage goes `0.32` → `0.62`
+(2.06:1 → 5.05:1), the finished stage `0.5` → `0.72` (3.42:1 → 7.18:1), and the waiting dot
+`0.22` → `0.47` (1.61:1 → 3.13:1). Reading order survives because the hierarchy is carried by
+weight, not by opacity: 18.02 for a current stage, 7.18 for a finished one, 5.05 for a waiting one.
+
+**Still open:** the other alphas in the table — `ScanView.swift:322`, `DesignSystem.swift:726`
+(`ReachPicker` unselected) — and the thirty-odd remaining `DS.<token>.opacity(…)` call sites.
 
 ### 13. Amber has four jobs, three on one screen
 

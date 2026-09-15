@@ -225,21 +225,61 @@ Image(systemName: KindCopy.symbolName(for: group.keeper.kind))
 
 **Why.** A translucent colour is not one colour — the number that decides legibility is its
 composite with whatever is behind it, and behind this one is any photograph at all. So the ground
-carries the glyph at the bright end and the hairline carries the badge at the dark end, and both
-ends are held to Apple's 3:1 floor for a meaningful UI element. Computed from the tokens: white on
-the ground over pure white is **5.05:1**, the hairline over pure black is **4.41:1**.
+carries the glyph at the bright end and the hairline carries the badge at the dark end.
 
 `DS.onPicture` is also **deliberately not adaptive**, alone in `DS`. Every other token flips with
 the appearance because every other token sits on the app's own chrome. Dark mode says nothing
 about whether the photograph behind this one is a white sky.
 
-**What pins it.** Three tests in `PaletteTests`, each proved by mutation, each run on its own:
+### The correction: two ends are not the worst case, and 3:1 was never held
+
+This case originally claimed both halves cleared Apple's 3:1 floor, citing white-on-ground over
+pure white at **5.05:1** and the hairline over pure black at **4.41:1**. Both numbers are real and
+both are the *easy* frames. The tests sampled only those two, so nothing looked at the middle —
+where a translucent dark ground has gone grey and a white hairline has gone grey with it.
+
+Swept across sixty-four frame luminances, the original pair's worst frame was `#6F6F6F`, where the
+better of ground and hairline managed **2.35:1**. The sentence "both ends are held to 3:1" was
+true about the ends and false about the mark.
+
+It is also the wrong shape of claim. **No single colour can clear a floor against every frame** —
+whatever it is, some photograph matches its luminance. That is *why* the mark is two parts, and
+the honest invariant is about the pair: for any frame, either the ground separates from it or the
+hairline does. At `0.62 / 0.45` that floor was 2.35:1; the tokens are now `0.85 / 0.90`, and the
+worst frame is `#7C7C7C` at **3.73:1**.
+
+The mutation that exposes this is instructive. Reverting the ground alone to `0.62` leaves the
+sweep **green** at 3.02:1 — the hairline is carrying the pair almost single-handed. Only reverting
+the hairline reddens it. A mutation aimed at the wrong half of a two-part mark proves nothing.
+
+**What pins it.** Four tests in `PaletteTests`, each proved by mutation, each run on its own:
 
 | Mutation | Contrast it produces | Test that went red |
 |---|---|---|
-| ground `0.62` → `0.20` | 1.54:1 | `testTheKindBadgeStaysReadableOnTheBrightestFrameThereIs` |
-| hairline `0.45` → `0.10` | 1.20:1 | `testTheKindBadgeKeepsAnEdgeOnTheDarkestFrameThereIs` |
-| token made `adaptive(light:dark:)` | — | `testTheMarkOnAPictureIgnoresTheAppearance` |
+| ground `0.85` → `0.62` | 3.02:1 (computed; frame not reported) | **none — the pair still holds** |
+| hairline `0.90` → `0.45` | 2.64:1 at `#5F5F5F` | `testAMarkOnAPhotographIsFindableOnEveryFrameItCanLandOn` |
+| both back to `0.62 / 0.45` | 2.35:1 at `#6F6F6F` | `testAMarkOnAPhotographIsFindableOnEveryFrameItCanLandOn` |
+| seal reverted to adaptive `DS.deep` | 2.71:1 in dark | `testTheSurvivorSealCarriesItsOwnTick`, `testTheSurvivorSealIgnoresTheAppearance` |
 
-**Not verified:** both numbers are computed from the tokens, by the same arithmetic the tests run.
-Neither has been checked against a real photograph in a screenshot.
+Run in an earlier session, against the `0.62 / 0.45` tokens, and **not re-run since**: ground
+`→ 0.20` giving 1.54:1 reddened `testTheKindBadgeStaysReadableOnTheBrightestFrameThereIs`;
+hairline `→ 0.10` giving 1.20:1 reddened `testTheKindBadgeKeepsAnEdgeOnTheDarkestFrameThereIs`;
+making the token `adaptive(light:dark:)` reddened `testTheMarkOnAPictureIgnoresTheAppearance`.
+
+### The other mark on the same thumbnail
+
+The case was written about the kind badge and stopped there, while the survivor seal sat on the
+same 52-point picture in `.foregroundStyle(.white, DS.deep)` — no ground, no hairline, and
+**adaptive**, which is the one thing this case's own closing paragraph forbids. `DS.deep` resolves
+to `#3DA1FF` in dark mode, which carries a white tick at **2.71:1**: a failure *inside* the mark,
+needing no photograph at all to provoke it. And the seal is the more meaningful of the two — the
+badge says what a file is, the seal says which copy lives.
+
+It is now built exactly like the badge, with `DS.onPictureAccent` (fixed `#0A6FE0`, white tick at
+4.81:1) in place of the neutral ground, because blue is what says *survivor* here.
+
+**The rule, restated:** a mark on a photograph needs two parts, a fixed palette, and a test that
+sweeps the frame rather than sampling its ends.
+
+**Not verified:** every number here is computed from the tokens, by the same arithmetic the tests
+run. None has been checked against a real photograph in a screenshot.
