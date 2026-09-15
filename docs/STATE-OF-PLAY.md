@@ -17,6 +17,12 @@ Three rules held throughout and should keep holding:
    Every driver in `Scripts/` dumps the screen when it gives up. That was learned the hard way,
    four separate times.
 
+**Where the research lives.** `docs/OPPORTUNITIES.md` is the research ledger: every Apple API
+worth having, verified against the iOS 26.4 SDK by compiling a probe rather than by reading
+annotations; the private symbols we found and refused, recorded so nobody rediscovers them; the
+interaction and motion spec; and two confirmed defects in shipped code. Read it before
+proposing a feature — it exists so nobody researches this twice.
+
 ---
 
 ## 1. Proven — exercised against real media, not stubs
@@ -37,10 +43,19 @@ These run in CI on every push, through the real system frameworks.
 | Second resources — RAW halves and Live Photo video | `SecondResourcesTests`, 5 tests, green from run 162, including that an asset which *claims* to be a Live Photo but has no measured video is not counted |
 | **Cross-source duplicates (the "C" feature)** | `crossing` job: a real folder granted through Apple's own document picker, 31 real items scanned, and a group that holds a library photograph and its folder copy *and says so*. Green from run 157 |
 | `DupeCore` logic | 307 tests |
-| Every screen and the whole path through them | 24 UI tests, all green — 23 against stubs, plus `CrossSourceUITests` against the real thing |
+| Every screen and the whole path through them | 24 UI tests, **21 green** — 23 against stubs, plus `CrossSourceUITests` against the real thing. See the three reds below. |
 
-Test counts by target, counted rather than remembered: **DupeCore 307**, **DupeSpaceTests 172**,
-**DupeSpaceUITests 24**.
+Test counts by target, counted rather than remembered: **DupeCore 307**, **DupeSpaceTests 191**,
+**DupeSpaceUITests 24, of which 3 fail**.
+
+The three reds, measured on 14 September 2026 and **not caused by anything in this session** —
+the same three fail with the onboarding wiring stashed out:
+`GroupUITests.testTheGroupScreenShowsWhatStaysAndWhyEachCopyIsOffered` ("the survivor has to be
+named"), `GroupUITests.testDeletingAWholeGroupIsBehindAConfirmation`, and
+`CrossSourceUITests.testAPictureInBothHalvesIsFoundAndSaidToBeInBoth`, which fails at a
+different line on each run and drives the system Files picker — flaky rather than merely
+broken. Undiagnosed. The line above used to say "all green", which had stopped being true
+without anyone re-counting.
 
 ### The three bugs the device jobs found that nothing else could
 
@@ -286,6 +301,253 @@ deletion, which is why this has been tolerated.
 
 **Nothing has been used by a human being.** Every screenshot in `docs/screenshots` comes from
 a script driving a simulator. No person has held this app.
+
+---
+
+## 5b. What the first real phone found
+
+**14 September 2026. The first time a person held this app.** §5 ended with "nobody has used
+this app"; this is the first hour of somebody doing so, on an iPhone 13 Pro Max with a real
+library. One launch produced more findings than the last twenty CI runs, which is the whole
+argument for §9's "needs a person" in one line.
+
+**Fixed — the permission wall outlived the permission.** The system alert appeared at launch,
+the user allowed it, and the card stayed. `access` is written in exactly two places —
+`refresh()`, which had already run, and `requestAccess()`, which only the card's button
+reaches — so a grant arriving by any other route left the screen describing a state that had
+stopped being true until the app was relaunched. Two ordinary routes lead there: the Settings
+round trip *the card's own second button offers*, and a permission revoked while the app was
+in the background. `refreshAccess()` on `scenePhase == .active` now re-reads it, and reloads
+only when it actually moved — an app switch must not re-enumerate fifty thousand assets.
+
+The alert itself was almost certainly raised by `PHPhotoLibrary.shared().register(_:)` in
+`beginObservingLibrary()`, which the launch ran *after* reading the status. Registering a
+change observer is not a passive subscription; it is a PhotoKit call, and it was asking for
+permission before anybody had read the card that explains what the app wants. Observation is
+now gated on `.authorized`, so the only thing that asks is the button — the route that
+updates state. ⚠️ **Unverified**: that `PHPhotoLibrary.shared()` is what prompts. The SDK
+header does not document it and it was reached by elimination — it is the only launch-time
+PhotoKit call that is not a pure status read. The fix does not depend on the answer.
+
+**Why nothing caught it.** Every UI test runs behind `-ui-testing`, which pins
+`StubMediaLibrary(access: .authorized)` — the permission is already granted before the first
+frame. The `real` job grants through `simctl privacy` during setup. Nothing in 503 tests ever
+ran the transition from unanswered to answered, which is the only moment the bug exists in.
+
+**Built — the screen that makes the promises before the ask.** The alert used to arrive at
+launch, raised by a change-observer registration, ahead of the card written to earn it.
+`DupeSpace/Sources/Features/Onboarding/Onboarding.swift` is four pages ending in the permission, and
+`OnboardingTests` pins the ordering as a contract rather than a layout preference: one ask, on
+the last page, and nothing before it may ask for anything. The grant routes through
+`OverviewViewModel.requestAccess()`, which is why the cover is presented from `RootView` and
+not from `AppShell` — `AppShell` has no `model`, so the screen would have had to raise the
+alert against a second library instance and leave the first still showing a wall.
+
+`OnboardingGate` decides who sees it, and it is a three-input decision because `-ui-testing`
+has to veto the screen (every UI test and the screenshot walk launch into what looks like a
+first run) while `-onboarding` has to be able to ask for it back, or this becomes the one
+screen that ships unmeasured. `Scripts/audit-ui.py` now walks it last.
+
+**Fixed — the artwork was grey, and drawing photographs was the answer.** The four scenes drew
+the tier colours at `opacity(0.32)` over `DS.well`, which rendered them grey: a skeleton loading
+state rather than an illustration, contradicting the app behind it where those same colours are
+drawn at full strength, and leaving the key at the bottom as the only saturated object on the
+screen. The pictures are photographs now — `DrawnPhoto`, six palettes of sky, light and two
+ridges, made of gradients and a `Shape` with no asset anywhere — and they are deliberately *not*
+`DS.adaptive` pairs. Everything else on the screen is interface and resolves against the
+appearance; a sunset does not become a different sunset in dark mode, and holding these fixed is
+what makes them read as photographs rather than as painted UI.
+
+That turned each rung into a sentence instead of a bar. A rung is a *pair* of photographs and
+how the right one differs from the left is which rung it is: identical, the same picture twice;
+`inferiorCopy`, desaturated and soft, which is what a re-send looks like beside its original;
+`burstLeftover`, the same frame a hair further on; `similar`, the same place photographed twice.
+The `barWidths` array went with it — it encoded a share of the library that this screen never
+had and the app never shows here. What fills the ninety-six points a height-sized pair cannot
+reach is the app's own `Badge` carrying `DS.cost(tier)`, which also makes the picture on page
+two an illustration of page two's sentence.
+
+**Fixed — about 195pt of nothing between the copy and the key.** The artwork was pinned at
+`frame(height: 232)` with a `Spacer` underneath swallowing whatever a large phone had left. It
+is a band now, 130 to 360, and the slack goes into the picture; on a small phone the picture
+gives it back rather than pushing the key off the bottom. Page three needed the same correction
+in reverse — its phone was clamped at `min(1, …)` and sat at its 214pt drawing height in a 338pt
+panel, the emptiest picture on the screen on the page whose whole job is to be believed.
+
+**Fixed — the copy had no entry point and never moved.** One `.body` paragraph in system grey,
+five lines, nothing in it more important than anything else. `OnboardingPage` has a `lead` now
+— one of the body's own sentences, lifted out and set apart by weight and colour rather than by
+size — and `PageCopy` stages title, lead and body seventy milliseconds apart, which is the order
+they are meant to be read in. It is its own view so that `.id(page.id)` rebuilds it and the
+stagger fires on every turn.
+
+**Fixed — one animation was decoration and is now an argument.** The library grid lit a
+`DS.deep` border on and off forever through five phases: the motion for something being
+*selected*, on the screen that asks permission to *look*. It is one pass now, corner to corner,
+that runs once and holds — measured at the last tile of the pass, saturation 0.210 at t=0.35s
+against 0.544 settled.
+
+Still open and older than any of this: `DS.destructive` (#E5342B) and `DS.tier(.similar)`
+(#BC4127) are both reds carrying two different meanings — "this control destroys files" and
+"deleting this costs you something" — the same collision the retired `aqua` token caused and
+that `DesignSystem.swift:80` records. Fixing it touches the whole app, not this screen. So does
+the wider complaint that the app reads as gloomy throughout.
+
+**Fixed — a test that passed once per simulator.** `testTheAccessCardIsFullWidthAfterTheCover-
+Dismissed` launched with no arguments and relied on `hasSeenOnboarding` being false. The first
+test in the file that taps Skip writes it to `true`, and it survives every reinstall — so the
+test passed on a fresh simulator and failed on every run after, with a message blaming the app
+for state the test had left behind itself. Proven rather than argued: the flag read `true` in
+the container's plist, and `simctl uninstall` followed by the unchanged test turned it green. It
+launches with `-onboarding` now, which beats the store while leaving `-ui-testing` off, so the
+library is still the real one and the cover is there whatever the simulator has been through.
+Two consecutive runs against a dirty simulator, both green.
+
+**Fixed — the three UI reds that had been carried as "not ours".** They had been recorded for
+sessions as pre-existing and nobody had opened them. Two were one defect.
+
+`GroupUITests` ×2 never reached the group screen at all. `ReviewView` draws its dock through
+`safeAreaInset(edge: .bottom)` as a floating panel the list scrolls under — deliberately, and
+`ReviewView.swift:786` says so — and at the scroll position `openFirstGroup()` arrives at, the
+first group row is entirely beneath it: the row measures `{{87, 713}, {287, 72}}`, the dock's
+key `{{209, 758}, {163, 52}}`, and the panel reaches about fifty points higher again. `tap()`
+sends the touch to the element's centre, so the touch went into the dock, armed the plan and
+opened the confirmation sheet; the assertion two lines later then reported that the group screen
+had no survivor named on it, which was true, because the group screen had never been opened. The
+screenshot at the moment of failure was the review screen with a delete sheet over it.
+
+`isHittable` is not the guard for this, and the first attempt at the fix proved it: it answered
+*true* for a row covered end to end, and changed nothing. The guard is geometry — scroll until
+the row clears the dock, and refuse to tap if it never does.
+
+The third, `CrossSourceUITests`, is two separate things. There was a real defect: the test tapped
+the picker's Browse tab unconditionally, and two element trees dumped a frame apart show what
+that did. Before the tap the picker was already at `DOC.browsingRoot Source:
+com.apple.FileProvider.LocalStorage, Title: On My iPhone` with `File View` in it — it reopens
+where it was last, which this file's own comment further down already knew. After the tap it was
+at `DOC.sidebar` showing Locations. The tap did not open the list, it navigated back out of one.
+Tapping only when the list is absent moves the failure from line 178 to line 220.
+
+What remains at 220 is not a defect at all: the fixture folder is written by
+`real-library-check.py --setup-only`, and `ci.yml:493` runs this suite in the `real` job and
+nowhere else. Neither UI shard includes it. A bare `xcodebuild test` runs it and it fails — the
+invocation being wrong, not the test. Also corrected: the note that this one "fails at a
+different line each run" no longer describes it. Three consecutive runs failed on the same line.
+
+**Fixed — four tests that ran nowhere.** `OnboardingUITests` was in neither UI shard, so the
+four tests guarding the one screen that stands between a person and the permission alert had
+never been executed by CI. It is in the short shard now: twenty-seven seconds for all four,
+against the two hundred and twenty that already anchors the other.
+
+### 5c. The second hour on a real phone — 14 September 2026, evening
+
+iPhone 13 Pro Max, iOS 26.6.1, **a debug build signed with a free personal team**. That last
+clause is load-bearing for the first two findings and must not be forgotten when they are
+chased. Reported by the user as he went; recorded before they are understood, so they are not
+re-found.
+
+**Launch takes thirty to forty seconds on a black screen. NOT MEASURED.** No instrumentation was
+running and no hypothesis below has been tested. The candidates, in the order they are worth
+eliminating: a debug build is `-Onone` and SwiftUI on device is dramatically slower unoptimised;
+a free-team development build is signature-validated on first launch; and something may be
+holding the main actor before the first frame — `AppEnvironment`'s statics, `StorageProbe`, or
+`RootView`'s `.task { await model.refresh() }`. **The one measurement that splits this three
+ways is a Release build to the same phone, timed.** Do that before touching a line of code.
+
+**The onboarding drew with no text and no artwork, and everything arrived very late. Half of
+this is the redesign's own doing and it has to be said plainly.** Every scene and every line of
+copy on that screen starts *invisible* and becomes visible only when `onAppear` fires:
+`PageCopy` holds `opacity(0)` until `shown`, `LadderScene`'s `keyframeAnimator` starts at
+`RungEntry(opacity: 0)`, `LibraryScene`'s tiles sit at `opacity(0.1)` until `read`. When the main
+thread is saturated at launch, `onAppear` lands late and the screen is *literally empty* until it
+does. The entrance animation converts "slow" into "broken", which is a worse failure than the
+slowness it is drawn over. The fix is not to remove the motion: start at the final opacity and
+animate a transform, so a frame that arrives before the animation still carries the content.
+
+**Granting photo access leaves the person sitting on the onboarding screen. ROOT CAUSE FOUND —
+this one is not a hypothesis.** `OnboardingView.act()` awaits the grant closure and only then
+calls `finish()`, with the key disabled the whole time. `RootView.swift:146` wires that closure
+to `model.requestAccess()`, and `OverviewViewModel.swift:116` is:
+
+    func requestAccess() async {
+        access = await library.requestAccess()
+        startObservingIfReadable()
+        await loadInventory()          // the entire library, before this returns
+    }
+
+So the cover cannot come down until every asset has been enumerated. On a library this app is
+explicitly *for* — fifty thousand assets — that is tens of seconds of a screen that looks hung.
+
+The fix is small and the reason the grant was routed this way survives it. `RootView.swift:139`
+records why the cover dismisses through `requestAccess()` and not around it: it must not dismiss
+onto a screen still showing a permission wall. But `access` is already set at line 117, *before*
+`loadInventory()` — so finishing between the two satisfies that requirement exactly. Dismiss on
+the grant; let the inventory arrive behind the overview, which already has a loading state.
+
+**The History chip carries two backgrounds.** `RootView.swift:251` gives it its own
+`RoundedRectangle(cornerRadius: 9).fill(DS.deep.opacity(0.13))`, and the element tree puts the
+chip inside the `NavigationBar` — where iOS 26 draws its own background behind a bar item. Two
+rectangles, two radii, one control. ⚠️ **Unverified**: that the outer one is the system's own
+iOS 26 bar chrome rather than something else of ours. The same tinted-rectangle pattern is used
+elsewhere — `ReviewView.swift:396` and `:497`, `GroupDetailView.swift:171`,
+`CompareSliderView.swift:127` — but every one of those is a *selection* state on a plain ground,
+where a background is the point. The chip is the only one sitting inside system chrome.
+
+**Leaving a scan kills it, and the user hit it on the phone. MECHANISM CONFIRMED.** He pressed
+Back mid-scan and the scan cancelled. §5b had this as a report; it is now reproduced and the code
+says exactly why:
+
+    ScanView.swift:9    @StateObject private var model: ScanViewModel   // the scan's life is the view's
+    ScanView.swift:95   .onDisappear { … model.cancel() }               // leaving it ends it
+    RootView.swift:126, :289                                            // built in two places, fresh each time
+
+Both halves have to go. The `@StateObject` means the model is *owned* by the view, so the scan
+cannot survive a pop even with the `onDisappear` removed — it would be deallocated anyway.
+
+**And the thing that was asked for is the other half of the same change.** "Put progress at the
+top of the screen so it is visible while walking around the app" is not a UI addition on top of
+this; it is only *possible* once the scan outlives `ScanView`. The order is: move ownership up
+(a shared scan object at `AppEnvironment` or `RootView` level, with `ScanView` observing rather
+than owning), stop cancelling on disappear, decide what a backgrounded scan does — iOS suspends
+the process, so either a `BGTask` or an explicit "it pauses" — and only then draw the bar. Drawing
+the bar first would produce a strip that reports on a scan that no longer exists.
+
+**Start Scan: the progress bar began at about a quarter, the labels stuttered, then it advanced.
+NOT MEASURED.** A bar that starts at 25% is either a weighting whose first stage is already
+counted complete, or a first published value that only arrives after enumeration has finished.
+`ScanView` is already on the §5b list for replacing its ledger with a progress card the moment
+work starts; this belongs with that work.
+
+### Reported, not yet diagnosed — a screenshot is coming for these
+
+Written down before they are understood, so they are not re-found:
+
+- **The scan screen is one card on a near-black field.** `ScanView.swift:33-42` replaces the
+  intro card with `progressCard` the moment scanning starts, so the plan ledger — the one
+  thing a waiting person would want to read — disappears exactly when the waiting begins.
+  `DS.ink` is `0x080C11` in dark mode. `SweeperRingView` already exists and is used in
+  `ConfirmDeleteSheet` and `ReviewView`, but not on the only screen where anybody waits.
+- **A scan cannot be left.** `ScanView.swift:80-84` cancels on `onDisappear`, and the model is
+  a `@StateObject` on the view. "Show progress at the top of every screen and let people walk
+  around the app" is therefore not a UI addition — it means moving scan ownership out of the
+  view and deciding what a backgrounded scan does.
+- **The review meter shows no colour** when *Lower-quality re-sends* and *Burst leftovers* are
+  the selection. `ReviewView.swift:709-719` draws `value: savings.onDeviceBytes` over
+  `total: maxReclaimableBytes`, tinted by the deepest selected tier. Both tier colours exist
+  (`DesignSystem.swift:120-121`), so the suspicion is a bar near zero width rather than a
+  missing hue — cloud-only or small originals contributing nothing on-device. **Not measured.**
+- **Thumbnails do not appear in group detail.** The horizontally scrolling comparison strip is
+  there and moves; the photographs are not in it. On a device with a real library this is the
+  most serious of the five — every screenshot in `docs/screenshots` comes from a stub loader.
+- **"Similar shots" scrolls without end and nothing in it is ticked.** By design the bottom
+  rung is unticked and one-by-one, but at real-library scale that reads as an endless list of
+  work rather than a considered default. The tier is right; the presentation of a large one is
+  not.
+- **No video section appeared at all.** §5 and §8 record `sweep()` being unable to reach the
+  video sections and conclude the checker was wrong, not the app. A person now reports the same
+  absence on a device. That does not overturn the conclusion — the library may simply hold no
+  video duplicates — but it is the second time this has been seen and it is no longer only a
+  script's opinion.
 
 ---
 
