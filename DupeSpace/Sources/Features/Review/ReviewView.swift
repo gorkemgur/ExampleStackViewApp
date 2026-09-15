@@ -515,7 +515,13 @@ struct ReviewView: View {
             }
             .padding(.vertical, 2)
         }
-        .scrollClipDisabled()
+        // No `.scrollClipDisabled()` here. It was, and it undid the fix sitting ten lines above
+        // it: `listControls` gives the order menu `fixedSize` and a layout priority precisely so
+        // the chip row cannot take the menu's width, and then turning the clip off let the chips
+        // go on *drawing* through the width they had just been denied. Measured at the default
+        // text size: the row is 268.67pt wide, the last chip ends at 311.33pt, and the word
+        // "Videos" was painted across the eight-point gutter and under the menu. Nothing needs
+        // to escape this frame — the 48pt row already holds a 44pt chip and its 2pt padding.
         .accessibilityIdentifier("review.kinds")
     }
 

@@ -355,4 +355,106 @@ final class ReviewUITests: XCTestCase {
             )
         }
     }
+
+    /// Reads the screen as pixels, because this defect leaves the geometry untouched.
+    ///
+    /// `.scrollClipDisabled()` changes what is *painted*, not what is laid out. Measured on the
+    /// review screen: with the modifier and without it, XCUITest reported the video chip at
+    /// exactly `(226.0, 422.0, 85.33, 44.0)` both times and `frame.intersects` said `true` both
+    /// times. An assertion on frames would have passed before the fix and after it — it would
+    /// have pinned nothing. The only witness that can tell the two states apart is the screen.
+    private func screenPixels() -> (CGContext, CGFloat)? {
+        guard let cg = XCUIScreen.main.screenshot().image.cgImage else { return nil }
+        let w = cg.width, h = cg.height
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return (ctx, CGFloat(w) / app.windows.firstMatch.frame.width)
+    }
+
+    private func pixel(_ ctx: CGContext, _ scale: CGFloat, _ x: CGFloat, _ y: CGFloat) -> (Int, Int, Int) {
+        guard let base = ctx.data else { return (-1, -1, -1) }
+        let p = base.assumingMemoryBound(to: UInt8.self)
+            + Int(y * scale) * ctx.bytesPerRow + Int(x * scale) * 4
+        return (Int(p[0]), Int(p[1]), Int(p[2]))
+    }
+
+    /// The filter chips may scroll. They may not be painted outside the row they scroll in.
+    ///
+    /// `listControls` already solved this once for layout: the order menu takes `fixedSize` and
+    /// a layout priority so the horizontal `ScrollView` cannot swallow its width. Then a
+    /// `.scrollClipDisabled()` on the chip row — added with no comment, in a commit that moved
+    /// files rather than decided anything — turned the clipping off again, so the content went
+    /// on drawing past the edge the layout had just been taught to respect. At the default text
+    /// size the chip row is 268.67pt wide and its last chip ends at 311.33pt, so the word
+    /// "Videos" ran through the eight-point gutter and under the "Biggest" menu.
+    ///
+    /// Three things this reading had to be taught, each one measured rather than assumed:
+    ///
+    /// The reference is the page margin **on the same row**, not one sample reused down the
+    /// band. There is a soft vertical gradient across the whole screen just above this row, and
+    /// a single reference called it ink in three places where the chip was not even drawn.
+    ///
+    /// The rows sampled are the chip's pill, not its hit area. The chip's frame is 44pt tall
+    /// and the capsule it paints is 34pt, so the top and bottom 5pt of that frame hold nothing
+    /// of the chip and everything of whatever is behind it.
+    ///
+    /// The threshold is 30 out of a possible 765, and the gap it sits in was measured on both
+    /// sides: the faintest thing the chip actually draws is its 1pt hairline at 48, and the
+    /// loudest residue of that gradient inside the sampled band is 12.
+    func testTheKindFilterIsNotPaintedOverTheOrderMenu() {
+        openReview()
+
+        let kinds = app.descendants(matching: .any).matching(identifier: "review.kinds").firstMatch
+        let order = app.buttons["review.order"]
+        let video = app.buttons["review.kind.video"]
+        XCTAssertTrue(kinds.exists && order.exists && video.exists, "the row under test is not on screen")
+
+        // Without this the test proves nothing: a chip row that fits has no overflow to clip,
+        // and every assertion below would pass on a screen that was never at risk.
+        XCTAssertGreaterThan(
+            video.frame.maxX, kinds.frame.maxX,
+            "the fixture no longer overflows the chip row, so this test cannot see the defect"
+        )
+
+        guard let (ctx, scale) = screenPixels() else { XCTFail("could not read the screen"); return }
+
+        let gutterX = (kinds.frame.maxX + order.frame.minX) / 2
+        let marginX: CGFloat = 8
+        let pill = video.frame.insetBy(dx: 0, dy: (44 - 34) / 2)
+        let threshold = 30
+
+        func distance(_ a: (Int, Int, Int), _ b: (Int, Int, Int)) -> Int {
+            abs(a.0 - b.0) + abs(a.1 - b.1) + abs(a.2 - b.2)
+        }
+
+        var rows: [(y: Int, gutter: (Int, Int, Int), margin: (Int, Int, Int), distance: Int)] = []
+        var y = pill.minY
+        while y <= pill.maxY {
+            let gutter = pixel(ctx, scale, gutterX, y)
+            let margin = pixel(ctx, scale, marginX, y)
+            rows.append((Int(y), gutter, margin, distance(gutter, margin)))
+            y += 1
+        }
+
+        // The control: the column the reading is calibrated against has to be empty itself.
+        // If something ever lands in the page margin, every number above is about that instead.
+        let marginSpread = rows.map { distance($0.margin, rows[0].margin) }.max() ?? 0
+        XCTAssertLessThanOrEqual(
+            marginSpread, threshold,
+            "the page margin varies by \(marginSpread) down this band, so it is not background "
+            + "and cannot calibrate the gutter"
+        )
+
+        let ink = rows.filter { $0.distance > threshold }
+        XCTAssertTrue(
+            ink.isEmpty,
+            "the chip row paints \(ink.count) of \(rows.count) rows into the "
+            + "\(order.frame.minX - kinds.frame.maxX)pt gutter at x=\(gutterX), outside its own frame "
+            + "which ends at \(kinds.frame.maxX): \(ink.prefix(4))"
+        )
+    }
 }
