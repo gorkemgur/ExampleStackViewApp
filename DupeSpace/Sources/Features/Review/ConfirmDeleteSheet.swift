@@ -81,6 +81,13 @@ struct ConfirmDeleteSheet: View {
             .safeAreaInset(edge: .bottom) {
                 deleteKey
             }
+            // The grabber is drawn by the system at the very top of the sheet and the
+            // navigation bar starts immediately under it, which put a pill-shaped Cancel button
+            // about fifteen points below a five-point handle — two rounded shapes stacked close
+            // enough to read as one confused control. The bar keeps its own space now.
+            .safeAreaInset(edge: .top) {
+                Color.clear.frame(height: 10)
+            }
         }
     }
 

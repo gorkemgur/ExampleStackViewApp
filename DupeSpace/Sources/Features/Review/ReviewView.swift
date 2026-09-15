@@ -11,6 +11,11 @@ import DupeCore
 struct ReviewView: View {
 
     @StateObject private var model: ReviewViewModel
+    /// Which rungs the reader has asked to see whole, keyed by kind and tier.
+    ///
+    /// View state, not model state: it is a decision about this screen, it means nothing to a
+    /// scan, and it should not survive one. Folding back shut on a new result is correct.
+    @State private var openedRungs: Set<String> = []
     @State private var showingConfirm = false
     @State private var confirmingReset = false
 
@@ -333,15 +338,44 @@ struct ReviewView: View {
 
             ForEach(model.kindSections) { kindSection in
                 Section {
-                    ForEach(Array(kindSection.sections.enumerated()), id: \.element.id) { index, section in
-                        rung(
-                            section,
-                            in: kindSection.kind,
-                            isLast: index == kindSection.sections.count - 1,
-                            explains: explainsTier(section.tier, in: kindSection.kind)
-                        )
+                    // One eager child per kind, holding that kind's rungs.
+                    //
+                    // The rungs were children of the lazy stack itself, and it reserved a
+                    // rung's height without building it: measured 237.9 points of empty screen
+                    // under the Photos heading, with `review.section.image.1` — a whole rung —
+                    // absent from the accessibility tree while the heading counted its item.
+                    // Padding moved off the `ForEach`, pinning removed, stable ids added: none
+                    // of those changed it. A plain `VStack` did, so laziness now stops at the
+                    // kind: three children instead of twelve, each of which draws everything
+                    // inside it once it exists.
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(kindSection.sections.enumerated()), id: \.element.id) { index, section in
+                            rung(
+                                section,
+                                in: kindSection.kind,
+                                isLast: index == kindSection.sections.count - 1,
+                                explains: explainsTier(section.tier, in: kindSection.kind)
+                            )
+                        // Padding on the rung, never on the `ForEach`.
+                        //
+                        // A modifier applied to a `ForEach` inside a lazy container wraps the
+                        // whole loop in one `ModifiedContent`, and a lazy stack cannot see
+                        // inside that: it becomes a single opaque child, reserves the height it
+                        // measured once and then does not build the rows. Measured on the
+                        // Photos heading: 237.9 points of empty screen between the heading and
+                        // `review.section.image.2`, with `review.section.image.1` — a whole
+                        // rung, "Lower-quality re-sends", one item, 0.5 MB — absent from the
+                        // accessibility tree entirely. Replacing the lazy stack with a plain
+                        // `VStack` made that rung appear 11.9 points below the heading, which
+                        // is what pinned the cause.
+                        //
+                        // This is the same defect as the one in `rung(_:in:isLast:explains:)`,
+                        // one level up and wearing different clothes: the heading said Photos
+                        // held four items and the screen showed three.
+                            .padding(.top, index == 0 ? DS.Space.m : 0)
+                            .padding(.bottom, index == kindSection.sections.count - 1 ? DS.Space.xxl : 0)
+                        }
                     }
-                    .padding(.bottom, DS.Space.xxl)
                 } header: {
                     // Pinned: with eighty-five groups the ladder is thousands of points long,
                     // and knowing which pile you are in should not require scrolling back.
@@ -359,13 +393,26 @@ struct ReviewView: View {
     /// offered, only where to start looking, which is why it is quieter and sits underneath.
     @ViewBuilder
     private var listControls: some View {
-        // No spacing: each row is now 44pt tall around a pill of 32 or 34, so the slack
-        // between them is already there.
-        VStack(alignment: .leading, spacing: 0) {
+        // One row, not two.
+        //
+        // The filter chips, the sort row and the first kind heading were three control rows
+        // stacked with no space between them, so the ladder began under a wall of chrome and
+        // "Sort" sat close enough to the heading below it to read as part of it. Sorting is one
+        // choice out of three and belongs in a menu; that returns a whole row to the screen and
+        // puts the two controls that filter and order the same list side by side.
+        HStack(alignment: .center, spacing: DS.Space.s) {
             if model.availableKinds.count > 1 || model.kindFilter != nil {
                 kindFilter
             }
-            orderPicker
+
+            orderMenu
+                // Both of these, or the menu is drawn over the last filter chip. A horizontal
+                // `ScrollView` asks for every point of width it is offered, so on a row with a
+                // chip row and a menu the menu got none and overlapped what was already there.
+                // `fixedSize` makes it ask for exactly its own width and the priority makes the
+                // scroll view give it up.
+                .fixedSize()
+                .layoutPriority(1)
         }
     }
 
@@ -374,53 +421,48 @@ struct ReviewView: View {
     /// Bytes stays the default because the screen exists to free space, but "the old ones" is
     /// the instinct people arrive with about a library they have not opened in four years —
     /// and `creationDate` was computed on every item and used by nothing on this screen.
-    private var orderPicker: some View {
-        HStack(spacing: 6) {
-            Text("Sort")
-                .font(.caption2.weight(.bold))
-                .textCase(.uppercase)
-                .kerning(0.6)
-                .foregroundStyle(.secondary)
-
+    ///
+    /// A menu rather than three chips in a row. Three chips cost a row of their own directly
+    /// above the first heading, which is the densest part of the screen and the part a reader
+    /// has to get past before any of the actual offers begin. The menu says what the order
+    /// currently is, which the chip row only said by shading one of three.
+    private var orderMenu: some View {
+        Menu {
+            // A picker inside a menu draws the tick beside the current choice itself, and the
+            // items keep their own identifiers so the tests can still name them.
             ForEach(ReviewBuilder.Order.allCases, id: \.self) { option in
-                let selected = model.order == option
                 Button {
                     withAnimation(Motion.content) { model.order = option }
                 } label: {
-                    Text(option.title)
-                        .font(.caption.weight(selected ? .bold : .medium))
-                        .foregroundStyle(selected ? DS.deep : Color.secondary)
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 32)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(selected ? DS.deep.opacity(0.12) : Color.clear)
-                        )
-                        // The pill is 32pt because a sort control should not shout. The
-                        // finger is 44pt because the audit is right that 32 is too small to
-                        // hit — so the hit area grows outside the pill rather than the pill
-                        // growing to meet it.
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
+                    if model.order == option {
+                        Label(option.title, systemImage: "checkmark")
+                    } else {
+                        Text(option.title)
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selected ? [.isSelected] : [])
                 .accessibilityIdentifier("review.order.\(option.rawValue)")
             }
-
-            Spacer(minLength: 0)
+        } label: {
+            HStack(spacing: 5) {
+                Text(model.order.title)
+                    .font(.caption.weight(.semibold))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(DS.deep)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 34)
+            .background(
+                Capsule(style: .continuous).fill(DS.deep.opacity(0.10))
+            )
+            // The pill is 34pt because a sort control should not shout. The finger is 44pt
+            // because the audit is right that 34 is too small to hit — so the hit area grows
+            // outside the pill rather than the pill growing to meet it.
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
-            // `.contain`, and not for decoration. An `accessibilityIdentifier` on a container
-            // is inherited by everything inside it and *overrides* the identifiers set there,
-            // so every one of these carried the container's name and none of its own. The
-            // element tree said so plainly once a failing test printed it:
-            //
-            //     Button, identifier: 'review.order', label: 'Biggest'
-            //     Button, identifier: 'review.order', label: 'Oldest'
-            //     Button, identifier: 'review.order', label: 'Newest'
-            //
-            // Marking the container as a container is what keeps the children addressable.
-        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Sort")
+        .accessibilityValue(model.order.title)
         .accessibilityIdentifier("review.order")
     }
 
@@ -440,7 +482,14 @@ struct ReviewView: View {
                 .monospacedDigit()
                 .foregroundStyle(DS.deep)
         }
-        .padding(.vertical, DS.Space.s)
+        // Measured off `04-review.png`, which is why these two numbers are not the same: the
+        // rule sat 8 points under the heading and 7 above the rung title, equidistant between
+        // two blocks of text. A rule halfway between two things does not say "the header ends
+        // here" — it reads as a line stuck to whatever it is nearest, and at 7 points it was
+        // nearest the content below. The header now owns the space above the rule and the
+        // section owns a clear gap below it.
+        .padding(.top, DS.Space.s)
+        .padding(.bottom, DS.Space.m)
         .padding(.horizontal, DS.Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DS.ink.opacity(0.96))
@@ -524,21 +573,72 @@ struct ReviewView: View {
 
     private func rung(_ section: ReviewSection, in kind: MediaKind, isLast: Bool, explains: Bool) -> some View {
         let tint = DS.tier(section.tier)
+        let key = rungKey(section, in: kind)
+        let window = RungWindow.state(groupCount: section.groups.count, isExpanded: openedRungs.contains(key))
 
         return HStack(alignment: .top, spacing: 14) {
             rail(tint: tint, isLast: isLast)
 
             VStack(alignment: .leading, spacing: 12) {
-                rungHeader(section, in: kind, tint: tint, explains: explains)
+                rungHeader(section, in: kind, tint: tint, explains: explains, isTruncated: window.isTruncated)
 
-                LazyVStack(spacing: 8) {
-                    ForEach(section.groups) { group in
+                // A plain stack, not a lazy one, and the nesting is the reason.
+                //
+                // This was a `LazyVStack` inside the list's own `LazyVStack`. The inner one
+                // reserved its rows' height and then never built them: measured on the burst
+                // rung, the explanation ended at y -191, the first row it did build sat at
+                // y -19, and the 172 points between them were empty with the rail drawn
+                // straight through. The rung is capped at five rows now, so there is nothing
+                // left for laziness to save and one fewer container that can disagree with its
+                // parent about what is on screen.
+                VStack(spacing: 8) {
+                    ForEach(section.groups.prefix(window.shown)) { group in
                         groupRow(group, tint: tint)
                     }
+                }
+
+                if window.isTruncated {
+                    unfold(window.hidden, key: key, in: kind, tier: section.tier, tint: tint)
                 }
             }
             .padding(.bottom, isLast ? 0 : 26)
         }
+    }
+
+    private func rungKey(_ section: ReviewSection, in kind: MediaKind) -> String {
+        "\(KindCopy.slug(for: kind)).\(section.tier.rawValue)"
+    }
+
+    /// The rest of a rung, offered rather than poured out.
+    ///
+    /// A row, not a chevron on the header: the reader is at the bottom of five groups when the
+    /// question "is that all of them" occurs to them, and the answer belongs where they are
+    /// looking. It only ever opens — a rung that could fold shut again would move the ground
+    /// under somebody mid-scroll.
+    private func unfold(_ hidden: Int, key: String, in kind: MediaKind, tier: RegretTier, tint: Color) -> some View {
+        Button {
+            withAnimation(Motion.content) { _ = openedRungs.insert(key) }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                Text("Show \(hidden) more")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: DS.controlCorner, style: .continuous)
+                    .fill(tint.opacity(0.10))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Show \(Counting.items(hidden)) more in \(ScanCopy.title(for: tier).lowercased())")
+        .accessibilityIdentifier("review.unfold.\(KindCopy.slug(for: kind)).\(tier.rawValue)")
     }
 
     /// The line the whole screen hangs off. Its node is the rung; it fades out under the last
@@ -571,7 +671,7 @@ struct ReviewView: View {
     /// list nested tiers under kinds, "Identical copies" appeared up to three times on one
     /// screen — so `review.section.identical` matched three elements and the UI test that
     /// tapped `review.selectall.identical` tapped whichever one the query happened to return.
-    private func rungHeader(_ section: ReviewSection, in kind: MediaKind, tint: Color, explains: Bool) -> some View {
+    private func rungHeader(_ section: ReviewSection, in kind: MediaKind, tint: Color, explains: Bool, isTruncated: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -597,7 +697,13 @@ struct ReviewView: View {
                 Button {
                     model.setSelected(!allTicked, in: section)
                 } label: {
-                    Text(allTicked ? "Deselect all" : "Select all")
+                    Text(
+                        RungWindow.selectAllTitle(
+                            selectableCount: selectable.count,
+                            isTruncated: isTruncated,
+                            allTicked: allTicked
+                        )
+                    )
                         .font(.caption.weight(.bold))
                         .foregroundStyle(tint)
                         .lineLimit(1)
@@ -869,6 +975,18 @@ struct ReviewView: View {
                         .foregroundStyle(DS.onSlab.opacity(0.66))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("review.skipped")
+                }
+
+                if outcome.refusedCount > 0 {
+                    // Also a refusal, and deliberately not the sentence above. Nothing about
+                    // these changed and the scan read them correctly; the library simply will
+                    // not part with them, and telling somebody their file changed when it did
+                    // not sends them looking for a problem that is not theirs.
+                    Text("\(Counting.items(outcome.refusedCount)) \(outcome.refusedCount == 1 ? "is" : "are") still here: Photos will not let this app delete \(outcome.refusedCount == 1 ? "it" : "them"). Assets synced from a computer, and photographs in somebody else's shared album, can only be removed where they came from.")
+                        .font(.caption)
+                        .foregroundStyle(DS.onSlab.opacity(0.66))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("review.refused")
                 }
 
                 if outcome.missingCount > 0 {

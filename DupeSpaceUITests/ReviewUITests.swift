@@ -34,6 +34,77 @@ final class ReviewUITests: XCTestCase {
         )
     }
 
+    /// Every row of a rung is drawn, not merely given room.
+    ///
+    /// The rung's rows used to sit in a `LazyVStack` nested inside the list's own `LazyVStack`.
+    /// The inner one reserved each row's height and then built almost none of them: measured on
+    /// the burst rung, one row of three was on screen and the other two were 172 points of
+    /// nothing with the ladder's rail running through it. Every assertion in this suite passed
+    /// throughout — they ask whether an element exists, and a row that is never built simply
+    /// is not queried for. This counts them instead.
+    func testEveryRowOfARungIsDrawnAndNotJustSpacedFor() {
+        app.terminate()
+        app.launchArguments = ["-ui-testing", "-crowded-library"]
+        app.launch()
+
+        openReview()
+
+        let burst = app.staticTexts["review.section.image.2"]
+        for _ in 0..<12 where !burst.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(burst.waitForExistence(timeout: 10), "no burst rung to measure")
+
+        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'review.group.2|'"))
+        XCTAssertEqual(
+            rows.count,
+            3,
+            "the fixture's burst rung holds three groups; anything fewer is a row that was given space and never drawn"
+        )
+    }
+
+    /// A rung long enough to be folded offers the rest rather than pouring it out.
+    ///
+    /// Launched with `-crowded-library`, which puts twelve pairs of similar photographs in the
+    /// fixture. The ordinary fixture's biggest rung is four groups, so nothing here could be
+    /// seen without it — the arithmetic has a unit test, and this is the only thing that proves
+    /// the row is drawn, can be reached and does something when it is tapped.
+    func testALongRungOffersTheRestRatherThanPouringItOut() {
+        app.terminate()
+        app.launchArguments = ["-ui-testing", "-crowded-library"]
+        app.launch()
+
+        openReview()
+
+        // Scrolled to, not merely queried. The list is a `LazyVStack`: rows below the fold are
+        // not instantiated, so a query that does not scroll reports an empty screen and says
+        // nothing about whether the row exists.
+        let unfold = app.buttons["review.unfold.image.3"]
+        for _ in 0..<12 where !unfold.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(
+            unfold.waitForExistence(timeout: 10),
+            "a twelve-group rung was drawn whole, with nothing offering the rest"
+        )
+
+        let rows = NSPredicate(format: "identifier BEGINSWITH 'review.group.'")
+        let before = app.buttons.matching(rows).count
+        XCTAssertGreaterThan(before, 0, "no group rows on screen at all")
+
+        unfold.tap()
+
+        XCTAssertFalse(
+            unfold.waitForExistence(timeout: 3),
+            "the rung is open, so the offer to open it has nothing left to offer"
+        )
+        XCTAssertGreaterThan(
+            app.buttons.matching(rows).count,
+            before,
+            "tapping it opened nothing"
+        )
+    }
+
     func testReviewOpensWithASafeSelectionThatCanBeChanged() {
         openReview()
 
@@ -164,12 +235,13 @@ final class ReviewUITests: XCTestCase {
         // failing a correct layout.
         let minimum: CGFloat = 44 - 0.01
 
-        for order in ["biggest", "oldest", "newest"] {
-            let chip = require("review.order.\(order)", in: app, "no sort chip for \(order)")
-            guard chip.exists else { continue }
+        // The three sort chips became one menu, so what has to clear 44 points is the control
+        // that opens it; the options inside are laid out by the system.
+        let sort = require("review.order", in: app, "no sort control")
+        if sort.exists {
             XCTAssertGreaterThanOrEqual(
-                chip.frame.height, minimum,
-                "the \(order) chip is \(chip.frame.height)pt tall, under the 44pt target"
+                sort.frame.height, minimum,
+                "the sort control is \(sort.frame.height)pt tall, under the 44pt target"
             )
         }
 
@@ -203,8 +275,11 @@ final class ReviewUITests: XCTestCase {
         let before = (total.label, count.label)
 
         for order in ["oldest", "newest", "biggest"] {
-            let chip = require("review.order.\(order)", in: app)
-            chip.tap()
+            app.buttons["review.order"].tap()
+
+            let option = app.buttons["review.order.\(order)"]
+            XCTAssertTrue(option.waitForExistence(timeout: 5), "the sort menu did not offer \(order)")
+            option.tap()
 
             XCTAssertEqual(total.label, before.0, "sorting by \(order) changed the total on offer")
             XCTAssertEqual(count.label, before.1, "sorting by \(order) changed the number selected")

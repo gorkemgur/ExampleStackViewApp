@@ -15,22 +15,46 @@ struct GroupRowView: View {
         HStack(spacing: 12) {
             ZStack(alignment: .bottomTrailing) {
                 ThumbnailView(item: group.keeper, side: 52, loader: loader)
-
-                // What kind of thing this is, on the picture.
-                //
-                // A video's thumbnail is a frame, so it looks exactly like a photo — the only
-                // thing distinguishing a 1.84 GB movie from a 410 KB still was the file
-                // extension, which most people never see. The badge sits top-left, away from
-                // the survivor's seal.
-                if group.keeper.kind != .image {
-                    Image(systemName: KindCopy.symbolName(for: group.keeper.kind))
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(3)
-                        .background(Circle().fill(.black.opacity(0.55)))
-                        .padding(3)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
+                    // What kind of thing this is, ON the picture.
+                    //
+                    // A video's thumbnail is a frame, so it looks exactly like a photo — the
+                    // only thing distinguishing a 1.84 GB movie from a 410 KB still was the
+                    // file extension, which most people never see.
+                    //
+                    // An overlay, not a second child of the `ZStack`. As a child it carried
+                    // `frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)`,
+                    // and a `ZStack` takes the size of its largest child — so that child asked
+                    // for every point of width the row had, the stack grew far past the 52-point
+                    // thumbnail, and the badge was drawn out on the card's white background
+                    // about ninety points to the left of the picture it describes. Measured off
+                    // `04-review.png`: badge at x≈69pt, thumbnail spanning x≈99–134pt. The
+                    // comment said "on the picture" the whole time.
+                    .overlay(alignment: .topLeading) {
+                        if group.keeper.kind != .image {
+                            // A square frame, and that is the whole point of it.
+                            //
+                            // `Circle()` behind a padded glyph fills whatever frame the glyph
+                            // asks for, and the video symbol is wide — so the "circle" came out
+                            // as a stretched ellipse that reads as a rounded rectangle. Fixing
+                            // the frame to 18 x 18 makes the circle a circle, and an 8-point
+                            // glyph inside it leaves the disc visible around the symbol rather
+                            // than being a ring drawn tight around it.
+                            Image(systemName: KindCopy.symbolName(for: group.keeper.kind))
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 18, height: 18)
+                                // The ground is `DS.onPicture`, not `.black.opacity(0.55)`,
+                                // and the ring is what makes it work on a dark frame. A fixed
+                                // black disc has one failure mode at each end: it is a sticker
+                                // on a white sky and it is invisible on a night shot. The disc
+                                // keeps the glyph readable at the bright end, the hairline
+                                // keeps the badge findable at the dark end, and `PaletteTests`
+                                // holds both to 3:1 against the worst frame each can meet.
+                                .background(Circle().fill(DS.onPicture))
+                                .overlay(Circle().strokeBorder(DS.onPictureEdge, lineWidth: 0.5))
+                                .padding(3)
+                        }
+                    }
 
                 // The survivor is marked on the picture rather than in the words: this is the
                 // copy that stays, and the row is otherwise about what goes.
