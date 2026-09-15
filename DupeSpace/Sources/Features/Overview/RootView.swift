@@ -13,9 +13,21 @@ struct RootView: View {
         folderRegistry: AppEnvironment.folderRegistry,
         changeObserver: AppEnvironment.makeChangeObserver()
     )
+    /// Re-reading the permission needs to know when the app comes back to the front. The
+    /// permission alert itself, the Settings round trip the access card offers, and a
+    /// revocation while backgrounded all land here and nowhere else.
+    @Environment(\.scenePhase) private var scenePhase
     @State private var pickingFolder = false
     @State private var showingLiveSurfaces = false
     @State private var path = NavigationPath()
+    /// Decided once, at the first construction of this view, and not re-asked afterwards: a
+    /// value that re-evaluated on every redraw would put the screen back up the moment
+    /// `markSeen()` had not yet been written.
+    @State private var showingOnboarding = OnboardingGate.shouldPresent(
+        hasSeen: AppEnvironment.onboardingStore.hasSeenOnboarding,
+        isUITesting: AppEnvironment.isUITesting,
+        isForced: AppEnvironment.isForcingOnboarding
+    )
 
     init(pendingLink: Binding<DeepLink?> = .constant(nil)) {
         _pendingLink = pendingLink
@@ -123,9 +135,32 @@ struct RootView: View {
         .sheet(isPresented: $showingLiveSurfaces) {
             LiveSurfacePreviewView { showingLiveSurfaces = false }
         }
+        // Presented from here rather than from `AppShell` because `model` is here. The last
+        // page's whole job is to route the grant through `requestAccess()`, which is the call
+        // that updates `access` and reloads the inventory; from `AppShell` the screen would
+        // have to raise the alert against a second library instance and leave this one still
+        // showing a permission wall over a library it had just been allowed to open.
+        //
+        // It does not wait for the inventory, and that is deliberate — see the note on
+        // `requestAccess(waitingForInventory:)`. The cover's key stays disabled until this
+        // returns, so waiting for fifty thousand assets to be enumerated meant the screen sat
+        // there dead after the permission had already been answered.
+        .fullScreenCover(isPresented: $showingOnboarding) {
+            OnboardingView(
+                store: AppEnvironment.onboardingStore,
+                onGrantPhotos: { await model.requestAccess(waitingForInventory: false) },
+                onFinish: { showingOnboarding = false }
+            )
+        }
         .task {
             await model.refresh()
             model.beginObservingLibrary()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Cheap by contract: `refreshAccess` reads the status and stops there unless it
+            // actually moved. See the note on it — this fires on every app switch.
+            guard phase == .active else { return }
+            Task { await model.refreshAccess() }
         }
         .onChange(of: pendingLink) { _, link in
             guard let link else { return }

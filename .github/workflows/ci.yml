@@ -261,13 +261,23 @@ jobs:
     # Split by measured cost rather than alphabetically: `HistoryUITests` alone is 220 seconds
     # because every one of its tests runs a whole scan first, and pairing it with the other
     # long suite would have left one shard idle while the other ran.
+    #
+    # `OnboardingUITests` was in neither shard and therefore ran nowhere — four tests written to
+    # guard the one screen that stands between a person and the permission alert, and CI had
+    # never executed one of them. It goes in the short shard: 27 seconds for all four, against
+    # the 220 that already anchors the other one.
+    #
+    # `CrossSourceUITests` is deliberately absent from both. It cannot pass without the fixture
+    # folder that `real-library-check.py --setup-only` writes, so it belongs to the `real` job
+    # below and nowhere else. A plain `xcodebuild test` with no `-only-testing` runs it and it
+    # fails — that is the invocation being wrong, not the test.
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - name: review and launch
+          - name: review, launch and onboarding
             slug: a
-            only: "-only-testing:DupeSpaceUITests/ReviewUITests -only-testing:DupeSpaceUITests/LaunchUITests"
+            only: "-only-testing:DupeSpaceUITests/ReviewUITests -only-testing:DupeSpaceUITests/LaunchUITests -only-testing:DupeSpaceUITests/OnboardingUITests"
           - name: history, deletion, scan, group
             slug: b
             only: "-only-testing:DupeSpaceUITests/HistoryUITests -only-testing:DupeSpaceUITests/DeletionUITests -only-testing:DupeSpaceUITests/ScanUITests -only-testing:DupeSpaceUITests/GroupUITests"

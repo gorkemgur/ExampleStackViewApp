@@ -37,6 +37,13 @@ final class StubMediaLibrary: MediaLibrary {
         StubMediaLibrary(access: .authorized, items: sampleItems())
     }
 
+    /// The same fixture, before anybody has answered the permission — the one state in which
+    /// `AccessCardView` is drawn. `loadInventory()` already returns nothing without
+    /// `.authorized`, so the items come along and stay unreachable, exactly as on a real phone.
+    static func unansweredFixture() -> StubMediaLibrary {
+        StubMediaLibrary(access: .notDetermined, items: sampleItems())
+    }
+
     static func previewFixture(access: LibraryAccess = .authorized) -> StubMediaLibrary {
         StubMediaLibrary(access: access, items: sampleItems())
     }

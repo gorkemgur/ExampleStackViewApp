@@ -25,6 +25,43 @@ enum AppEnvironment {
         ProcessInfo.processInfo.arguments.contains(cleanLibraryFlag)
     }
 
+    /// Makes the stub library report `.notDetermined`, so `AccessCardView` is actually drawn.
+    ///
+    /// The permission wall is the one screen a UI test could not reach without leaving the
+    /// fixtures behind: `-ui-testing` pins the stub at `.authorized`, so the card is never on
+    /// screen, and the test written to measure it therefore launched with no flags at all and
+    /// leaned on the simulator's real TCC state. That works exactly once per simulator — the
+    /// moment anything answers the permission, the card stops being drawn and the test fails
+    /// saying the card was missing, which is true and tells you nothing. XCUITest cannot reset
+    /// TCC; it can pass a flag. Passed alongside `-ui-testing`, as `-clean-library` is.
+    static let unansweredAccessFlag = "-unanswered-access"
+
+    static var isAccessUnanswered: Bool {
+        ProcessInfo.processInfo.arguments.contains(unansweredAccessFlag)
+    }
+
+    /// Shows the onboarding screen even though `-ui-testing` is on.
+    ///
+    /// `-ui-testing` has to suppress onboarding, because every UI test and the screenshot walk
+    /// launch into what looks like a first run and would stop on its first page. Suppressing it
+    /// there would otherwise make this the one screen in the app that is never photographed, so
+    /// this flag asks for it back. Passed alongside `-ui-testing`, not instead of it, exactly
+    /// as `-clean-library` is.
+    static let onboardingFlag = "-onboarding"
+
+    static var isForcingOnboarding: Bool {
+        ProcessInfo.processInfo.arguments.contains(onboardingFlag)
+    }
+
+    /// One store, shared: the gate that decides whether to present the screen and the screen
+    /// that marks it seen have to agree on what has been seen.
+    ///
+    /// In memory under test, so a walk that reaches the end of the sequence does not leave a
+    /// "seen" flag in the simulator's defaults for the next run to trip over.
+    static let onboardingStore: any OnboardingStoring = isUITesting
+        ? InMemoryOnboardingStore()
+        : UserDefaultsOnboardingStore()
+
     /// One registry, shared: the library that reads granted folders and the screen that
     /// manages them have to agree on what is granted.
     static let folderRegistry: any FolderRegistering = isUITesting
@@ -32,7 +69,11 @@ enum AppEnvironment {
         : UserDefaultsFolderRegistry()
 
     static func makeLibrary() -> MediaLibrary {
-        guard !isUITesting else { return StubMediaLibrary.uiTestFixture() }
+        guard !isUITesting else {
+            return isAccessUnanswered
+                ? StubMediaLibrary.unansweredFixture()
+                : StubMediaLibrary.uiTestFixture()
+        }
         return CompositeMediaLibrary(
             photos: PhotoKitMediaLibrary(),
             files: FileMediaLibrary(registry: folderRegistry)

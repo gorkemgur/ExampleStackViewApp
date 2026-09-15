@@ -33,6 +33,12 @@ final class OverviewViewModel: ObservableObject {
     private var isEnumerating = false
     private var reloadRequested = false
 
+    /// Whether the screen has asked for the library to be watched, as opposed to whether it
+    /// is being watched. The screen asks once, at launch, when the permission is usually still
+    /// unanswered — so the request has to outlive the moment it could not be honoured.
+    private var wantsObservation = false
+    private var isObserving = false
+
     init(
         library: MediaLibrary,
         folderRegistry: any FolderRegistering = InMemoryFolderRegistry(),
@@ -65,14 +71,33 @@ final class OverviewViewModel: ObservableObject {
     /// Starts watching the library so the numbers on screen keep describing the library that
     /// actually exists — deleting photos in Photos should not leave a stale total here.
     func beginObservingLibrary() {
-        guard let changeObserver else { return }
-        changeObserver.startObserving { [weak self] in
-            Task { await self?.reloadAfterExternalChange() }
-        }
+        wantsObservation = true
+        startObservingIfReadable()
     }
 
     func stopObservingLibrary() {
+        wantsObservation = false
+        guard isObserving else { return }
+        isObserving = false
         changeObserver?.stopObserving()
+    }
+
+    /// Registers only once the library can actually be read.
+    ///
+    /// `PHPhotoLibrary.shared().register(_:)` is not a passive subscription — it is a PhotoKit
+    /// call, and on a real device it was what put the permission alert on screen at launch,
+    /// before anybody had read the card that explains what the app wants and promises nothing
+    /// leaves the phone. Worse, the grant then arrived through a route that writes nothing to
+    /// `access`, so the wall stayed up over a library the app was by then allowed to read.
+    ///
+    /// Asking is now something only the card's button does. This waits for the answer.
+    private func startObservingIfReadable() {
+        guard wantsObservation, !isObserving, access == .authorized else { return }
+        guard let changeObserver else { return }
+        isObserving = true
+        changeObserver.startObserving { [weak self] in
+            Task { await self?.reloadAfterExternalChange() }
+        }
     }
 
     private func reloadAfterExternalChange() async {
@@ -83,13 +108,55 @@ final class OverviewViewModel: ObservableObject {
         storage = StorageProbe.current()
         access = library.currentAccess()
         folders = folderRegistry.folders()
+        startObservingIfReadable()
         // Asked unconditionally: granted folders are readable whatever the photo library says.
         await loadInventory()
     }
 
-    func requestAccess() async {
+    /// Answers the permission, and decides whether the caller waits for the library behind it.
+    ///
+    /// Waiting is the default, because it is what the access card wants: that card sits on a
+    /// screen which draws a loading card underneath it, so the read is visible while it happens.
+    ///
+    /// The onboarding cover wants the opposite, and that is the whole of this parameter. Its key
+    /// is disabled while the grant is in flight and the screen dismisses only once the grant
+    /// returns — so awaiting the inventory here held the cover up for as long as it took to
+    /// enumerate the library, with nothing on screen moving and the key dead. On a real phone
+    /// that is the "granting photo access strands you on the onboarding screen" report.
+    ///
+    /// `access` is already correct on the line above, which is what makes this safe: the screen
+    /// behind the cover is right the moment it is uncovered, and the enumeration is work it can
+    /// do in its own time.
+    func requestAccess(waitingForInventory: Bool = true) async {
         access = await library.requestAccess()
+        startObservingIfReadable()
+        guard waitingForInventory else {
+            Task { await loadInventory() }
+            return
+        }
         await loadInventory()
+    }
+
+    /// Re-reads the permission, and reads the library again only if it changed.
+    ///
+    /// The permission is not the app's to hold. It can be answered in a system alert the app
+    /// did not raise, turned on in Settings — which is where this very screen's second button
+    /// sends people — or taken away while the app sits in the background. Every one of those
+    /// happens with `access` already read and nothing left to read it again, which on a real
+    /// phone meant a permission wall standing over a library the app was allowed to open.
+    ///
+    /// It runs every time the app comes to the front, so the early return is not a nicety.
+    /// Re-enumerating on each return would charge fifty thousand assets to answering a phone
+    /// call, and this app is *for* libraries that size.
+    func refreshAccess() async {
+        let current = library.currentAccess()
+        guard current != access else { return }
+
+        access = current
+        startObservingIfReadable()
+        // Both directions: a grant makes a library readable, and a revocation must take its
+        // totals off the screen rather than leave them describing what can no longer be read.
+        await loadInventory(force: true)
     }
 
     // MARK: - Folders
