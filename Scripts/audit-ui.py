@@ -31,6 +31,9 @@ UDID = sys.argv[1]
 OUT_DIR = sys.argv[2]
 BUNDLE_ID = "com.gorkemgur.dupespace"
 
+# Kept in step with `OnboardingPage.all`, which `OnboardingTests` pins at four.
+ONBOARDING_PAGES = [1, 2, 3, 4]
+
 # Apple's own minimum for anything a finger has to hit.
 MIN_TAP_TARGET = 44.0
 # The tree reports fractional frames; a point of slack keeps rounding out of the findings.
@@ -387,7 +390,7 @@ def sample(label, action, seconds=2.5):
         )
 
 
-def relaunch(text_size=None):
+def relaunch(text_size=None, extra=None):
     """Restart against the fixtures, optionally at a larger Dynamic Type size.
 
     The size is passed as a launch argument, which UIKit reads in place of the device setting —
@@ -399,6 +402,8 @@ def relaunch(text_size=None):
     arguments = ["xcrun", "simctl", "launch", UDID, BUNDLE_ID, "-ui-testing"]
     if text_size:
         arguments += ["-UIPreferredContentSizeCategoryName", text_size]
+    if extra:
+        arguments += extra
     run(arguments)
 
 
@@ -505,9 +510,48 @@ def main():
         audit_layout("review", describe())
 
     audit_large_text()
+    audit_onboarding()
 
     write_report()
     return 0
+
+
+def audit_onboarding():
+    """The first screen anybody sees, which `-ui-testing` otherwise hides.
+
+    Suppressing onboarding under test is not optional — every UI test and this walk launch into
+    what looks like a fresh install and would stop on its first page. `-onboarding` asks for it
+    back, passed alongside `-ui-testing` rather than instead of it. Without this step it would
+    be the one screen in the app that ships unmeasured.
+
+    Last in the walk on purpose: it restarts the app into a modal cover, which is not a state
+    anything after it could be audited from.
+    """
+    relaunch(extra=["-onboarding"])
+    time.sleep(2.5)
+
+    for page in range(len(ONBOARDING_PAGES)):
+        tree = describe()
+        if find(tree, "onboarding.title") is None:
+            notes.append(
+                f"onboarding: page {page + 1} was never reached — the screen did not present, "
+                "or -onboarding is not wired to the gate"
+            )
+            return
+        audit_layout(f"onboarding page {page + 1}", tree)
+        shot(os.path.join(OUT_DIR, f"onboarding-{page + 1}.png"))
+
+        key = find(tree, "onboarding.primary")
+        if key is None:
+            notes.append(f"onboarding: page {page + 1} has no primary control")
+            return
+        # Not past the last page: its key raises the photo permission alert, which no simulator
+        # walk can answer and which would leave every screenshot after it behind a system sheet.
+        if page == len(ONBOARDING_PAGES) - 1:
+            break
+        sample(f"onboarding page {page + 1} to {page + 2}", lambda: tap(key, settle=0), seconds=2.0)
+
+    relaunch()
 
 
 def audit_large_text():
