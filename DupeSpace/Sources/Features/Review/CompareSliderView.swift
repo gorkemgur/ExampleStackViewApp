@@ -130,7 +130,12 @@ struct CompareSliderView: View {
                     Capsule(style: .continuous)
                         .strokeBorder(showingDifference ? DS.deep.opacity(0.4) : DS.hairline, lineWidth: 1)
                 )
-                .contentShape(Capsule(style: .continuous))
+                // Pill 32pt, hit area 44pt — the pattern `ReviewView.orderPicker` carries.
+                // A `.contentShape(Capsule())` used to stand here, which reads like the fix
+                // and is its opposite: a content shape *confines* the touch to the shape it is
+                // handed, and cannot make a target taller than the frame underneath it.
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(difference.isBelowNoiseFloor)

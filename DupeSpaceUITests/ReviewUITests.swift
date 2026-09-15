@@ -285,4 +285,74 @@ final class ReviewUITests: XCTestCase {
             XCTAssertEqual(count.label, before.1, "sorting by \(order) changed the number selected")
         }
     }
+
+    /// The most consequential choice in the product, at the text size the people who need it
+    /// actually run.
+    ///
+    /// `ReachPicker` hands each option an equal flexible column — on a 393pt device that is
+    /// 393 - 32 - 40 = 321 inner, less 2x8 of spacing, about 102pt a column — and then defends
+    /// it with `lineLimit(1)` and `minimumScaleFactor(0.7)`. `.footnote` is 13pt at Large and
+    /// 49pt at AX5; seven tenths of 49 is 34, and "+ similar" is nine characters. A minimum
+    /// scale factor is not a Dynamic Type strategy. It is permission to shrink the text until
+    /// it stops fitting, and then truncate it anyway.
+    ///
+    /// Nothing in this project has ever looked at this control at these sizes: the Python walk
+    /// relaunches at AX1 and stops there, and the scan screen was never reached at large text
+    /// at all.
+    ///
+    /// Two launches, and the first one is not decoration. `XCUIApplication` has no API for the
+    /// content size category, so it goes in as a launch argument — and a launch argument the
+    /// app quietly ignores would fail every assertion below while the control was innocent.
+    /// The baseline pass measures a plain piece of text on the same screen, so the run can say
+    /// which of the two it caught.
+    ///
+    /// Geometry, not labels: VoiceOver reads the whole string off a `Text` that is drawing an
+    /// ellipsis, so only the frames can tell whether a label had room.
+    func testTheReachPickerStacksAtAccessibilitySizesRatherThanShrinkingItsLabels() {
+        openReview()
+        let baselineText = require("review.total", in: app, timeout: 20).frame.height
+
+        app.terminate()
+        app.launchArguments = [
+            "-ui-testing",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        openReview()
+
+        let grownText = require("review.total", in: app, timeout: 20).frame.height
+        // A ratio, not "bigger". The first version of this test asked for the long spelling,
+        // `UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge`, which the system does not
+        // recognise — and it did not fall back to Large either: the screen's own text came back
+        // 31.3pt against 33.7pt, a 1.07x nudge that sailed through a `greaterThan` while the
+        // app was nowhere near an accessibility size. AX3XL moves this text 1.54x. Anything
+        // under 1.3 is the argument being misspelt, not the picker being wrong.
+        XCTAssertGreaterThan(
+            grownText,
+            baselineText * 1.3,
+            "the launch argument never reached the app: the screen's own text is \(grownText)pt at AX3XL against \(baselineText)pt at the default size. Nothing below this line is about the picker."
+        )
+
+        let frames = (0..<3).map { require("budget.depth.\($0)", in: app, timeout: 20).frame }
+
+        for index in 1..<frames.count {
+            XCTAssertGreaterThanOrEqual(
+                frames[index].minY,
+                frames[index - 1].maxY,
+                "at AX3XL the reach picker is still a row: step \(index) starts at \(frames[index].minY) while step \(index - 1) ends at \(frames[index - 1].maxY)"
+            )
+        }
+
+        // And the width stacking is for. A third of the inner width is about 102pt; a stacked
+        // step gets the row, which is what stops nine characters being scaled into an ellipsis.
+        let window = app.windows.firstMatch.frame
+        for (index, frame) in frames.enumerated() {
+            XCTAssertGreaterThan(
+                frame.width,
+                window.width * 0.6,
+                "step \(index) is \(frame.width)pt wide in a \(window.width)pt window"
+            )
+        }
+    }
 }

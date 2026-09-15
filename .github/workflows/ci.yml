@@ -281,9 +281,14 @@ jobs:
           - name: review ladder, launch and onboarding
             slug: a
             only: "-only-testing:DupeSpaceUITests/ReviewUITests -only-testing:DupeSpaceUITests/LadderDrawingUITests -only-testing:DupeSpaceUITests/LaunchUITests -only-testing:DupeSpaceUITests/OnboardingUITests"
+          # `ScanStripUITests` is the third suite to be found running nowhere, after
+          # `OnboardingUITests` and `LadderDrawingUITests`. It is a second class in
+          # `ScanUITests.swift`, and the shards name *classes* — so "scan tests are covered"
+          # was true of the file and false of half its contents. It passes in 13.5 seconds and
+          # pins the claim that a scan survives leaving the screen that started it.
           - name: history, deletion, scan, group
             slug: b
-            only: "-only-testing:DupeSpaceUITests/HistoryUITests -only-testing:DupeSpaceUITests/DeletionUITests -only-testing:DupeSpaceUITests/ScanUITests -only-testing:DupeSpaceUITests/GroupUITests"
+            only: "-only-testing:DupeSpaceUITests/HistoryUITests -only-testing:DupeSpaceUITests/DeletionUITests -only-testing:DupeSpaceUITests/ScanUITests -only-testing:DupeSpaceUITests/ScanStripUITests -only-testing:DupeSpaceUITests/GroupUITests"
     steps:
       - uses: actions/checkout@v4
 

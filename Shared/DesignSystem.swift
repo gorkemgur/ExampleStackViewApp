@@ -729,13 +729,31 @@ struct ReachPicker<Value: Hashable>: View {
     var onSlab: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var selectedIndex: Int {
         options.firstIndex { $0.value == selection } ?? 0
     }
 
+    /// Three columns, or three rows.
+    ///
+    /// Equal flexible columns are about 102pt on a 393pt device, and `.footnote` is 13pt at
+    /// Large against 49pt at AX5. The control used to meet that with `lineLimit(1)` and
+    /// `minimumScaleFactor(0.7)`, which is not a Dynamic Type strategy: seven tenths of 49 is
+    /// still 34pt, "+ similar" is nine characters, and the label ellipsised — on the two
+    /// choices this app's own doc comment calls the most consequential in the product.
+    ///
+    /// So past `.accessibility1` the row becomes a column and each step gets the full width to
+    /// spell itself in. The ordinal reading survives the change, because filling every step up
+    /// to the chosen one reads the same downwards as it does rightwards.
+    private var stacked: Bool { typeSize >= .accessibility1 }
+
     var body: some View {
-        HStack(spacing: DS.Space.s) {
+        let layout = stacked
+            ? AnyLayout(VStackLayout(spacing: DS.Space.s))
+            : AnyLayout(HStackLayout(spacing: DS.Space.s))
+
+        return layout {
             ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
                 Button {
                     withAnimation(reduceMotion ? nil : Motion.control) {
@@ -745,8 +763,13 @@ struct ReachPicker<Value: Hashable>: View {
                     Text(option.title)
                         .font(.footnote.weight(index == selectedIndex ? .bold : .medium))
                         .foregroundStyle(labelColor(at: index, option: option))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        // Stacked, the width is no longer the scarce thing, so the label is
+                        // allowed to be its own size: no single-line rule, no shrinking.
+                        .lineLimit(stacked ? nil : 1)
+                        .minimumScaleFactor(stacked ? 1 : 0.7)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, stacked ? DS.Space.s : 0)
+                        .padding(.vertical, stacked ? 6 : 0)
                         .frame(maxWidth: .infinity)
                         // A full 44pt. The simulator audit caught this control at 34 on its
                         // first run — a stock segmented picker is 32 and gets away with it

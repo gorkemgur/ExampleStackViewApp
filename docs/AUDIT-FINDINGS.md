@@ -160,7 +160,7 @@ Photos filter. Either fills the bar permanently while the number above keeps cli
 **Pin:** extract `reclaimFraction(selection:depth:filter:)` and assert it *moves* when a
 selection outside the depth is added.
 
-### 3. `minimumScaleFactor` is not a Dynamic Type strategy — the two most consequential controls truncate
+### 3. `minimumScaleFactor` is not a Dynamic Type strategy — the two most consequential controls truncate — **FIXED 15 September 2026**
 
 `ReachPicker` (`DesignSystem.swift:670-681`) gives each option an equal flexible column with
 `lineLimit(1)` and `minimumScaleFactor(0.7)`. On a 393pt device: 393 − 32 − 40 = 321 inner,
@@ -176,6 +176,41 @@ text, and `Scripts/audit-ui.py:563` only relaunches at AX1, never AX5.
 
 **Fix:** read `@Environment(\.dynamicTypeSize)` in `ReachPicker` and stack vertically at
 `>= .accessibility1`. **Pin:** XCUITest at AX3XL asserting the chips are stacked.
+
+**Fixed** exactly as prescribed — `AnyLayout` switching `HStackLayout` for `VStackLayout` past
+`.accessibility1`, and `lineLimit`/`minimumScaleFactor` dropped in that mode, because stacked
+the width is no longer the scarce thing. Measured on iPhone 13 Pro: the three steps were
+100.7pt wide on one row at both sizes before, and at AX3XL are now 318pt wide at y = 314.7,
+387.3 and 460.0 — a column. Pinned by
+`ReviewUITests.testTheReachPickerStacksAtAccessibilitySizesRatherThanShrinkingItsLabels`, proved
+by mutation (`stacked` forced to `false` → step 1 starts at 314.7 while step 0 ends at 358.7).
+
+The test needed fixing before the code did, and the reason is worth keeping. `XCUIApplication`
+has no API for the content size category, so it goes in as a launch argument — and the spelled-out
+`UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge` is **not** a constant the system knows.
+It does not fall back to Large either: the screen's own text came back 33.7pt against 31.3pt, a
+1.07x nudge that walked straight through a `greaterThan` probe while the app sat at an ordinary
+size, and the picker was blamed for a row it was drawing correctly. The short spelling,
+`UICTContentSizeCategoryAccessibilityXXXL`, moves that text 1.54x. The probe now asserts a
+**ratio**, so a misspelt argument fails as itself rather than as the control under test.
+
+`ReachPicker` is shared, so the strictness picker on the scan screen gets the same fix — and
+"gets it for free" is exactly the claim that deserved its own measurement, because that screen
+is a card on a dark slab with an explanation underneath, which is somewhere new to overflow.
+`ScanUITests.testTheStrictnessPickerFitsTheSlabAtAccessibilitySizes` asks both questions there:
+stacked, **and** still inside the window's width.
+
+Writing that second test turned up something else. `ScanUITests.swift` holds **two** classes, and
+the CI shards name classes rather than files — so `ScanStripUITests`, the suite that pins the
+claim that a scan survives leaving the screen that started it, has never run on CI. It is the
+third suite found running nowhere, after `OnboardingUITests` and `LadderDrawingUITests`. Added to
+shard b; it passes in 13.5 seconds. Every other UI test class was checked: no more orphans.
+
+**Not fixed by this:** the other twenty-five `minimumScaleFactor` call sites. `ReachPicker` was
+the one the audit named and the one whose labels carry a decision; the rest are unmeasured. The
+screenshot walk that produced the evidence above also showed the review screen's bottom dock
+truncating its delete key to "D…" and wrapping "3 selected" over four lines at AX3XL — a worse
+defect than the one this section fixed, and untouched.
 
 ### 4. `.fixedSize()` + `.layoutPriority(1)` inverts at accessibility sizes
 
@@ -338,7 +373,7 @@ seal covers ~80 % of the picture it marks while the badge beside it has not move
 `ComparisonTable.swift:154` already uses `@ScaledMetric` — the pattern exists in the repo and is
 used once.
 
-### 16. Touch targets under 44 the repo has already fixed three times elsewhere
+### 16. Touch targets under 44 the repo has already fixed three times elsewhere — **PARTLY FIXED 15 September 2026**
 
 | where | size | what it does |
 |---|---|---|
@@ -350,6 +385,24 @@ The fix is written three times with a comment explaining it (`ReviewView.swift:4
 715-718`; `DesignSystem.swift:676-680`). `GroupDetailView`'s select-all is the same control as
 `ReviewView`'s and got the opposite decision. `Scripts/audit-ui.py:38` already has
 `MIN_TAP_TARGET = 44.0` — the walk simply never opens a group.
+
+**Fixed for the two on the group screen**, by the pattern this repo already had: the pill keeps
+its own height and a 44pt frame goes around it, so the hit area grows outside the pill rather
+than the pill growing to meet the finger. Measured 34.0 → 44.0 and 32.0 → 44.0, pinned by
+`GroupUITests.testTheControlsOnTheGroupScreenAreAFullFingerTall`, both halves proved by mutation.
+
+The difference toggle is the one worth reading twice. It already carried
+`.contentShape(Capsule())`, which reads like the fix and is its opposite: a content shape
+*confines* the touch to the shape it is handed and cannot make a target taller than the frame
+underneath it. The audit's framing — "`minHeight: 32`" with no mention of the content shape —
+was right about the number and would have been dismissed by anyone who read the next line. A hit
+shape is not a hit size.
+
+**`RootView.swift:292-303` is deliberately left.** It sits in a `ToolbarItem(placement:
+.topBarTrailing)`, and the navigation bar's own 44pt may already be carrying the target — the
+row is 32 in the *view*, which is not the same claim. Nobody has measured it. It stays open
+rather than being changed on the strength of a line number, which is how
+`ReviewView.swift:454` nearly got "fixed" while it was already correct.
 
 ### 17. A disabled control styled exactly like a live one
 

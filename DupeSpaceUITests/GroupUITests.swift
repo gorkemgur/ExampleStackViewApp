@@ -144,4 +144,48 @@ final class GroupUITests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["group.keepone"].exists, "cancelling must not arm anything")
     }
+
+    /// Two controls on this screen a finger has to find.
+    ///
+    /// Both were drawn at the height the *pill* wants to be rather than the height a thumb
+    /// needs. `group.selectall` at 34pt ticks every copy in the group — up to sixty of them.
+    /// The difference toggle at 32pt is the more instructive of the two: it carries a
+    /// `.contentShape(Capsule())`, which reads like the fix and does the opposite. A content
+    /// shape *confines* the touch to the shape it is handed; it cannot make the target taller
+    /// than the frame underneath it. A hit shape is not a hit size, and only a measurement
+    /// tells those two apart.
+    ///
+    /// `ReviewView` already answered this on its sort and kind chips: the pill stays 34 and a
+    /// 44pt frame is placed around it, so the hit area grows outside the pill rather than the
+    /// pill growing to meet the finger. This holds the group screen to the same rule.
+    func testTheControlsOnTheGroupScreenAreAFullFingerTall() {
+        openFirstGroup()
+
+        let selectAll = require("group.selectall", in: app, timeout: 15)
+        XCTAssertGreaterThanOrEqual(
+            selectAll.frame.height,
+            44,
+            "the control that ticks every copy in the group is \(selectAll.frame.height)pt tall"
+        )
+
+        // The toggle sits under a candidate's wipe, and the candidates are a `LazyVStack`:
+        // below the fold it is not built, so a query that does not scroll is asking about a
+        // view that does not exist yet.
+        let toggle = app
+            .descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'candidate.difference.'"))
+            .firstMatch
+        for _ in 0..<10 where !toggle.exists {
+            app.swipeUp()
+        }
+        guard toggle.waitForExistence(timeout: 10) else {
+            XCTFail("no difference toggle on the group screen. What was on it:\n\n\(screen(app))")
+            return
+        }
+        XCTAssertGreaterThanOrEqual(
+            toggle.frame.height,
+            44,
+            "the difference toggle is \(toggle.frame.height)pt tall"
+        )
+    }
 }

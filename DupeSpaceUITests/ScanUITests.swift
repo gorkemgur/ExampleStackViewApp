@@ -81,6 +81,68 @@ final class ScanUITests: XCTestCase {
             "the ledger must not push the start key off the screen"
         )
     }
+    /// The same control, on the other screen that matters, at the same text size.
+    ///
+    /// `ReachPicker` is shared, so the stacking fix reaches the strictness picker for free —
+    /// and "for free" is exactly the claim that deserves a measurement. This screen is not the
+    /// review screen: the picker sits on a dark slab inside a card, with an explanation
+    /// underneath it, and a control that grows from 44pt tall to three rows of 65 has somewhere
+    /// new to overflow. So this asks the two questions the review test cannot: are the steps
+    /// stacked here too, and does the column still fit the width it was given.
+    func testTheStrictnessPickerFitsTheSlabAtAccessibilitySizes() {
+        app.terminate()
+        app.launchArguments = [
+            "-ui-testing",
+            // The short spelling. The long one is not a constant the system knows, and it
+            // fails by quietly leaving the app at an ordinary size.
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+
+        let entry = app.buttons["root.scan"]
+        for _ in 0..<10 where !entry.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(entry.waitForExistence(timeout: 30), "the scan entry point was never reachable")
+        entry.tap()
+        XCTAssertTrue(app.buttons["scan.start"].waitForExistence(timeout: 20), "the scan screen did not open")
+
+        let first = element("scan.strictness.0", in: app)
+        for _ in 0..<10 where !first.exists {
+            app.swipeUp()
+        }
+        guard first.waitForExistence(timeout: 15) else {
+            XCTFail("the strictness picker was never reached. What was on the screen:\n\n\(screen(app))")
+            return
+        }
+        let frames = (0..<3).map { element("scan.strictness.\($0)", in: app).frame }
+
+        for index in 1..<frames.count {
+            XCTAssertGreaterThanOrEqual(
+                frames[index].minY,
+                frames[index - 1].maxY,
+                "at AX3XL the strictness picker is still a row: step \(index) starts at \(frames[index].minY) while step \(index - 1) ends at \(frames[index - 1].maxY)"
+            )
+        }
+
+        // And it has to fit. A stacked step takes the whole row, and the row is inside a card
+        // inside the slab's padding — if that arithmetic is wrong the label leaves the screen
+        // rather than being scaled down, which is the trade this fix deliberately made.
+        let window = app.windows.firstMatch.frame
+        for (index, frame) in frames.enumerated() {
+            XCTAssertGreaterThanOrEqual(
+                frame.minX,
+                window.minX,
+                "step \(index) starts at \(frame.minX), off the left of a \(window.width)pt window"
+            )
+            XCTAssertLessThanOrEqual(
+                frame.maxX,
+                window.maxX,
+                "step \(index) ends at \(frame.maxX), past the right of a \(window.width)pt window"
+            )
+        }
+    }
 }
 
 // MARK: - The strip

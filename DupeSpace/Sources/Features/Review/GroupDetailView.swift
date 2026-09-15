@@ -122,6 +122,11 @@ struct GroupDetailView: View {
                     .padding(.horizontal, 12)
                     .frame(minHeight: 34)
                     .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
+                    // Pill 34pt, hit area 44pt — the pattern `ReviewView.orderPicker` already
+                    // carries, and this is the control with the most to lose by being missed:
+                    // one tap ticks every copy in the group, up to sixty of them.
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("group.selectall")
