@@ -714,7 +714,17 @@ struct ReviewView: View {
                         color: actionTint
                     )
                 ],
-                total: Double(max(model.maxReclaimableBytes, 1)),
+                // Measured on a real phone: with "No loss" chosen the reading beside this bar
+                // said "Only 5,4 MB is available at this setting" while the total here was
+                // `maxReclaimableBytes` — everything reclaimable at *any* depth, 1,36 GB. Four
+                // tenths of one per cent is an accurate bar and an invisible one, and a meter
+                // nobody can see is not a measurement, it is a smudge.
+                //
+                // The fraction now asks the question the screen is actually asking: of what
+                // this setting puts on the table, how much have you taken. Ticking everything
+                // at "No loss" fills it. Reaching further is what the three chips are for, and
+                // the line under them already says so in words.
+                total: max(reachableBytes, 1),
                 height: 4
             )
             .accessibilityHidden(true)
