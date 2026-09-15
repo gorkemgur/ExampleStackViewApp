@@ -94,6 +94,12 @@ DupeSpace.xcodeproj/
 .build/
 build/
 *.xcresult
+
+# Every `-derivedDataPath` this project hands to xcodebuild. CI writes `.derived`,
+# `.derived-compile` and `.derived-release`; a local run adds whatever suffix it needed to keep
+# two builds apart. Thousands of files each, machine-specific, and worth nothing to anyone else
+# — but without this line one `git add -A` commits all of them.
+.derived*/
 DupeSpace/Info.plist
 DupeSpaceWidgets/Info.plist
 DupeSpace/DupeSpace.entitlements
