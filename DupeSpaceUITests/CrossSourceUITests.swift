@@ -166,15 +166,30 @@ final class CrossSourceUITests: XCTestCase {
         // The tab bar, by its own identifier. Not `picker.buttons["Browse"]`: run 149's tree
         // has two elements labelled Browse — the tab and the navigation bar's back button —
         // and `firstMatch` on that is a coin toss between going forward and going back.
-        let tabs = picker.tabBars["DOC.browsingModeTabBar"]
-        if tabs.buttons["Browse"].waitForExistence(timeout: 20) {
-            tabs.buttons["Browse"].tap()
-        }
-
         // And the files themselves, inside the picker's own collection. The picker is in the
         // app's tree, so an unscoped query for a folder name would happily match the app's own
         // chrome behind the sheet.
         let files = picker.collectionViews["File View"]
+
+        // Only reach for the tab bar if the list is not already on screen, and that "only" is
+        // the whole fix.
+        //
+        // This tapped Browse unconditionally, and the tap was the failure. Two trees dumped a
+        // frame apart say so: before it, the picker was already at
+        // `DOC.browsingRoot Source: com.apple.FileProvider.LocalStorage, Title: On My iPhone`
+        // with `File View` in it — the picker reopens where it was last, which this file's own
+        // comment further down already knew. After it, the picker was at `DOC.sidebar` showing
+        // Locations. Tapping Browse did not *open* the list, it navigated back out of it, and
+        // the assertion twenty lines later then reported that the list had never appeared.
+        //
+        // Three consecutive runs failed on the same line, so the note that this one "fails at a
+        // different line each run" no longer describes it.
+        if !files.waitForExistence(timeout: 5) {
+            let tabs = picker.tabBars["DOC.browsingModeTabBar"]
+            if tabs.buttons["Browse"].waitForExistence(timeout: 20) {
+                tabs.buttons["Browse"].tap()
+            }
+        }
         XCTAssertTrue(
             files.waitForExistence(timeout: 20),
             "the picker never showed a file list (\(hostName)):\n\n\(screen(picker))"
