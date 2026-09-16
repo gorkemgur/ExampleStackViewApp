@@ -24,6 +24,18 @@ struct CompareSliderView: View {
     @State private var showingDifference = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// Past `.accessibility1` the labels under the comparator go under each other.
+    ///
+    /// Two badges and a button in one row. The badges ask for their own width and will not
+    /// give it back — `Badge` is `fixedSize` for a reason it records — and at AX5 the two of
+    /// them alone are 369 points of a card that has 300 inside its padding. The button
+    /// between them is the only thing in the row that *can* shrink, so it does, to 79
+    /// points, and "Where they differ" wraps letter by letter into a capsule 720 points
+    /// tall; the card comes out at 464 and is clipped at both edges, with the tick box that
+    /// decides this copy's fate off the left of the screen. Same threshold as `ReachPicker`.
+    private var stacked: Bool { typeSize >= .accessibility1 }
 
     /// The comparator is 180pt tall and never wider than the screen.
     ///
@@ -83,11 +95,26 @@ struct CompareSliderView: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                chip("Keeping", tint: DS.deep)
-                Spacer(minLength: 0)
-                differenceToggle
-                chip("This copy", tint: DS.neutral)
+            if stacked {
+                // Not an `AnyLayout`: the order changes. In the row the toggle sits beside
+                // "This copy"; stacked, the two badges keep the picture's left and right —
+                // "Keeping" against the leading edge, "This copy" against the trailing one,
+                // the way the wipe above them is read — and the toggle takes the full width
+                // underneath, where its label can wrap on words.
+                VStack(spacing: 8) {
+                    chip("Keeping", tint: DS.deep)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    chip("This copy", tint: DS.neutral)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    differenceToggle
+                }
+            } else {
+                HStack(spacing: 8) {
+                    chip("Keeping", tint: DS.deep)
+                    Spacer(minLength: 0)
+                    differenceToggle
+                    chip("This copy", tint: DS.neutral)
+                }
             }
         }
         .animation(reduceMotion ? nil : Motion.control, value: showingDifference)
@@ -121,6 +148,9 @@ struct CompareSliderView: View {
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(showingDifference ? DS.deep : Color.secondary)
                 .padding(.horizontal, 9)
+                // Stacked, the width is the whole card's: the label wraps on words, not
+                // letters, and the pill stays a pill.
+                .frame(maxWidth: stacked ? .infinity : nil)
                 .frame(minHeight: 32)
                 .background(
                     Capsule(style: .continuous)
@@ -138,6 +168,14 @@ struct CompareSliderView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Its own height, whatever the card offers. The card's stack is handed a definite
+            // height at placement and splits it among its children by flexibility, not by
+            // what each asked for; the deficit lands on the most flexible thing in the most
+            // flexible child, which is this label. Measured at AX5: the stack proposed 77
+            // points where the two-line label needs 96, and "Where they differ" came back
+            // one line tall as "Where the…". Fixed vertically, the label is asked for its
+            // height rather than told it.
+            .fixedSize(horizontal: false, vertical: true)
             .disabled(difference.isBelowNoiseFloor)
             .accessibilityIdentifier("candidate.difference.\(candidate.id)")
         }

@@ -54,7 +54,8 @@ final class GroupUITests: XCTestCase {
         target.tap()
     }
 
-    private func openFirstGroup() {
+    /// Scan the fixture and land on the review screen.
+    private func openReview() {
         let entry = app.buttons["root.scan"]
         for _ in 0..<8 where !entry.exists { app.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 30))
@@ -67,6 +68,10 @@ final class GroupUITests: XCTestCase {
         XCTAssertTrue(review.waitForExistence(timeout: 60))
         review.tap()
         XCTAssertTrue(app.staticTexts["review.total"].waitForExistence(timeout: 20))
+    }
+
+    private func openFirstGroup() {
+        openReview()
 
         // The link half of the row, not the tick box beside it: the box selects the whole
         // group, and a test that taps and hopes is a test that toggles a deletion by accident.
@@ -104,6 +109,118 @@ final class GroupUITests: XCTestCase {
             )
         }
         row.tap()
+    }
+
+    /// The card for one copy has to fit the phone it is drawn on.
+    ///
+    /// Under the comparator sit two badges and a button in one row. The badges ask for their
+    /// own width and will not give it back — `Badge` is `fixedSize` for a reason recorded in
+    /// `DesignSystem.swift` — and at AX5 the two of them alone are 369 points of a card that
+    /// has 300 inside its padding. The button between them is the only thing in the row that
+    /// *can* shrink, so it does, to 79 points, and "Where they differ" wraps letter by letter
+    /// into a capsule 720 points tall. The card itself comes out at 464 and is clipped at both
+    /// edges: "Keeping" reads "eeping", "This copy" reads "This cop", and the tick box at the
+    /// head of the row — the control that decides whether this copy is deleted — is off the
+    /// left of the screen entirely.
+    ///
+    /// The outer stack is lazy, so it does not re-propose the widest child's width to the
+    /// others the way `ScanView`'s eager one does; only this card overflows, and the survivor
+    /// panel above it stays put. That is why the assertions are on the card's own parts.
+    func testTheCopyCardFitsTheScreenAtAccessibilitySizes() {
+        openReview()
+        let baselineText = app.staticTexts["review.total"].frame.height
+
+        app.terminate()
+        app.launchArguments = [
+            "-ui-testing",
+            // Short spelling only — the long form is ignored without a word. See
+            // `ScanUITests.testTheStrictnessPickerFitsTheSlabAtAccessibilitySizes`.
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        openReview()
+
+        let grownText = app.staticTexts["review.total"].frame.height
+        XCTAssertGreaterThan(
+            grownText,
+            baselineText * 1.3,
+            "the launch argument never reached the app: the review total is \(grownText)pt at AX5 "
+            + "against \(baselineText)pt at the default size. Nothing below this line is about the card."
+        )
+
+        // Straight to the row. At this size `app.swipeUp()` does not move the review list at
+        // all — forty swipes left the first group row where it started — so the geometry guard
+        // `openFirstGroup` uses can never be satisfied here. The tap itself scrolls the row in.
+        let row = app
+            .descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'review.open.'"))
+            .firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "no group row to open")
+        row.tap()
+        XCTAssertTrue(
+            app.staticTexts["group.keeper"].waitForExistence(timeout: 10),
+            "the group screen did not open. What was on the screen:\n\n\(screen(app))"
+        )
+
+        let window = app.windows.firstMatch.frame
+        let keeping = app.staticTexts["Keeping"].firstMatch
+        for _ in 0..<10 where !keeping.exists { app.swipeUp() }
+        XCTAssertTrue(keeping.waitForExistence(timeout: 10), "the comparator never appeared")
+
+        let candidate = app
+            .descendants(matching: .any)
+            .matching(NSPredicate(
+                format: "identifier BEGINSWITH 'candidate.' AND NOT identifier CONTAINS '.difference.' "
+                    + "AND NOT identifier CONTAINS '.table.' AND NOT identifier CONTAINS '.keep.'"
+            ))
+            .firstMatch
+        XCTAssertTrue(candidate.exists, "no copy row on the group screen")
+        let rowFrame = candidate.frame
+        XCTAssertGreaterThanOrEqual(
+            rowFrame.minX, window.minX,
+            "the copy row starts at \(rowFrame.minX), off the left of a \(window.width)pt window — "
+            + "the tick box at its head cannot be seen or tapped"
+        )
+        XCTAssertLessThanOrEqual(
+            rowFrame.maxX, window.maxX,
+            "the copy row ends at \(rowFrame.maxX), past the right of a \(window.width)pt window"
+        )
+
+        for label in ["Keeping", "This copy"] {
+            let chip = app.staticTexts[label].firstMatch
+            let frame = chip.frame
+            XCTAssertGreaterThanOrEqual(
+                frame.minX, window.minX,
+                "'\(label)' starts at \(frame.minX), off the left of the window — its first letters are cut"
+            )
+            XCTAssertLessThanOrEqual(
+                frame.maxX, window.maxX,
+                "'\(label)' ends at \(frame.maxX), past the right of the window — its last letters are cut"
+            )
+        }
+
+        let toggle = app
+            .descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'candidate.difference.'"))
+            .firstMatch
+        XCTAssertTrue(toggle.exists, "the difference toggle never appeared")
+        let pill = toggle.frame
+        XCTAssertGreaterThan(
+            pill.width, pill.height,
+            "the difference toggle is \(pill.width) wide and \(pill.height) tall: a pill squeezed into a "
+            + "column, its label wrapping letter by letter"
+        )
+        // And not the opposite failure. "Where they differ" at this size is wider than the card,
+        // so it has to take two lines; a pill one line tall has cut the label to "Where the…".
+        // XCUITest cannot see an ellipsis, but it can see a height: one line of this type is
+        // the height of a badge beside it.
+        let oneLine = keeping.frame.height
+        XCTAssertGreaterThan(
+            pill.height, oneLine * 1.5,
+            "the difference toggle is \(pill.height)pt tall against \(oneLine)pt for one line of the "
+            + "same type: its label was cut to one line instead of wrapping"
+        )
     }
 
     func testTheGroupScreenShowsWhatStaysAndWhyEachCopyIsOffered() {
