@@ -14,6 +14,7 @@ struct ScanView: View {
     /// started at all under Reduce Motion.
     @State private var pulse = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// What the scan is about to do, worked out from metadata alone. Off the main actor and
     /// once per appearance: it sorts and windows the whole library, which is nothing at
     /// twenty-eight items and is not nothing at fifty thousand.
@@ -591,12 +592,30 @@ struct ScanView: View {
         }
     }
 
+    /// Past `.accessibility1` the rung's two columns become two rows.
+    ///
+    /// Two things in the row refuse to shrink, each for a good reason: the badge asks for its
+    /// own width so two words never wrap inside a capsule, and the bytes column is `fixedSize`
+    /// so a figure never ellipsises to "180,4…". Side by side at AX5 that is 244 + 12 + 8 + 220
+    /// = 484pt of demands against the 300pt a card has inside its padding on a 390pt phone —
+    /// and a card that cannot be drawn is not scrolled to, it is clipped at both edges. Worse,
+    /// a `VStack` proposes its final width to every child at placement, so one 548pt card
+    /// widened the headline slab and the caveats with it: the whole screen sat 79pt off the
+    /// left. Under each other, 244 and 220 fit in 300 with room to spare, so nothing has to
+    /// give up the width it was told to keep. Same threshold as `ReachPicker`.
+    private var tierCardStacked: Bool { typeSize >= .accessibility1 }
+
     /// One rung of the ladder, carrying its own colour — the same colour the review screen
     /// rails that tier with, so the two screens are plainly describing the same thing.
     @ViewBuilder
     private func tierCard(_ summary: TierSummary) -> some View {
+        let stacked = tierCardStacked
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+
         Card(rail: DS.tier(summary.tier)) {
-            HStack(alignment: .top, spacing: 12) {
+            layout {
                 VStack(alignment: .leading, spacing: 6) {
                     // The glyph inline, unboxed, the way `Card` has drawn its own since the
                     // tinted icon slot was taken out of it — "every settings row in every app",
@@ -612,7 +631,8 @@ struct ScanView: View {
 
                         Text(ScanCopy.title(for: summary.tier))
                             .font(.system(.headline, design: .rounded))
-                            .lineLimit(2)
+                            // Stacked, the width is no longer the scarce thing.
+                            .lineLimit(stacked ? nil : 2)
                             .accessibilityIdentifier("scan.tier.\(summary.tier.rawValue)")
                     }
 
@@ -624,19 +644,25 @@ struct ScanView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer(minLength: 8)
+                if !stacked {
+                    Spacer(minLength: 8)
+                }
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: stacked ? .leading : .trailing, spacing: 2) {
                     Text(ByteFormatting.string(summary.bytes))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .monospacedDigit()
+                        .accessibilityIdentifier("scan.tier.\(summary.tier.rawValue).bytes")
                     Text(Counting.items(summary.itemCount))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                .lineLimit(1)
-                .fixedSize()
-                .layoutPriority(1)
+                .lineLimit(stacked ? nil : 1)
+                // Beside the text column the figure keeps its width and wins the contest for
+                // it. Under the text column there is no contest, and a column that will not
+                // shrink is exactly what put the card off the phone.
+                .fixedSize(horizontal: !stacked, vertical: true)
+                .layoutPriority(stacked ? 0 : 1)
             }
         }
     }

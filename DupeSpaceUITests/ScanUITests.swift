@@ -143,6 +143,100 @@ final class ScanUITests: XCTestCase {
             )
         }
     }
+
+    /// The result cards have to fit the phone they are drawn on.
+    ///
+    /// `Badge` asks for its own width and will not give it back: `.fixedSize(horizontal: true,
+    /// vertical: true)`, unconditionally. That was put there for a real reason — in the
+    /// onboarding rung the pill was handed the leftovers of a row that had already spent its
+    /// width and wrapped two words onto two cramped lines — but the remedy was written as an
+    /// always. At an accessibility size the badge's two words are wide enough that the card
+    /// cannot be drawn in 390 points, and a card that cannot be drawn is not scrolled to: it
+    /// is clipped at both edges, so "Burst leftovers" is read as "leftovers" and "Your call"
+    /// as "ur call".
+    ///
+    /// A vertical `ScrollView` does not rescue this. It scrolls the axis the card is not
+    /// overflowing on.
+    func testTheScanResultCardsFitTheScreenAtAccessibilitySizes() {
+        runScan()
+        let baselineText = require("scan.total", in: app, timeout: 30).frame.height
+
+        app.terminate()
+        app.launchArguments = [
+            "-ui-testing",
+            // Short spelling only — see `testTheStrictnessPickerFitsTheSlabAtAccessibilitySizes`.
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        runScan()
+
+        let grownText = require("scan.total", in: app, timeout: 30).frame.height
+        XCTAssertGreaterThan(
+            grownText,
+            baselineText * 1.3,
+            "the launch argument never reached the app: the scan total is \(grownText)pt at AX3XL "
+            + "against \(baselineText)pt at the default size. Nothing below this line is about the cards."
+        )
+
+        let window = app.windows.firstMatch.frame
+        for tier in 0..<3 {
+            let title = app.staticTexts["scan.tier.\(tier)"]
+            for _ in 0..<10 where !title.exists {
+                app.swipeUp()
+            }
+            guard title.waitForExistence(timeout: 15) else {
+                XCTFail("tier \(tier) was never reached. What was on the screen:\n\n\(screen(app))")
+                return
+            }
+            let frame = title.frame
+            XCTAssertGreaterThanOrEqual(
+                frame.minX, window.minX,
+                "tier \(tier)'s title starts at \(frame.minX), off the left of a \(window.width)pt window — "
+                + "the card is wider than the phone, so its first characters are cut off"
+            )
+            XCTAssertLessThanOrEqual(
+                frame.maxX, window.maxX,
+                "tier \(tier)'s title ends at \(frame.maxX), past the right of a \(window.width)pt window"
+            )
+
+            // The title is a weak witness: it wraps inside its column and lands within a few
+            // points of the edge either way. The bytes column is the element that actually
+            // refuses to shrink, so it is the one that ends up furthest off the phone.
+            let bytes = app.staticTexts["scan.tier.\(tier).bytes"]
+            XCTAssertTrue(bytes.exists, "tier \(tier) has no bytes column")
+            let bytesFrame = bytes.frame
+            XCTAssertGreaterThanOrEqual(
+                bytesFrame.minX, window.minX,
+                "tier \(tier)'s bytes start at \(bytesFrame.minX), off the left of a \(window.width)pt window"
+            )
+            XCTAssertLessThanOrEqual(
+                bytesFrame.maxX, window.maxX,
+                "tier \(tier)'s bytes end at \(bytesFrame.maxX), past the right of a \(window.width)pt window — "
+                + "the column will not give up its width, so the card is drawn wider than the phone"
+            )
+        }
+    }
+
+    private func runScan() {
+        let entry = app.buttons["root.scan"]
+        for _ in 0..<10 where !entry.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(entry.waitForExistence(timeout: 30), "the scan entry point was never reachable")
+        entry.tap()
+
+        let start = app.buttons["scan.start"]
+        for _ in 0..<10 where !start.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(start.waitForExistence(timeout: 20), "the scan screen did not open")
+        start.tap()
+        XCTAssertTrue(
+            app.staticTexts["scan.total"].waitForExistence(timeout: 60),
+            "the scan never produced a total"
+        )
+    }
 }
 
 // MARK: - The strip
