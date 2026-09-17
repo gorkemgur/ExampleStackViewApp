@@ -223,6 +223,107 @@ final class GroupUITests: XCTestCase {
         )
     }
 
+    /// The header over the copies has to fit the phone as well.
+    ///
+    /// "1 other copy", "1 selected" and the bulk control share one row, and at AX5 on a 390pt
+    /// phone that row has 358 points for three things that ask for more. Measured: the copy
+    /// count wrapped to three lines, the selected count hyphenated to "se-lect-ed" one syllable
+    /// a line, and the control — the one tap that ticks every copy in the group — came out 108
+    /// points wide with its label cut to "De…". "Select all" and "Deselect all" open with the
+    /// same two letters, so the cut label did not even say which of the two it was.
+    ///
+    /// Past .accessibility1 the row becomes a column and the control takes the whole width.
+    /// XCUITest cannot see an ellipsis, so this pins the geometry that makes one impossible:
+    /// stacked, the label may wrap, which leaves the control only two ways to misreport
+    /// itself — too narrow, or two lines tall — and both are frames. The counts are pinned the
+    /// same way: one line of either is at least twice as wide as it is tall, and a count that
+    /// has been broken across lines is not.
+    func testTheBulkControlAndItsCountsFitTheScreenAtAccessibilitySizes() {
+        openReview()
+        let baselineText = app.staticTexts["review.total"].frame.height
+
+        app.terminate()
+        app.launchArguments = [
+            "-ui-testing",
+            // Short spelling only — see `testTheCopyCardFitsTheScreenAtAccessibilitySizes`.
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        openReview()
+
+        let grownText = app.staticTexts["review.total"].frame.height
+        XCTAssertGreaterThan(
+            grownText,
+            baselineText * 1.3,
+            "the launch argument never reached the app: the review total is \(grownText)pt at AX5 "
+            + "against \(baselineText)pt at the default size. Nothing below this line is about the header."
+        )
+
+        // Straight to the row; at this size `swipeUp` does not move the review list, the tap
+        // itself scrolls the row in. See the copy card test above.
+        let row = app
+            .descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'review.open.'"))
+            .firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "no group row to open")
+        row.tap()
+        XCTAssertTrue(
+            app.staticTexts["group.keeper"].waitForExistence(timeout: 10),
+            "the group screen did not open. What was on the screen:\n\n\(screen(app))"
+        )
+
+        let window = app.windows.firstMatch.frame
+        let control = app.buttons["group.selectall"]
+        for _ in 0..<10 where !control.exists { app.swipeUp() }
+        XCTAssertTrue(control.waitForExistence(timeout: 10), "the bulk control never appeared")
+
+        // Neither count carries an identifier; both are found by what they say.
+        let copies = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS 'other cop'"))
+            .firstMatch
+        let selected = app.staticTexts
+            .matching(NSPredicate(format: "label ENDSWITH ' selected'"))
+            .firstMatch
+        XCTAssertTrue(copies.exists, "no copy count over the copies")
+        XCTAssertTrue(selected.exists, "no selected count over the copies")
+        for (name, count) in [("the copy count", copies), ("the selected count", selected)] {
+            let frame = count.frame
+            XCTAssertGreaterThan(
+                frame.width, frame.height * 2,
+                "\(name) is \(frame.width) wide and \(frame.height) tall: its words were pushed onto "
+                + "separate lines"
+            )
+        }
+
+        let pill = control.frame
+        XCTAssertGreaterThanOrEqual(
+            pill.width, window.width * 0.75,
+            "the bulk control is \(pill.width)pt wide on a \(window.width)pt window: squeezed beside "
+            + "the counts instead of taking the column under them"
+        )
+        XCTAssertLessThanOrEqual(
+            pill.maxX, window.maxX,
+            "the bulk control ends at \(pill.maxX), past the right of the window"
+        )
+
+        // It is already carrying the longer of its two labels: the first group is identical
+        // copies, and those come pre-selected (`ReviewViewModel.init`), so the control reads
+        // "Deselect all" — the label that was cut to "De…". Stacked, it may wrap and cannot be
+        // cut, so one line tall is the whole claim; one line of this type is the height of the
+        // selected count beside it, the same caption size.
+        XCTAssertEqual(
+            control.label, "Deselect all",
+            "the first group is no longer pre-selected, and this pin needs the longer label on the control"
+        )
+        let oneLine = selected.frame.height
+        XCTAssertLessThanOrEqual(
+            pill.height, oneLine * 1.5,
+            "the bulk control is \(pill.height)pt tall against \(oneLine)pt for one line of the same "
+            + "type: 'Deselect all' wrapped instead of fitting"
+        )
+    }
+
     func testTheGroupScreenShowsWhatStaysAndWhyEachCopyIsOffered() {
         openFirstGroup()
 

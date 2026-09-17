@@ -19,7 +19,19 @@ struct GroupDetailView: View {
     let loader: any ThumbnailLoading
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var confirmingClearAll = false
+
+    /// Past `.accessibility1` the header over the copies goes from a row to a column.
+    ///
+    /// "1 other copy", "1 selected" and the bulk control share one row. At AX5 on a 390pt
+    /// phone that row has 358 points and the three of them want more. Measured: the copy
+    /// count wrapped to three lines, the selected count hyphenated to "se-lect-ed" one
+    /// syllable a line, and the control — the one tap that ticks every copy in the group —
+    /// came out 108 points wide with its label cut to "De…", which, "Select all" and
+    /// "Deselect all" opening with the same two letters, no longer said which it was. Same
+    /// threshold as `ReachPicker`, `ScanView.tierCardStacked` and `CompareSliderView`.
+    private var stacked: Bool { typeSize >= .accessibility1 }
 
     init(group: ReviewGroup, model: ReviewViewModel, loader: any ThumbnailLoading) {
         self.reviewGroupID = group.id
@@ -99,37 +111,57 @@ struct GroupDetailView: View {
     /// awkward control at the bottom of this screen.
     private func copiesHeader(_ group: ReviewGroup) -> some View {
         let selectedCount = selectedCount(group)
-        return HStack(spacing: DS.Space.s) {
-            Text(Counting.copies(group.candidates.count))
-                .font(.subheadline.weight(.semibold))
 
-            Text("\(selectedCount) selected")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+        let copies = Text(Counting.copies(group.candidates.count))
+            .font(.subheadline.weight(.semibold))
 
-            Spacer(minLength: 8)
+        let selected = Text("\(selectedCount) selected")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
 
-            Button {
-                withAnimation(Motion.control) {
-                    model.setSelected(selectedCount < group.candidates.count, in: group)
-                }
-            } label: {
-                Text(selectedCount < group.candidates.count ? "Select all" : "Deselect all")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 34)
-                    .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
-                    // Pill 34pt, hit area 44pt — the pattern `ReviewView.orderPicker` already
-                    // carries, and this is the control with the most to lose by being missed:
-                    // one tap ticks every copy in the group, up to sixty of them.
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
+        let control = Button {
+            withAnimation(Motion.control) {
+                model.setSelected(selectedCount < group.candidates.count, in: group)
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("group.selectall")
+        } label: {
+            Text(selectedCount < group.candidates.count ? "Select all" : "Deselect all")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                // In the row the label stays on one line, as it always did. Stacked, the pill
+                // is the whole column's width and the label may wrap on words inside it —
+                // never be cut: a cut label here reads "De…" for both of its states.
+                .lineLimit(stacked ? nil : 1)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: stacked ? .infinity : nil)
+                .frame(minHeight: 34)
+                .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
+                // Pill 34pt, hit area 44pt — the pattern `ReviewView.orderPicker` already
+                // carries, and this is the control with the most to lose by being missed:
+                // one tap ticks every copy in the group, up to sixty of them.
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("group.selectall")
+
+        return Group {
+            if stacked {
+                // Not an `AnyLayout`: the row has a spacer the column has no use for. The two
+                // counts go under each other too — at AX5 they do not share 358 points either.
+                VStack(alignment: .leading, spacing: DS.Space.s) {
+                    copies
+                    selected
+                    control
+                }
+            } else {
+                HStack(spacing: DS.Space.s) {
+                    copies
+                    selected
+                    Spacer(minLength: 8)
+                    control
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
