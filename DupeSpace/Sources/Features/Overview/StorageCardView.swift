@@ -51,14 +51,25 @@ struct StorageCardView: View {
             )
             .accessibilityIdentifier("storage.bar")
 
-            HStack(alignment: .top, spacing: DS.Space.m) {
-                ForEach(legendParts) { part in
-                    legend(
-                        color: part.color,
-                        title: part.title,
-                        bytes: part.bytes,
-                        isActionable: part.isActionable
-                    )
+            // Not an `HStack` of independent columns: each used to be its own `VStack`, so a
+            // title that wrapped to two lines ("Everything else", at AX5) grew only its own
+            // column, while a short one ("Free") stayed on one line. The two never shared a
+            // row, so the byte figure that followed sat at whatever height its own title left
+            // off — lower under the wrapped title than under the one that did not wrap. `Grid`
+            // lays out by row instead of by column: every column's swatch, title and figure
+            // share the same three rows, so the figures line up regardless of how many lines
+            // the title above any one of them took.
+            Grid(alignment: .leading, horizontalSpacing: DS.Space.m, verticalSpacing: 5) {
+                GridRow {
+                    ForEach(legendParts) { part in legendSwatch(color: part.color) }
+                }
+                GridRow {
+                    ForEach(legendParts) { part in legendTitle(part.title, id: part.id) }
+                }
+                GridRow {
+                    ForEach(legendParts) { part in
+                        legendBytes(part.bytes, isActionable: part.isActionable, id: part.id)
+                    }
                 }
             }
 
@@ -139,44 +150,49 @@ struct StorageCardView: View {
 
     /// Each legend repeats its slug from the bar above rather than using a dot, so the eye can
     /// carry a colour straight from the measurement to the figure that names it.
+    ///
+    /// One `Grid` row per part, so this is one cell rather than a whole column: outlined as
+    /// well as filled, because "Free" carries the colour of the track's empty end, which is a
+    /// shade off the page it is drawn on, so without an edge that swatch was a blank space
+    /// above the word.
     @ViewBuilder
-    private func legend(
-        color: Color,
-        title: String,
-        bytes: Int64,
-        isActionable: Bool = false
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            // Outlined as well as filled: "Free" carries the colour of the track's empty end,
-            // which is a shade off the page it is drawn on, so without an edge that swatch was
-            // a blank space above the word.
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(color)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .strokeBorder(DS.hairline, lineWidth: 0.5)
-                )
-                .frame(height: 3)
-                .frame(maxWidth: 34, alignment: .leading)
+    private func legendSwatch(color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(color)
+            .overlay(
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .strokeBorder(DS.hairline, lineWidth: 0.5)
+            )
+            .frame(height: 3)
+            .frame(maxWidth: 34, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.6)
-                .fixedSize(horizontal: false, vertical: true)
+    @ViewBuilder
+    private func legendTitle(_ title: String, id: String) -> some View {
+        Text(title)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .minimumScaleFactor(0.6)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("storage.legend.\(id).title")
+    }
 
-            // The library figure is the only one this app can do anything about, and on a
-            // 343 GB disk it is a sliver of the bar. It gets the weight and the colour.
-            Text(ByteFormatting.string(bytes))
-                .font(.system(.footnote, design: .rounded).weight(isActionable ? .bold : .medium))
-                .monospacedDigit()
-                .foregroundStyle(isActionable ? DS.deep : Color.primary)
-                .lineLimit(1)
-                // Three fixed columns, so at an accessibility text size the figure has to
-                // shrink rather than push the one beside it off the screen.
-                .minimumScaleFactor(0.5)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    /// The library figure is the only one this app can do anything about, and on a 343 GB disk
+    /// it is a sliver of the bar. It gets the weight and the colour.
+    @ViewBuilder
+    private func legendBytes(_ bytes: Int64, isActionable: Bool, id: String) -> some View {
+        Text(ByteFormatting.string(bytes))
+            .font(.system(.footnote, design: .rounded).weight(isActionable ? .bold : .medium))
+            .monospacedDigit()
+            .foregroundStyle(isActionable ? DS.deep : Color.primary)
+            .lineLimit(1)
+            // Every column is flexible-width, so at an accessibility text size the figure has
+            // to shrink rather than push the one beside it off the screen.
+            .minimumScaleFactor(0.5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("storage.legend.\(id).bytes")
     }
 }

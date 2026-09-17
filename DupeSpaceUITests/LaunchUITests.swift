@@ -33,6 +33,56 @@ final class LaunchUITests: XCTestCase {
         )
     }
 
+    /// The legend under the bar has one column per part on the disk, and each was its own
+    /// `VStack`: at the default size both titles fit one line and nobody noticed the columns
+    /// disagreed on height. At AX5 "Everything else" wraps to two lines while "Free" — four
+    /// letters — stays on one, and because the two columns never shared a row, the byte figure
+    /// under "Everything else" sat lower than the one under "Free": the same misalignment
+    /// `copiesHeader`'s two independent counts had.
+    func testTheLegendFiguresStayInARowEvenWhenOneTitleWrapsAndTheOtherDoesNot() {
+        XCTAssertTrue(app.staticTexts["storage.headline"].waitForExistence(timeout: 30))
+        let baselineTitle = app.staticTexts["storage.legend.other.title"].frame.height
+
+        app.terminate()
+        app.launchArguments = [
+            "-ui-testing",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["storage.headline"].waitForExistence(timeout: 30))
+
+        let otherTitle = app.staticTexts["storage.legend.other.title"]
+        let freeTitle = app.staticTexts["storage.legend.free.title"]
+        XCTAssertTrue(otherTitle.waitForExistence(timeout: 10), "no 'Everything else' legend column")
+        XCTAssertTrue(freeTitle.exists, "no 'Free' legend column")
+
+        let grownTitle = otherTitle.frame.height
+        XCTAssertGreaterThan(
+            grownTitle, baselineTitle * 1.3,
+            "the launch argument never reached the app: 'Everything else' is \(grownTitle)pt tall at "
+            + "AX5 against \(baselineTitle)pt at the default size"
+        )
+        XCTAssertGreaterThan(
+            grownTitle, freeTitle.frame.height * 1.3,
+            "'Everything else' (\(grownTitle)pt) and 'Free' (\(freeTitle.frame.height)pt) wrapped to "
+            + "the same number of lines: nothing below this line is about the misalignment two "
+            + "different line counts cause"
+        )
+
+        let otherBytes = app.staticTexts["storage.legend.other.bytes"]
+        let freeBytes = app.staticTexts["storage.legend.free.bytes"]
+        XCTAssertTrue(otherBytes.exists, "no byte figure under 'Everything else'")
+        XCTAssertTrue(freeBytes.exists, "no byte figure under 'Free'")
+
+        XCTAssertEqual(
+            otherBytes.frame.minY, freeBytes.frame.minY, accuracy: 2,
+            "the byte figures sit \(otherBytes.frame.minY)pt and \(freeBytes.frame.minY)pt down the "
+            + "screen: 'Everything else' wrapping to two lines pushed its own column's figure down "
+            + "while 'Free', staying on one line, did not move"
+        )
+    }
+
     func testAuthorisedLibraryShowsItsBreakdownAndNoPermissionWall() {
         XCTAssertTrue(
             app.staticTexts["breakdown.title"].waitForExistence(timeout: 30),
